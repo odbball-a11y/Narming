@@ -2,7 +2,13 @@
 
 A small poker environment for two players. It needs Python 3.10+ and nothing else.
 
-## Play
+## Play in the browser
+
+`web/index.html` is a self-contained table page (published at https://claude.ai/artifact/G9ajbsWNykxjABtsGvETVb).
+It runs a JavaScript port of the same rules engine and bot, with bet presets, a raise slider,
+pot odds, an optional equity readout and keyboard shortcuts (F / C / R / A / Enter).
+
+## Play in the terminal
 
 ```bash
 python -m holdem play                     # you against the built-in bot
