@@ -1,5 +1,6 @@
 """Command-line front end.
 
+    python -m holdem structures               # list the blind structures
     python -m holdem play                     # you vs the bot in this terminal
     python -m holdem play --hotseat           # two people sharing one terminal
     python -m holdem table new Alice Bob      # turn-by-turn play through a save file
@@ -16,6 +17,7 @@ import sys
 from .bot import HeuristicBot
 from .cards import pretty_cards
 from .game import IllegalAction, Table
+from .structure import PRESETS, BlindStructure, parse_levels, preset
 
 HELP = (
     "actions: f(old)  x/check  c(all)  b(et) N  r(aise) N  a(ll-in)  "
@@ -30,8 +32,7 @@ def render(view: dict) -> str:
     if "street" not in view:
         stacks = ", ".join(f"{n} {s}" for n, s in view["stacks"].items())
         return f"No hand dealt yet. Stacks: {stacks}"
-    sb, bb = view["blinds"]
-    lines.append(f"── Hand #{view['hand_no']}  ({sb}/{bb})  button: {view['button']} ──")
+    lines.append(f"── Hand #{view['hand_no']}  {level_line(view['level'])}  button: {view['button']} ──")
     for line in view["log"]:
         lines.append("  " + line)
     lines.append("")
@@ -55,6 +56,21 @@ def render(view: dict) -> str:
     if view["match_over"]:
         lines.append(f"  ★ Match over: {view['winner']} has all the chips.")
     return "\n".join(lines)
+
+
+def level_line(info: dict) -> str:
+    sb, bb = info["blinds"]
+    text = f"Level {info['level']} · {sb}/{bb}"
+    if info["next_blinds"]:
+        nsb, nbb = info["next_blinds"]
+        if info["hands_left"] is not None:
+            n = info["hands_left"]
+            when = "from the next hand" if n == 0 else f"after {n} hand{'s' if n != 1 else ''}"
+        else:
+            secs = info["seconds_left"]
+            when = "from the next hand" if secs == 0 else f"in {secs // 60}:{secs % 60:02d}"
+        text += f" (→ {nsb}/{nbb} {when})"
+    return text
 
 
 def describe_legal(legal: dict) -> str:
@@ -93,13 +109,18 @@ def parse_action(text: str):
 
 def play(args):
     names = [args.name, "Bot" if not args.hotseat else args.opponent]
-    table = Table(names, args.stack, args.sb, args.bb, seed=args.seed)
+    structure = build_structure(args)
+    table = Table(names, seed=args.seed, structure=structure)
     bot = None if args.hotseat else HeuristicBot(seed=args.seed)
-    print(f"Heads-up NLHE: {names[0]} vs {names[1]}, {args.stack} chips each, blinds {args.sb}/{args.bb}")
+    print(f"Heads-up NLHE: {names[0]} vs {names[1]}")
+    print(structure.describe())
     print(HELP)
 
     while not table.match_over:
+        before = table.level
         table.deal()
+        if table.level != before:
+            print(f"\n*** Blinds go up: level {table.level + 1}, {table.small_blind}/{table.big_blind} ***")
         last_viewer = None
         while not table.hand.finished:
             seat = table.hand.to_act
@@ -143,11 +164,36 @@ def play(args):
 def print_history(table):
     for h in table.history[-10:]:
         net = ", ".join(f"{table.names[s]} {h['net'][s]:+d}" for s in (0, 1))
-        print(f"  #{h['hand_no']}: pot {h['pot']}, board {pretty_cards(h['board'])} → {net}")
+        blinds = "/".join(map(str, h.get("blinds", [])))
+        print(f"  #{h['hand_no']} ({blinds}): pot {h['pot']}, board {pretty_cards(h['board'])} → {net}")
 
 
 def clear():
     print("\033[2J\033[H", end="")
+
+
+def build_structure(args) -> BlindStructure:
+    d = preset(args.structure).to_dict()
+    changed = False
+    if args.stack:
+        d["starting_stack"], changed = args.stack, True
+    if args.levels:
+        d["levels"], changed = parse_levels(args.levels), True
+    if args.hands_per_level:
+        d.update(hands_per_level=args.hands_per_level, minutes_per_level=None)
+        changed = True
+    elif args.minutes_per_level:
+        d.update(minutes_per_level=args.minutes_per_level, hands_per_level=None)
+        changed = True
+    elif args.fixed:
+        d.update(minutes_per_level=None, hands_per_level=None)
+        changed = True
+    if changed:
+        d["name"] = "Custom"
+    try:
+        return BlindStructure.from_dict(d)
+    except ValueError as e:
+        sys.exit(f"! {e}")
 
 
 # ----------------------------------------------------------- save-file table
@@ -168,7 +214,7 @@ def save(table, path):
 
 def table_cmd(args):
     if args.cmd == "new":
-        table = Table(args.players, args.stack, args.sb, args.bb, seed=args.seed)
+        table = Table(args.players, seed=args.seed, structure=build_structure(args))
         table.deal()
         save(table, args.file)
         print(f"Table created at {args.file}. Hand #1 dealt; {table.names[table.hand.to_act]} to act.")
@@ -178,7 +224,8 @@ def table_cmd(args):
         if args.cmd == "deal":
             table.deal()
             save(table, args.file)
-            print(f"Hand #{table.hand_no} dealt; {table.names[table.hand.to_act]} to act.")
+            print(f"Hand #{table.hand_no} dealt at {level_line(table.level_info())}; "
+                  f"{table.names[table.hand.to_act]} to act.")
         elif args.cmd == "act":
             action, amount = parse_action(" ".join(args.action))
             table.act(args.who, action, amount)
@@ -189,6 +236,9 @@ def table_cmd(args):
             print(json.dumps(v, indent=1) if args.json else render(v))
         elif args.cmd == "history":
             print_history(table)
+        elif args.cmd == "structure":
+            print(table.blind_structure().describe())
+            print("Now: " + level_line(table.level_info()))
     except (IllegalAction, ValueError) as e:
         sys.exit(f"! {e}")
 
@@ -200,9 +250,15 @@ def main(argv=None):
     sub = p.add_subparsers(dest="mode", required=True)
 
     def stakes(sp):
-        sp.add_argument("--stack", type=int, default=200, help="starting chips (default 200)")
-        sp.add_argument("--sb", type=int, default=1, help="small blind (default 1)")
-        sp.add_argument("--bb", type=int, default=2, help="big blind (default 2)")
+        g = sp.add_argument_group("blind structure")
+        g.add_argument("--structure", default="standard", choices=sorted(PRESETS),
+                       help="preset to start from (default standard; see 'structures')")
+        g.add_argument("--stack", type=int, help="starting chips for each player")
+        g.add_argument("--levels", help="blind levels, e.g. 10/20,15/30,25/50")
+        pace = g.add_mutually_exclusive_group()
+        pace.add_argument("--hands-per-level", type=int, help="blinds go up every N hands")
+        pace.add_argument("--minutes-per-level", type=float, help="blinds go up every N minutes")
+        pace.add_argument("--fixed", action="store_true", help="blinds never go up")
         sp.add_argument("--seed", help="seed for reproducible shuffles")
 
     pp = sub.add_parser("play", help="play interactively")
@@ -210,6 +266,8 @@ def main(argv=None):
     pp.add_argument("--hotseat", action="store_true", help="two humans, one terminal")
     pp.add_argument("--opponent", default="Player2", help="second name in hotseat mode")
     stakes(pp)
+
+    sub.add_parser("structures", help="show the preset blind structures")
 
     tp = sub.add_parser("table", help="turn-by-turn play through a JSON save file")
     tp.add_argument("--file", default="table.json")
@@ -219,6 +277,7 @@ def main(argv=None):
     stakes(tn)
     tsub.add_parser("deal")
     tsub.add_parser("history")
+    tsub.add_parser("structure", help="show this table's blind structure and current level")
     ts = tsub.add_parser("show")
     ts.add_argument("--as", dest="who", required=True)
     ts.add_argument("--json", action="store_true")
@@ -227,6 +286,9 @@ def main(argv=None):
     ta.add_argument("action", nargs="+", help="e.g. call | check | fold | raise 12 | allin")
 
     args = p.parse_args(argv)
+    if args.mode == "structures":
+        print("\n\n".join(st.describe() for st in PRESETS.values()))
+        return
     if args.mode == "play":
         play(args)
     else:

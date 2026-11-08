@@ -17,9 +17,11 @@ Rules implemented:
 
 import random
 import secrets
+import time
 
 from .cards import shuffled_deck
 from .evaluator import best_hand, describe
+from .structure import BlindStructure
 
 STREETS = ["preflop", "flop", "turn", "river"]
 CARDS_DEALT = {"flop": 3, "turn": 1, "river": 1}
@@ -271,22 +273,68 @@ class Hand:
 
 
 class Table:
-    """A heads-up match: two players, alternating button, until one is broke."""
+    """A heads-up match: two players, alternating button, until one is broke.
 
-    def __init__(self, names, starting_stack=200, small_blind=1, big_blind=2, seed=None):
+    Pass a `structure` (see holdem.structure) for blinds that go up; without
+    one, the table plays fixed `small_blind`/`big_blind` blinds. A
+    `starting_stack` given alongside a structure overrides the structure's.
+    """
+
+    def __init__(self, names, starting_stack=None, small_blind=1, big_blind=2, seed=None,
+                 structure=None, clock=None):
         if len(names) != 2:
             raise ValueError("heads-up needs exactly two players")
-        if not 0 < small_blind <= big_blind:
-            raise ValueError("blinds must satisfy 0 < small blind <= big blind")
+        if structure is None:
+            structure = BlindStructure.fixed(small_blind, big_blind, starting_stack or 200)
+        elif starting_stack:
+            structure = BlindStructure.from_dict({**structure.to_dict(), "starting_stack": starting_stack})
         self.names = list(names)
-        self.stacks = [starting_stack, starting_stack]
-        self.small_blind = small_blind
-        self.big_blind = big_blind
+        self.structure = structure.to_dict()
+        self.stacks = [structure.starting_stack] * 2
+        self.level = 0
+        self.small_blind, self.big_blind = structure.blinds(0)
         self.seed = seed if seed is not None else secrets.token_hex(8)
+        self.started_at = None  # wall-clock time of the first deal
         self.button = 1  # flips to seat 0 on the first hand
         self.hand_no = 0
         self.hand = None
         self.history = []
+        self._clock = clock
+
+    # The clock is injectable for tests; it is not saved with the table.
+    def _now(self) -> float:
+        clock = getattr(self, "_clock", None)
+        return clock() if clock else time.time()
+
+    def blind_structure(self) -> BlindStructure:
+        return BlindStructure.from_dict(self.structure)
+
+    def elapsed(self) -> float:
+        return 0.0 if self.started_at is None else self._now() - self.started_at
+
+    def level_info(self) -> dict:
+        """Current level, and what comes next and when.
+
+        hands_left counts the hand in progress, if any. 0 means the next hand
+        is dealt at the next level. seconds_left can be 0 for the same reason.
+        """
+        st = self.blind_structure()
+        info = {
+            "structure": st.name,
+            "level": self.level + 1,
+            "blinds": [self.small_blind, self.big_blind],
+            "next_blinds": list(st.blinds(self.level + 1)) if st.increases else None,
+            "hands_left": None,
+            "seconds_left": None,
+        }
+        if st.hands_per_level:
+            last_hand_of_level = (self.level + 1) * st.hands_per_level
+            in_progress = self.hand is not None and not self.hand.finished
+            info["hands_left"] = max(0, last_hand_of_level - self.hand_no + (1 if in_progress else 0))
+        elif st.minutes_per_level:
+            end = (self.level + 1) * st.minutes_per_level * 60
+            info["seconds_left"] = max(0, round(end - self.elapsed()))
+        return info
 
     def seat_of(self, who) -> int:
         if isinstance(who, int) and who in (0, 1):
@@ -311,8 +359,13 @@ class Table:
             raise IllegalAction("the current hand is not finished")
         if self.match_over:
             raise IllegalAction(f"the match is over - {self.names[self.winner]} won")
+        if self.started_at is None:
+            self.started_at = self._now()
         self.hand_no += 1
         self.button = 1 - self.button
+        st = self.blind_structure()
+        self.level = max(self.level, st.level_for(self.hand_no, self.elapsed()))
+        self.small_blind, self.big_blind = st.blinds(self.level)
         rng = random.Random(f"{self.seed}:{self.hand_no}")
         self.hand = Hand(self.stacks, self.button, self.small_blind, self.big_blind,
                          shuffled_deck(rng), self.hand_no)
@@ -338,6 +391,7 @@ class Table:
                 "hole": h.hole if h.result["showdown"] else None,
                 "board": h.board,
                 "pot": h.result["pot"],
+                "blinds": [h.small_blind, h.big_blind],
                 "winners": h.result["winners"],
                 "net": [h.stacks[s] - h.start_stacks[s] for s in (0, 1)],
             })
@@ -352,6 +406,7 @@ class Table:
             "seat": seat,
             "stacks": {self.names[s]: self.stacks[s] for s in (0, 1)},
             "blinds": [self.small_blind, self.big_blind],
+            "level": self.level_info(),
             "hand_no": self.hand_no,
             "match_over": self.match_over,
             "winner": self.names[self.winner] if self.match_over else None,
@@ -382,13 +437,14 @@ class Table:
         return v
 
     def to_dict(self) -> dict:
-        d = dict(vars(self))
+        d = {k: v for k, v in vars(self).items() if not k.startswith("_")}
         d["hand"] = self.hand.to_dict() if self.hand else None
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Table":
+    def from_dict(cls, data: dict, clock=None) -> "Table":
         t = cls.__new__(cls)
         t.__dict__.update(data)
         t.hand = Hand.from_dict(data["hand"]) if data["hand"] else None
+        t._clock = clock
         return t
