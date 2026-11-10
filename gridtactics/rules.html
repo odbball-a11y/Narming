@@ -69,7 +69,7 @@ code, .mono { font-family: var(--f-mono); font-size: .88em; }
 .unit header { display: flex; align-items: center; gap: 12px; }
 .token { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 800 20px/1 var(--f-display);
   background: var(--blue); color: var(--panel); box-shadow: inset 0 0 0 3px var(--orange); flex: none; }
-.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .stats div { display: grid; gap: 2px; padding: 8px 4px; text-align: center; border-left: 1px solid var(--line); }
 .stats div:first-child { border-left: 0; }
 .stats b { font: 700 18px/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
@@ -134,7 +134,7 @@ tr:last-child td { border-bottom: 0; }
     <span class="chip">2 players</span>
     <span class="chip">About 30 minutes</span>
     <span class="chip">Learn in 10 minutes</span>
-    <span class="chip draft">Draft rules 0.3, still being tested</span>
+    <span class="chip draft">Draft rules 0.4, still being tested</span>
   </div>
 </header>
 
@@ -159,7 +159,7 @@ tr:last-child td { border-bottom: 0; }
       <svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="16" fill="var(--orange-soft)" stroke="var(--orange)" stroke-width="3"/><path d="M14 14 30 30M30 14 14 30" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/></svg>
       <span class="how">Wipe out</span>
       <h3>Destroy their army</h3>
-      <p>Your opponent has no units on the board and can't bring in any more, because their reserve is empty or they can't afford what's left.</p>
+      <p>Your opponent has no units left on the board and nothing left in their reserve to bring in.</p>
     </article>
   </div>
 </section>
@@ -173,7 +173,7 @@ tr:last-child td { border-bottom: 0; }
       <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="4" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="3"/></svg>
         <p><strong>Bases.</strong> <span class="blue">Blue</span>'s base is <span class="mono">e1</span> at the bottom; <span class="orange">Orange</span>'s is <span class="mono">d10</span> at the top. New units arrive next to your base. Guard yours, because one enemy unit stepping onto it ends the game.</p></div>
       <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 3 31 17 17 31 3 17Z" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="3"/></svg>
-        <p><strong>Control points</strong> at <span class="mono">a5</span> and <span class="mono">h6</span>. Stand on them to score victory points and earn extra gold.</p></div>
+        <p><strong>Control points</strong> at <span class="mono">a5</span> and <span class="mono">h6</span>. Stand on them to score victory points.</p></div>
       <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><defs><pattern id="hatchK" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--high)"/><rect width="2" height="6" fill="var(--high-line)"/></pattern></defs><rect x="2" y="2" width="30" height="30" rx="4" fill="url(#hatchK)"/></svg>
         <p><strong>High ground</strong> at <span class="mono">e6</span> and <span class="mono">f6</span>. Spearmen and Archers standing here reach 1 square further.</p></div>
       <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="4" fill="var(--wall)"/></svg>
@@ -191,19 +191,19 @@ tr:last-child td { border-bottom: 0; }
   <div class="units">
     <article class="unit">
       <header><div class="token" aria-hidden="true">B</div><div><h3>Bruiser</h3><div class="note">Fast, tough, cheap</div></div></header>
-      <div class="stats"><div><b>6</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>1</b><span>Range</span></div><div><b>3</b><span>Move</span></div><div><b>2</b><span>Gold</span></div></div>
+      <div class="stats"><div><b>6</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>1</b><span>Range</span></div><div><b>3</b><span>Move</span></div></div>
       <p>Can move and then attack in the same action.</p>
       <div class="ability"><h4>Charge</h4><p>If the Bruiser moved 2 or more squares this action, its attack deals 3 damage.</p></div>
     </article>
     <article class="unit">
       <header><div class="token" aria-hidden="true">S</div><div><h3>Spearman</h3><div class="note">Holds the line</div></div></header>
-      <div class="stats"><div><b>5</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>1</b><span>Range</span></div><div><b>2</b><span>Move</span></div><div><b>3</b><span>Gold</span></div></div>
+      <div class="stats"><div><b>5</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>1</b><span>Range</span></div><div><b>2</b><span>Move</span></div></div>
       <p>Can move and then attack in the same action.</p>
       <div class="ability"><h4>First strike</h4><p>When an enemy unit moves and stops next to a Spearman, the Spearman hits it for 2 damage straight away, before the enemy attacks.</p></div>
     </article>
     <article class="unit">
       <header><div class="token" aria-hidden="true">A</div><div><h3>Archer</h3><div class="note">Fragile, long reach</div></div></header>
-      <div class="stats"><div><b>4</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>2–4</b><span>Range</span></div><div><b>2</b><span>Move</span></div><div><b>4</b><span>Gold</span></div></div>
+      <div class="stats"><div><b>4</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>2–4</b><span>Range</span></div><div><b>2</b><span>Move</span></div></div>
       <p>Moves <em>or</em> shoots in an action, never both. Can't attack an adjacent unit, or hit back at one.</p>
       <div class="ability"><h4>Steady aim</h4><p>Deals 3 damage to a unit that did not move during its side's most recent turn.</p></div>
     </article>
@@ -215,7 +215,7 @@ tr:last-child td { border-bottom: 0; }
       <li><strong>Spearmen stop Bruisers.</strong> A charging Bruiser takes a first strike before it lands its blow.</li>
       <li><strong>Archers break Spearmen.</strong> They shoot from out of reach, and a Spearman holding its ground takes 3.</li>
     </ul>
-    <p class="note">A mixed army is stronger than three of the same kind. Watch what your opponent fields and recruit the answer.</p>
+    <p class="note">Both sides get the same reserve, so the skill is in timing: watch what your opponent fields and bring in the answer when it counts.</p>
   </div>
 </section>
 
@@ -226,18 +226,17 @@ tr:last-child td { border-bottom: 0; }
     <li><div><h3>Choose sides</h3><p>Decide at random who plays <span class="blue">Blue</span>. Blue sits at the bottom (row 1) and takes the first turn. <span class="orange">Orange</span> sits at the top.</p></div></li>
     <li><div><h3>Place the starting armies</h3><p>Blue: Bruiser on <span class="mono">d2</span>, Spearman on <span class="mono">e2</span>, Archer on <span class="mono">f2</span>. Orange: Bruiser on <span class="mono">c9</span>, Spearman on <span class="mono">d9</span>, Archer on <span class="mono">e9</span>.</p></div></li>
     <li><div><h3>Set out your reserve</h3><p>Beside the board, each player keeps 2 Bruisers, 2 Spearmen and 2 Archers. These are the only reinforcements you get all game.</p></div></li>
-    <li><div><h3>Take gold and zero your score</h3><p>Each player starts with 4 gold and 0 victory points.</p></div></li>
+    <li><div><h3>Set the score</h3><p>Blue starts on 0 victory points and Orange on 2. Orange moves second, and the head start makes up for it.</p></div></li>
   </ol>
 </section>
 
 <section aria-labelledby="turn">
   <div class="eyebrow">Playing the game</div>
   <h2 id="turn">On your turn</h2>
-  <p>Players take turns, starting with Blue. A round is one turn each. Every turn follows the same three steps, in order.</p>
+  <p>Players take turns, starting with Blue. A round is one turn each. Every turn follows the same two steps, in order.</p>
   <div class="turn">
     <ol class="steps">
       <li><div><h3>Score</h3><p>Gain 1 victory point for each control point one of your units is standing on. If you reach 12, you win.</p></div></li>
-      <li><div><h3>Collect gold</h3><p>Take 3 gold, plus 1 more for each control point you own. You own a point if your unit was the last one to stand on it, even after that unit has walked away.</p></div></li>
       <li><div><h3>Take up to 5 actions</h3><p>Each action is either <strong>recruiting</strong> one unit or <strong>activating</strong> one of your units to move and/or attack. You may recruit once per turn, as your first action. Each unit can be activated only once per turn. Unused actions are lost.</p></div></li>
     </ol>
   </div>
@@ -275,7 +274,7 @@ tr:last-child td { border-bottom: 0; }
     <div class="rule">
       <h3>Recruiting</h3>
       <ul>
-        <li>Pay the unit's gold cost, take it from your reserve and place it on an empty square next to your base (up, down, left or right of it).</li>
+        <li>Take any unit from your reserve and place it on an empty square next to your base (up, down, left or right of it). Recruiting is free; your reserve is the only limit.</li>
         <li>You can have at most <strong>6 units</strong> on the board.</li>
         <li>A new unit can be activated later in the same turn.</li>
         <li>If every square around your base is filled, you can't recruit.</li>
@@ -297,7 +296,7 @@ tr:last-child td { border-bottom: 0; }
         <li><strong>First strike:</strong> the Spearman hits the Bruiser before it swings. Bruiser: 6 → 4.</li>
         <li><strong>The Bruiser attacks</strong> for 3. Spearman: 2 → 0, removed. Orange will score nothing from <span class="mono">h6</span> next turn.</li>
       </ol>
-      <p class="note">Order matters. If the Bruiser had gone first, the Spearman would have survived its hit and struck back, and the Bruiser would have taken 4 damage instead of 2. Orange still owns <span class="mono">h6</span> for gold until a Blue unit stands on it.</p>
+      <p class="note">Order matters. If the Bruiser had gone first, the Spearman would have survived its hit and struck back, and the Bruiser would have taken 4 damage instead of 2.</p>
     </div>
   </div>
 </section>
@@ -307,11 +306,11 @@ tr:last-child td { border-bottom: 0; }
   <h2 id="refcard">Quick reference</h2>
   <div class="ref">
     <table>
-      <thead><tr><th>Unit</th><th>Health</th><th>Damage</th><th>Range</th><th>Move</th><th>Gold</th><th>Acts</th><th>Ability</th></tr></thead>
+      <thead><tr><th>Unit</th><th>Health</th><th>Damage</th><th>Range</th><th>Move</th><th>Acts</th><th>Ability</th></tr></thead>
       <tbody>
-        <tr><td><strong>Bruiser</strong></td><td class="n">6</td><td class="n">2</td><td class="n">1</td><td class="n">3</td><td class="n">2</td><td>Move + attack</td><td>Charge: 3 damage after moving 2+</td></tr>
-        <tr><td><strong>Spearman</strong></td><td class="n">5</td><td class="n">2</td><td class="n">1 (2 high)</td><td class="n">2</td><td class="n">3</td><td>Move + attack</td><td>First strike on enemies that stop next to it</td></tr>
-        <tr><td><strong>Archer</strong></td><td class="n">4</td><td class="n">2</td><td class="n">2–4 (2–5 high)</td><td class="n">2</td><td class="n">4</td><td>Move or attack</td><td>Steady aim: 3 damage to a unit that stood still</td></tr>
+        <tr><td><strong>Bruiser</strong></td><td class="n">6</td><td class="n">2</td><td class="n">1</td><td class="n">3</td><td>Move + attack</td><td>Charge: 3 damage after moving 2+</td></tr>
+        <tr><td><strong>Spearman</strong></td><td class="n">5</td><td class="n">2</td><td class="n">1 (2 high)</td><td class="n">2</td><td>Move + attack</td><td>First strike on enemies that stop next to it</td></tr>
+        <tr><td><strong>Archer</strong></td><td class="n">4</td><td class="n">2</td><td class="n">2–4 (2–5 high)</td><td class="n">2</td><td>Move or attack</td><td>Steady aim: 3 damage to a unit that stood still</td></tr>
       </tbody>
     </table>
   </div>
@@ -320,9 +319,9 @@ tr:last-child td { border-bottom: 0; }
       <thead><tr><th>Turn step</th><th>What happens</th></tr></thead>
       <tbody>
         <tr><td><strong>1. Score</strong></td><td>+1 point per control point you stand on. 12 points wins.</td></tr>
-        <tr><td><strong>2. Gold</strong></td><td>+3, plus +1 per control point you own.</td></tr>
-        <tr><td><strong>3. Actions</strong></td><td>Up to 5. Recruit once (first), then activate each unit at most once. Unused actions are lost.</td></tr>
-        <tr><td><strong>Any time</strong></td><td>A unit on the enemy base wins at once. A side with no units that can't recruit loses.</td></tr>
+        <tr><td><strong>2. Actions</strong></td><td>Up to 5. Recruit once (first), then activate each unit at most once. Unused actions are lost.</td></tr>
+        <tr><td><strong>Any time</strong></td><td>A unit on the enemy base wins at once. A side with no units and an empty reserve loses.</td></tr>
+        <tr><td><strong>Setup</strong></td><td>Reserve of 2 of each unit. Blue starts on 0 points, Orange on 2.</td></tr>
       </tbody>
     </table>
   </div>
@@ -337,8 +336,8 @@ tr:last-child td { border-bottom: 0; }
     <details><summary>Can a unit attack without moving?</summary><p>Yes. Any unit can attack from where it stands. Archers must do this, because they can't move and attack in the same action.</p></details>
     <details><summary>Do walls block arrows?</summary><p>No. Walls only block movement. Range is counted straight through them.</p></details>
     <details><summary>What if an Archer is attacked by an adjacent enemy?</summary><p>It can't hit back. Archers need at least 2 squares of space. Keep them behind your Spearmen.</p></details>
-    <details><summary>Does the game have a turn limit?</summary><p>No. Your reserve of 6 reinforcements runs out, and the control points keep scoring, so games end on their own. In testing, most finished in 10 to 16 rounds.</p></details>
-    <details><summary>What happens if both control points are held by the same player?</summary><p>They score 2 points a turn and earn 2 extra gold. That's how most points victories happen, so contest at least one.</p></details>
+    <details><summary>Does the game have a turn limit?</summary><p>No. Your reserve of 6 reinforcements runs out, and the control points keep scoring, so games end on their own. In testing, most finished in 10 to 15 rounds.</p></details>
+    <details><summary>What happens if both control points are held by the same player?</summary><p>They score 2 points a turn. That's how most points victories happen, so contest at least one.</p></details>
   </div>
 </section>
 
@@ -347,8 +346,8 @@ tr:last-child td { border-bottom: 0; }
   <h3 id="draft">These are draft rules</h3>
   <p>They come from thousands of simulated games between computer players. The next things to check at the table:</p>
   <ul>
-    <li>Whether an army of only Bruisers is too good at holding the control points. A higher cost of 3 gold is the likely fix.</li>
-    <li>Whether Blue's first move is an advantage. The computer players won 55% as Blue. If it shows with people too, Orange may start with 1 point.</li>
+    <li>Whether Orange's 2-point head start is right for people. Computer players won 46% as Blue with it, and 58% without it.</li>
+    <li>Whether the free choice of when to recruit gives enough decisions. A reserve draft before the game is a possible addition.</li>
     <li>Whether parking a unit on your own base makes defending too easy.</li>
   </ul>
 </aside>

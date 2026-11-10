@@ -16,12 +16,10 @@ HELD = dict(vp_timing="start", **NO_CUTOFF)
 CORE = dict(mech=MECH, pool=POOL)
 DRAFT = dict(**CORE, vp_target=12, **HELD)          # draft rules 0.3 (the rulebook)
 FREE = dict(cost=dict(B=0, S=0, A=0))               # no gold: the reserve is the only limit
+DRAFT_04 = dict(DRAFT, **FREE, start_vp=(0, 2))    # draft rules 0.4: no gold, Orange starts on 2 VP
 VARIANTS = {
     "draft 0.3":                               DRAFT,
-    "Orange starts with 2 VP":                 dict(DRAFT, start_vp=(0, 2)),
-    "no gold":                                 dict(DRAFT, **FREE),
-    "no gold, Orange 1 VP":                    dict(DRAFT, **FREE, start_vp=(0, 1)),
-    "no gold, Orange 2 VP":                    dict(DRAFT, **FREE, start_vp=(0, 2)),
+    "draft 0.4":                               DRAFT_04,
 }
 PAIRS = [(a, b) for a in g.STYLES for b in g.STYLES]
 
