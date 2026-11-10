@@ -1,0 +1,399 @@
+<title>Grid Tactics Rulebook</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a single rulebook column; board and legend sit side by side on wide screens. Team colours carry meaning throughout. */
+:root {
+  --bg: #eef1f5; --panel: #ffffff; --ink: #18212c; --muted: #566273; --line: #cfd6df;
+  --blue: #2a66cc; --blue-soft: #dbe6f8; --orange: #d9661a; --orange-soft: #fbe3d2;
+  --tile-a: #e3e8ee; --tile-b: #d6dde5; --wall: #3a4452; --high: #9db36a; --high-line: #6f8a3d;
+  --gold: #c99a12; --gold-soft: #f6ebc8;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10151c; --panel: #18202a; --ink: #e5eaf0; --muted: #98a4b3; --line: #2c3642;
+  --blue: #5b93f0; --blue-soft: #1b2b45; --orange: #f08a43; --orange-soft: #3b2415;
+  --tile-a: #222b36; --tile-b: #1b232d; --wall: #6a7686; --high: #5d7036; --high-line: #8fa95b;
+  --gold: #e2b734; --gold-soft: #3a3115; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #10151c; --panel: #18202a; --ink: #e5eaf0; --muted: #98a4b3; --line: #2c3642;
+  --blue: #5b93f0; --blue-soft: #1b2b45; --orange: #f08a43; --orange-soft: #3b2415;
+  --tile-a: #222b36; --tile-b: #1b232d; --wall: #6a7686; --high: #5d7036; --high-line: #8fa95b;
+  --gold: #e2b734; --gold-soft: #3a3115; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 17px/1.6 var(--f-body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); line-height: 1.1; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(26px, 4vw, 34px); font-weight: 800; }
+h3 { font-size: 20px; font-weight: 700; }
+p { margin: 0; max-width: 66ch; }
+section { display: grid; gap: 20px; }
+.eyebrow { font: 700 12px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 19px; color: var(--muted); }
+strong { font-weight: 700; }
+.blue { color: var(--blue); } .orange { color: var(--orange); }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+
+/* Hero */
+.hero { display: grid; gap: 18px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+.hero h1 { font-size: clamp(46px, 9vw, 88px); font-weight: 800; letter-spacing: -.02em; }
+.hero h1 span:first-child { color: var(--blue); } .hero h1 span:last-child { color: var(--orange); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 500 13px/1 var(--f-mono); padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+.chip.draft { border-color: var(--gold); background: var(--gold-soft); }
+
+/* Win conditions */
+.wins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.win { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 10px; align-content: start; }
+.win svg { width: 44px; height: 44px; }
+.win .how { font: 700 12px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+/* Board */
+.board-row { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 32px; align-items: start; }
+.board-box { overflow-x: auto; }
+#board { width: 100%; max-width: 420px; height: auto; display: block; }
+#board text { font-family: var(--f-mono); }
+.legend { display: grid; gap: 14px; }
+.key { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: start; }
+.key svg { width: 34px; height: 34px; }
+.key p { font-size: 16px; }
+
+/* Units */
+.units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.unit { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; align-content: start; }
+.unit header { display: flex; align-items: center; gap: 12px; }
+.token { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 800 20px/1 var(--f-display);
+  background: var(--blue); color: var(--panel); box-shadow: inset 0 0 0 3px var(--orange); flex: none; }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stats div { display: grid; gap: 2px; padding: 8px 4px; text-align: center; border-left: 1px solid var(--line); }
+.stats div:first-child { border-left: 0; }
+.stats b { font: 700 18px/1.1 var(--f-mono); font-variant-numeric: tabular-nums; }
+.stats span { font: 500 10px/1.2 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ability { border-top: 1px dashed var(--line); padding-top: 12px; display: grid; gap: 4px; }
+.ability h4 { margin: 0; font: 700 15px/1.3 var(--f-display); }
+.ability p { font-size: 15.5px; }
+.triangle { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 8px; }
+.triangle ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+/* Steps */
+ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 14px; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: start; }
+ol.steps > li::before { content: counter(s); width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--ink);
+  display: grid; place-items: center; font: 800 17px/1 var(--f-display); }
+ol.steps h3 { margin-bottom: 4px; }
+
+.turn { background: var(--panel); border: 2px solid var(--ink); border-radius: 12px; padding: 24px; display: grid; gap: 18px; }
+
+/* Rule blocks */
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 36px; }
+.rule { display: grid; gap: 8px; align-content: start; }
+.rule ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 62ch; }
+
+/* Example */
+.example { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 28px; align-items: start; }
+#mini { width: 100%; max-width: 260px; height: auto; }
+.example ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+.note { font-size: 15.5px; color: var(--muted); }
+
+/* Reference card */
+.ref { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 700 11px/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+
+/* FAQ */
+.faq { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.faq details { border-bottom: 1px solid var(--line); padding: 14px 4px; }
+.faq summary { cursor: pointer; font: 700 17px/1.35 var(--f-display); }
+.faq summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: 4px; }
+.faq details p { margin-top: 8px; }
+
+.draftbox { border: 1px dashed var(--gold); background: var(--gold-soft); border-radius: 10px; padding: 20px; display: grid; gap: 10px; }
+.draftbox ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+@media (max-width: 760px) {
+  .wins, .units, .rules { grid-template-columns: minmax(0, 1fr); }
+  .board-row, .example { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">A game of small armies and tight squares</div>
+  <h1><span>Grid</span> <span>Tactics</span></h1>
+  <p class="lede">Two commanders, one 8 × 10 battlefield. Lead Bruisers, Spearmen and Archers to take the enemy base or hold the field, before your opponent does it to you.</p>
+  <div class="chips">
+    <span class="chip">2 players</span>
+    <span class="chip">About 30 minutes</span>
+    <span class="chip">Learn in 10 minutes</span>
+    <span class="chip draft">Draft rules 0.3, still being tested</span>
+  </div>
+</header>
+
+<section aria-labelledby="goal">
+  <div class="eyebrow">The goal</div>
+  <h2 id="goal">Three ways to win</h2>
+  <p>The first player to do any one of these wins immediately.</p>
+  <div class="wins">
+    <article class="win">
+      <svg viewBox="0 0 44 44" aria-hidden="true"><rect x="4" y="4" width="36" height="36" rx="6" fill="var(--orange-soft)" stroke="var(--orange)" stroke-width="3"/><circle cx="22" cy="22" r="10" fill="var(--blue)"/></svg>
+      <span class="how">Capture</span>
+      <h3>Take the enemy base</h3>
+      <p>Move any one of your units onto your opponent's base square. You win the moment it arrives.</p>
+    </article>
+    <article class="win">
+      <svg viewBox="0 0 44 44" aria-hidden="true"><path d="M22 4 40 22 22 40 4 22Z" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="3"/><text x="22" y="27" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)" font-family="JetBrains Mono, monospace">12</text></svg>
+      <span class="how">Points</span>
+      <h3>Score 12 victory points</h3>
+      <p>Hold the two control points. Each one you are standing on at the start of your turn scores 1 point.</p>
+    </article>
+    <article class="win">
+      <svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="16" fill="var(--orange-soft)" stroke="var(--orange)" stroke-width="3"/><path d="M14 14 30 30M30 14 14 30" stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/></svg>
+      <span class="how">Wipe out</span>
+      <h3>Destroy their army</h3>
+      <p>Your opponent has no units on the board and can't bring in any more, because their reserve is empty or they can't afford what's left.</p>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="field">
+  <div class="eyebrow">The battlefield</div>
+  <h2 id="field">Know the board</h2>
+  <div class="board-row">
+    <div class="board-box"><svg id="board" role="img" aria-label="The 8 by 10 board at the start of the game, with both bases, both armies, the two control points, high ground and walls"></svg></div>
+    <div class="legend">
+      <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="4" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="3"/></svg>
+        <p><strong>Bases.</strong> <span class="blue">Blue</span>'s base is <span class="mono">e1</span> at the bottom; <span class="orange">Orange</span>'s is <span class="mono">d10</span> at the top. New units arrive next to your base. Guard yours, because one enemy unit stepping onto it ends the game.</p></div>
+      <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 3 31 17 17 31 3 17Z" fill="var(--gold-soft)" stroke="var(--gold)" stroke-width="3"/></svg>
+        <p><strong>Control points</strong> at <span class="mono">a5</span> and <span class="mono">h6</span>. Stand on them to score victory points and earn extra gold.</p></div>
+      <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><defs><pattern id="hatchK" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--high)"/><rect width="2" height="6" fill="var(--high-line)"/></pattern></defs><rect x="2" y="2" width="30" height="30" rx="4" fill="url(#hatchK)"/></svg>
+        <p><strong>High ground</strong> at <span class="mono">e6</span> and <span class="mono">f6</span>. Spearmen and Archers standing here reach 1 square further.</p></div>
+      <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="4" fill="var(--wall)"/></svg>
+        <p><strong>Walls</strong> at <span class="mono">b7 c7</span> and <span class="mono">f4 g4</span>. Nothing can stand on or move through a wall. Attacks pass over them.</p></div>
+      <div class="key"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="var(--blue)"/><text x="17" y="22.5" text-anchor="middle" font-size="15" font-weight="800" fill="var(--panel)" font-family="Bricolage Grotesque, sans-serif">S</text></svg>
+        <p><strong>Starting armies.</strong> Each side begins with one Bruiser (B), one Spearman (S) and one Archer (A) in the row in front of its base.</p></div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="army">
+  <div class="eyebrow">Your army</div>
+  <h2 id="army">Three kinds of unit</h2>
+  <p>Every attack deals 2 damage unless a special ability says otherwise. A unit is removed when its health reaches 0. Units never heal.</p>
+  <div class="units">
+    <article class="unit">
+      <header><div class="token" aria-hidden="true">B</div><div><h3>Bruiser</h3><div class="note">Fast, tough, cheap</div></div></header>
+      <div class="stats"><div><b>6</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>1</b><span>Range</span></div><div><b>3</b><span>Move</span></div><div><b>2</b><span>Gold</span></div></div>
+      <p>Can move and then attack in the same action.</p>
+      <div class="ability"><h4>Charge</h4><p>If the Bruiser moved 2 or more squares this action, its attack deals 3 damage.</p></div>
+    </article>
+    <article class="unit">
+      <header><div class="token" aria-hidden="true">S</div><div><h3>Spearman</h3><div class="note">Holds the line</div></div></header>
+      <div class="stats"><div><b>5</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>1</b><span>Range</span></div><div><b>2</b><span>Move</span></div><div><b>3</b><span>Gold</span></div></div>
+      <p>Can move and then attack in the same action.</p>
+      <div class="ability"><h4>First strike</h4><p>When an enemy unit moves and stops next to a Spearman, the Spearman hits it for 2 damage straight away, before the enemy attacks.</p></div>
+    </article>
+    <article class="unit">
+      <header><div class="token" aria-hidden="true">A</div><div><h3>Archer</h3><div class="note">Fragile, long reach</div></div></header>
+      <div class="stats"><div><b>4</b><span>Health</span></div><div><b>2</b><span>Damage</span></div><div><b>2–4</b><span>Range</span></div><div><b>2</b><span>Move</span></div><div><b>4</b><span>Gold</span></div></div>
+      <p>Moves <em>or</em> shoots in an action, never both. Can't attack an adjacent unit, or hit back at one.</p>
+      <div class="ability"><h4>Steady aim</h4><p>Deals 3 damage to a unit that did not move during its side's most recent turn.</p></div>
+    </article>
+  </div>
+  <div class="triangle">
+    <h3>Who beats whom</h3>
+    <ul>
+      <li><strong>Bruisers hunt Archers.</strong> They close the distance fast, charge for 3, and an adjacent Archer can't hit back.</li>
+      <li><strong>Spearmen stop Bruisers.</strong> A charging Bruiser takes a first strike before it lands its blow.</li>
+      <li><strong>Archers break Spearmen.</strong> They shoot from out of reach, and a Spearman holding its ground takes 3.</li>
+    </ul>
+    <p class="note">A mixed army is stronger than three of the same kind. Watch what your opponent fields and recruit the answer.</p>
+  </div>
+</section>
+
+<section aria-labelledby="setup">
+  <div class="eyebrow">Before you start</div>
+  <h2 id="setup">Setup</h2>
+  <ol class="steps">
+    <li><div><h3>Choose sides</h3><p>Decide at random who plays <span class="blue">Blue</span>. Blue sits at the bottom (row 1) and takes the first turn. <span class="orange">Orange</span> sits at the top.</p></div></li>
+    <li><div><h3>Place the starting armies</h3><p>Blue: Bruiser on <span class="mono">d2</span>, Spearman on <span class="mono">e2</span>, Archer on <span class="mono">f2</span>. Orange: Bruiser on <span class="mono">c9</span>, Spearman on <span class="mono">d9</span>, Archer on <span class="mono">e9</span>.</p></div></li>
+    <li><div><h3>Set out your reserve</h3><p>Beside the board, each player keeps 2 Bruisers, 2 Spearmen and 2 Archers. These are the only reinforcements you get all game.</p></div></li>
+    <li><div><h3>Take gold and zero your score</h3><p>Each player starts with 4 gold and 0 victory points.</p></div></li>
+  </ol>
+</section>
+
+<section aria-labelledby="turn">
+  <div class="eyebrow">Playing the game</div>
+  <h2 id="turn">On your turn</h2>
+  <p>Players take turns, starting with Blue. A round is one turn each. Every turn follows the same three steps, in order.</p>
+  <div class="turn">
+    <ol class="steps">
+      <li><div><h3>Score</h3><p>Gain 1 victory point for each control point one of your units is standing on. If you reach 12, you win.</p></div></li>
+      <li><div><h3>Collect gold</h3><p>Take 3 gold, plus 1 more for each control point you own. You own a point if your unit was the last one to stand on it, even after that unit has walked away.</p></div></li>
+      <li><div><h3>Take up to 5 actions</h3><p>Each action is either <strong>recruiting</strong> one unit or <strong>activating</strong> one of your units to move and/or attack. You may recruit once per turn, as your first action. Each unit can be activated only once per turn. Unused actions are lost.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section aria-labelledby="detail">
+  <div class="eyebrow">The rules in detail</div>
+  <h2 id="detail">Moving, fighting, recruiting</h2>
+  <div class="rules">
+    <div class="rule">
+      <h3>Moving</h3>
+      <ul>
+        <li>Move up, down, left or right, one square at a time, up to the unit's Move value. No diagonal steps.</li>
+        <li>You can't enter or pass through walls or any other unit, including your own.</li>
+        <li><strong>Enemies hold you up.</strong> When a unit steps onto a square next to an enemy, it must stop there. A unit that <em>starts</em> next to an enemy may still walk away.</li>
+      </ul>
+    </div>
+    <div class="rule">
+      <h3>Attacking</h3>
+      <ul>
+        <li>Count range like movement, squares up, down, left and right, but walls and units don't block it.</li>
+        <li>Bruisers and Spearmen attack at range 1 (next door). Archers attack at range 2 to 4.</li>
+        <li><strong>On high ground</strong>, Spearmen and Archers add 1 to their maximum range. Bruisers don't.</li>
+        <li><strong>Hitting back.</strong> If the target survives and the attacker is within the target's range, the target strikes back once, right away.</li>
+      </ul>
+    </div>
+    <div class="rule">
+      <h3>Special abilities</h3>
+      <ul>
+        <li><strong>Charge</strong> counts squares moved in this action only. It doesn't apply when a Bruiser hits back.</li>
+        <li><strong>First strike</strong> happens when the enemy finishes its move. If it kills the unit, that unit's attack is lost. Every enemy Spearman next to the stopping square strikes. Placing a new recruit doesn't trigger it.</li>
+        <li><strong>Steady aim</strong> also applies when an Archer hits back. A unit recruited this turn hasn't moved yet, so it counts as standing still.</li>
+      </ul>
+    </div>
+    <div class="rule">
+      <h3>Recruiting</h3>
+      <ul>
+        <li>Pay the unit's gold cost, take it from your reserve and place it on an empty square next to your base (up, down, left or right of it).</li>
+        <li>You can have at most <strong>6 units</strong> on the board.</li>
+        <li>A new unit can be activated later in the same turn.</li>
+        <li>If every square around your base is filled, you can't recruit.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="ex">
+  <div class="eyebrow">An example turn</div>
+  <h2 id="ex">Breaking a point</h2>
+  <div class="example">
+    <svg id="mini" role="img" aria-label="Close-up of the right edge of the board: an Orange Spearman on control point h6, a Blue Archer on f5 and a Blue Bruiser on h3, with the wall on g4"></svg>
+    <div class="rule">
+      <p>An <span class="orange">Orange</span> Spearman (5 health) has held the control point on <span class="mono">h6</span> for several turns, scoring every time. <span class="blue">Blue</span> has an Archer on <span class="mono">f5</span> and a Bruiser on <span class="mono">h3</span>.</p>
+      <ol>
+        <li><strong>The Archer shoots first.</strong> <span class="mono">h6</span> is 3 squares away (2 across, 1 up), within range 2–4. The Spearman didn't move last turn, so steady aim deals 3. Spearman: 5 → 2. The Spearman's range is 1, so it can't hit back.</li>
+        <li><strong>The Bruiser charges.</strong> It moves <span class="mono">h4</span>, <span class="mono">h5</span>. Being next to the Spearman, it must stop there. That's 2 squares, so charge is on.</li>
+        <li><strong>First strike:</strong> the Spearman hits the Bruiser before it swings. Bruiser: 6 → 4.</li>
+        <li><strong>The Bruiser attacks</strong> for 3. Spearman: 2 → 0, removed. Orange will score nothing from <span class="mono">h6</span> next turn.</li>
+      </ol>
+      <p class="note">Order matters. If the Bruiser had gone first, the Spearman would have survived its hit and struck back, and the Bruiser would have taken 4 damage instead of 2. Orange still owns <span class="mono">h6</span> for gold until a Blue unit stands on it.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="refcard">
+  <div class="eyebrow">Keep this handy</div>
+  <h2 id="refcard">Quick reference</h2>
+  <div class="ref">
+    <table>
+      <thead><tr><th>Unit</th><th>Health</th><th>Damage</th><th>Range</th><th>Move</th><th>Gold</th><th>Acts</th><th>Ability</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Bruiser</strong></td><td class="n">6</td><td class="n">2</td><td class="n">1</td><td class="n">3</td><td class="n">2</td><td>Move + attack</td><td>Charge: 3 damage after moving 2+</td></tr>
+        <tr><td><strong>Spearman</strong></td><td class="n">5</td><td class="n">2</td><td class="n">1 (2 high)</td><td class="n">2</td><td class="n">3</td><td>Move + attack</td><td>First strike on enemies that stop next to it</td></tr>
+        <tr><td><strong>Archer</strong></td><td class="n">4</td><td class="n">2</td><td class="n">2–4 (2–5 high)</td><td class="n">2</td><td class="n">4</td><td>Move or attack</td><td>Steady aim: 3 damage to a unit that stood still</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="ref">
+    <table>
+      <thead><tr><th>Turn step</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><strong>1. Score</strong></td><td>+1 point per control point you stand on. 12 points wins.</td></tr>
+        <tr><td><strong>2. Gold</strong></td><td>+3, plus +1 per control point you own.</td></tr>
+        <tr><td><strong>3. Actions</strong></td><td>Up to 5. Recruit once (first), then activate each unit at most once. Unused actions are lost.</td></tr>
+        <tr><td><strong>Any time</strong></td><td>A unit on the enemy base wins at once. A side with no units that can't recruit loses.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="faq">
+  <div class="eyebrow">Questions at the table</div>
+  <h2 id="faq">FAQ</h2>
+  <div class="faq">
+    <details><summary>Can my own units stand on my base?</summary><p>Yes. An enemy can't step onto an occupied square, so it has to destroy that unit before it can capture. It does block one of your recruiting squares, though, and the unit isn't fighting anywhere else.</p></details>
+    <details><summary>Do I have to use all 5 actions?</summary><p>No, but any you don't use are lost. You can't save actions or move a unit twice.</p></details>
+    <details><summary>Can a unit attack without moving?</summary><p>Yes. Any unit can attack from where it stands. Archers must do this, because they can't move and attack in the same action.</p></details>
+    <details><summary>Do walls block arrows?</summary><p>No. Walls only block movement. Range is counted straight through them.</p></details>
+    <details><summary>What if an Archer is attacked by an adjacent enemy?</summary><p>It can't hit back. Archers need at least 2 squares of space. Keep them behind your Spearmen.</p></details>
+    <details><summary>Does the game have a turn limit?</summary><p>No. Your reserve of 6 reinforcements runs out, and the control points keep scoring, so games end on their own. In testing, most finished in 10 to 16 rounds.</p></details>
+    <details><summary>What happens if both control points are held by the same player?</summary><p>They score 2 points a turn and earn 2 extra gold. That's how most points victories happen, so contest at least one.</p></details>
+  </div>
+</section>
+
+<aside class="draftbox" aria-labelledby="draft">
+  <div class="eyebrow">For playtesters</div>
+  <h3 id="draft">These are draft rules</h3>
+  <p>They come from thousands of simulated games between computer players. The next things to check at the table:</p>
+  <ul>
+    <li>Whether an army of only Bruisers is too good at holding the control points. A higher cost of 3 gold is the likely fix.</li>
+    <li>Whether Blue's first move is an advantage. The computer players won 55% as Blue. If it shows with people too, Orange may start with 1 point.</li>
+    <li>Whether parking a unit on your own base makes defending too easy.</li>
+  </ul>
+</aside>
+
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const COLS = "abcdefgh";
+  // Coordinates follow the simulator: x 0-7 left to right, y 0 (Orange, top) to 9 (Blue, bottom). Row label = 10 - y.
+  const WALLS = [[1,3],[2,3],[5,6],[6,6]], HIGH = [[4,4],[5,4]], CPS = [[0,5],[7,4]];
+  const BASES = [[4,9,"blue"],[3,0,"orange"]];
+  const UNITS = [[3,8,"B","blue"],[4,8,"S","blue"],[5,8,"A","blue"],[2,1,"B","orange"],[3,1,"S","orange"],[4,1,"A","orange"]];
+
+  function draw(svg, opts) {
+    const c = opts.cell, pad = 22, x0 = opts.x0 || 0, y0 = opts.y0 || 0, w = opts.w || 8, h = opts.h || 10;
+    svg.setAttribute("viewBox", `0 0 ${pad + w * c + 6} ${h * c + pad + 6}`);
+    const defs = el("defs", {}, svg);
+    const pat = el("pattern", { id: svg.id + "-hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("rect", { width: 8, height: 8, fill: "var(--high)" }, pat); el("rect", { width: 3, height: 8, fill: "var(--high-line)" }, pat);
+    const X = x => pad + (x - x0) * c, Y = y => 3 + (y - y0) * c;
+    const inView = (x, y) => x >= x0 && x < x0 + w && y >= y0 && y < y0 + h;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++)
+      el("rect", { x: X(x), y: Y(y), width: c, height: c, fill: (x + y) % 2 ? "var(--tile-b)" : "var(--tile-a)" }, svg);
+    HIGH.filter(p => inView(...p)).forEach(([x, y]) => el("rect", { x: X(x) + 2, y: Y(y) + 2, width: c - 4, height: c - 4, rx: 4, fill: `url(#${svg.id}-hatch)` }, svg));
+    WALLS.filter(p => inView(...p)).forEach(([x, y]) => el("rect", { x: X(x) + 1, y: Y(y) + 1, width: c - 2, height: c - 2, rx: 4, fill: "var(--wall)" }, svg));
+    CPS.filter(p => inView(...p)).forEach(([x, y]) => { const cx = X(x) + c / 2, cy = Y(y) + c / 2, r = c * .4;
+      el("path", { d: `M${cx} ${cy - r} L${cx + r} ${cy} L${cx} ${cy + r} L${cx - r} ${cy}Z`, fill: "var(--gold-soft)", stroke: "var(--gold)", "stroke-width": 3 }, svg); });
+    BASES.filter(p => inView(p[0], p[1])).forEach(([x, y, t]) => {
+      el("rect", { x: X(x) + 3, y: Y(y) + 3, width: c - 6, height: c - 6, rx: 6, fill: `var(--${t}-soft)`, stroke: `var(--${t})`, "stroke-width": 3 }, svg);
+      const tx = el("text", { x: X(x) + c / 2, y: Y(y) + c / 2 + 4, "text-anchor": "middle", "font-size": 10, "font-weight": 700, fill: `var(--${t})` }, svg); tx.textContent = "BASE"; });
+    (opts.arrows || []).forEach(([x1, y1, x2, y2, t, dash]) => el("line", { x1: X(x1) + c / 2, y1: Y(y1) + c / 2, x2: X(x2) + c / 2, y2: Y(y2) + c / 2, stroke: `var(--${t})`, "stroke-width": 3, "stroke-dasharray": dash ? "5 5" : "", "stroke-linecap": "round", opacity: .85 }, svg));
+    (opts.units || UNITS).filter(p => inView(p[0], p[1])).forEach(([x, y, k, t, hp]) => {
+      el("circle", { cx: X(x) + c / 2, cy: Y(y) + c / 2, r: c * .36, fill: `var(--${t})` }, svg);
+      const tx = el("text", { x: X(x) + c / 2, y: Y(y) + c / 2 + c * .13, "text-anchor": "middle", "font-size": c * .38, "font-weight": 800, fill: "var(--panel)", style: "font-family: Bricolage Grotesque, sans-serif" }, svg); tx.textContent = k;
+      if (hp) { const b = el("text", { x: X(x) + c - 3, y: Y(y) + 11, "text-anchor": "end", "font-size": 10, "font-weight": 700, fill: "var(--ink)" }, svg); b.textContent = hp; } });
+    for (let x = x0; x < x0 + w; x++) { const t = el("text", { x: X(x) + c / 2, y: h * c + pad, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, svg); t.textContent = COLS[x]; }
+    for (let y = y0; y < y0 + h; y++) { const t = el("text", { x: pad - 7, y: Y(y) + c / 2 + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)" }, svg); t.textContent = 10 - y; }
+  }
+  draw(document.getElementById("board"), { cell: 48 });
+  // Example: Orange Spearman on h6 (7,4), Blue Archer on f5 (5,5), Blue Bruiser on h3 (7,7).
+  draw(document.getElementById("mini"), { cell: 48, x0: 4, y0: 3, w: 4, h: 5,
+    units: [[7,4,"S","orange","5hp"],[5,5,"A","blue","4hp"],[7,7,"B","blue","6hp"]],
+    arrows: [[5,5,7,4,"blue",true],[7,7,7,5,"blue",false]] });
+})();
+</script>

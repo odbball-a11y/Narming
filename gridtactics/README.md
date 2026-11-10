@@ -4,6 +4,7 @@ A two-player tactics game on an 8x10 grid, still in rules design. Nothing playab
 
 - `gridsim.py`: the rules engine plus heuristic bots in three styles. `python3 gridsim.py 270` compares the
   original rule sets by game length (its median and 80% range count finished games only).
+- `rules.html`: the player-facing rulebook for the current draft rules (0.3).
 - `analyze.py`: runs the rule variants listed in `VARIANTS` and reports game length (unfinished games counted),
   first-player win rate, how games end, win rate by bot style, comeback rate, and one-unit-type armies vs mixed.
 
