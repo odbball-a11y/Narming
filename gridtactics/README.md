@@ -1,6 +1,10 @@
 # Grid Tactics (rules prototype)
 
-A two-player tactics game on an 8x10 grid, still in rules design. Nothing playable yet.
+A two-player tactics game on an 8x10 grid, still in rules design.
+
+- `play.html`: the playable game (draft rules 0.4), against the computer or two players on one screen.
+  Self-contained; open it in a browser. `node gridtactics/test_play.js` checks its rules engine and
+  compares bot-vs-bot results with the Python simulator.
 
 - `gridsim.py`: the rules engine plus heuristic bots in three styles. `python3 gridsim.py 270` compares the
   original rule sets by game length (its median and 80% range count finished games only).
