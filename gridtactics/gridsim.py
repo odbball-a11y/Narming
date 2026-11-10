@@ -45,11 +45,14 @@ class Game:
         s.mech = cfg.get("mech") or {}
         s.ut = {k: dict(v) for k, v in UNITS.items()}
         if s.mech.get("spear_rmax"): s.ut["S"]["rmax"] = s.mech["spear_rmax"]
+        for k, c in (cfg.get("cost") or {}).items(): s.ut[k]["cost"] = c
+        for k, o in (cfg.get("stats") or {}).items(): s.ut[k].update(o)   # e.g. {"B": {"hp": 5}}
+        s.no_score = set(cfg.get("no_score") or ())     # unit kinds that can't score control points
         s.pool = [dict(cfg["pool"]) for _ in (0, 1)] if cfg.get("pool") else None
         s.force = cfg.get("force_recruit") or {}          # {player: [unit kinds]} for tests
         if s.pool:
             for pl, ks in s.force.items(): s.pool[pl] = {ks[0]: sum(cfg["pool"].values())}
-        s.vp = [0, 0]; s.how = None
+        s.vp = list(cfg.get("start_vp") or (0, 0)); s.how = None
         s.gold = [cfg["start_gold"]]*2
         s.cp_owner = {c: None for c in CPS}
         for pl in (0, 1):
@@ -117,7 +120,7 @@ class Game:
                 if tgt.st["rmin"] <= md(tgt.p, dest) <= tgt.rmax(): sc -= s.dmg(tgt, u)*5
             if tgt.p == BASE[me]: sc += 120                # evict a capturer
             if vpt and tgt.p in s.cp_owner: sc += 15 + 4*s.vp[foe]   # contest a scoring point
-        if vpt and dest in s.cp_owner: sc += 18 + 3*s.vp[me]
+        if vpt and dest in s.cp_owner and u.k not in s.no_score: sc += 18 + 3*s.vp[me]
         if vpt and s.cfg.get("vp_contest") and any(e.o == foe and e.p in s.cp_owner and md(e.p, dest) == 1 for e in s.units):
             sc += 10 + 3*s.vp[foe]                         # block a point the enemy is scoring
         if s.cfg.get("base_hp") and md(dest, BASE[foe]) <= 1: sc += 35
@@ -154,17 +157,17 @@ class Game:
             choices = [k for k in [want[k] for k in foes] + ["B", "S", "A"] if k in avail]
         if not choices: return False
         k = random.choice(choices)
-        if s.gold[pl] < UNITS[k]["cost"]:
+        if s.gold[pl] < s.ut[k]["cost"]:
             k = "B" if "B" in choices and s.gold[pl] >= 2 else None
         if not k: return False
-        s.gold[pl] -= UNITS[k]["cost"]
+        s.gold[pl] -= s.ut[k]["cost"]
         if s.pool: s.pool[pl][k] -= 1
         s.units.append(U(k, pl, min(spawn, key=lambda p: DIST_TO[1-pl].get(p, 99)), s.ut))
         return True
 
     def scoring(s, pl):
         """Points this player scores now: control points they stand on (optionally not while an enemy is adjacent)."""
-        held = [u.p for u in s.units if u.o == pl and u.p in s.cp_owner]
+        held = [u.p for u in s.units if u.o == pl and u.p in s.cp_owner and u.k not in s.no_score]
         if s.cfg.get("vp_contest"):
             held = [c for c in held if not any(e.o != pl and md(e.p, c) == 1 for e in s.units)]
         return len(held)
@@ -176,7 +179,7 @@ class Game:
     def can_recruit_ever(s, pl):
         rc = s.cfg.get("recruit_until")
         if rc is not None and s.round > rc: return False
-        return any(s.gold[pl] + s.cfg["income"] >= UNITS[k]["cost"] for k in s.available(pl))
+        return any(s.gold[pl] + s.cfg["income"] >= s.ut[k]["cost"] for k in s.available(pl))
 
     def play_turn(s, pl, style):
         # capture check: survived a full enemy turn on their base
