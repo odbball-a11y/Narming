@@ -215,8 +215,12 @@ def test_training_run_writes_both_phases(run_dir):
     assert evolve.list_generations(run_dir) == [1, 2, 3, 4, 5, 6]
     history = evolve.load_history(run_dir)
     assert [h["mode"] for h in history] == ["solo"] * 3 + ["race"] * 3
-    solo = [h["best"] for h in history[:3]]
-    assert solo == sorted(solo)                     # elites survive: never gets worse
+    # The best drivers survive unchanged into the next generation (their
+    # scores can still move, as each generation is tested in new conditions).
+    for gen in (1, 2):
+        best = evolve.load_generation(run_dir, gen)["pop"][:2]
+        nxt = evolve.load_generation(run_dir, gen + 1)["pop"]
+        assert all(any(np.array_equal(b, row) for row in nxt) for b in best)
     race = history[-1]
     assert len(race["scenarios"]) == 2 and {s["slot"] for s in race["scenarios"]} <= {0, 1, 2, 3}
     assert {"place", "overtakes", "fault", "damage", "draft"} <= set(race["training"])
