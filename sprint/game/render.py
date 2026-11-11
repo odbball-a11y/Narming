@@ -281,8 +281,12 @@ class UI:
         """Line chart.  `series` is [(label, colour, values)], values aligned
         with `xs` and possibly None.  `marker` = (x value, label) draws a
         vertical line.  `floor` forces the bottom of the y axis."""
-        frame = self.panel(screen, x, y, w, h, border=(70, 56, 120))
+        self.panel(screen, x, y, w, h, border=(70, 56, 120))
         self.text(screen, "small", title, C_HUD_TEXT, x + 2, y + 1.2)
+        lx = x + 2
+        for label, colour, _ in series:
+            r = self.text(screen, "small", label, colour, lx, y + 3.9)
+            lx += r.width / self.unit + 2.5
         values = [v for _, _, vals in series for v in vals if v is not None]
         if not values or len(xs) < 1:
             self.text(screen, "small", "no data yet", C_HUD_DIM, x + w / 2, y + h / 2, "center")
@@ -293,7 +297,7 @@ class UI:
             hi = lo + 1.0
         pad = (hi - lo) * 0.08
         lo, hi = (lo - pad if floor is None else lo), hi + pad
-        left, right, top, bottom = x + 11, x + w - 3, y + 6.5, y + h - 5
+        left, right, top, bottom = x + 9, x + w - 2.5, y + 8.5, y + h - 4.5
         x0, x1 = xs[0], max(xs[-1], xs[0] + 1)
 
         def pos(xv, yv):
@@ -311,17 +315,17 @@ class UI:
         if marker and x0 <= marker[0] <= x1:
             a, b = pos(marker[0], lo), pos(marker[0], hi)
             pygame.draw.line(screen, C_HUD_ACCENT, a, b)
-            self.text(screen, "small", marker[1], C_HUD_ACCENT, left + (marker[0] - x0) / (x1 - x0)
-                      * (right - left) + 0.6, top - 0.4)
-        lx = x + w - 2
+            mx = left + (marker[0] - x0) / (x1 - x0) * (right - left)
+            if mx > (left + right) / 2:     # keep the label inside the chart
+                self.text(screen, "small", marker[1], C_HUD_ACCENT, mx - 0.6, bottom - 2.6, "topright")
+            else:
+                self.text(screen, "small", marker[1], C_HUD_ACCENT, mx + 0.6, bottom - 2.6)
         for label, colour, vals in reversed(series):
             pts = [pos(xv, v) for xv, v in zip(xs, vals) if v is not None]
             if len(pts) > 1:
                 pygame.draw.lines(screen, colour, False, pts, max(2, int(self.unit * 0.35)))
             elif pts:
                 pygame.draw.circle(screen, colour, pts[0], max(2, int(self.unit * 0.5)))
-            r = self.text(screen, "small", label, colour, lx, y + 1.2, "topright")
-            lx -= r.width / self.unit + 2.5
 
     def backdrop(self, screen) -> None:
         """Plain menu background: night-sky grid with a sunset stripe band."""

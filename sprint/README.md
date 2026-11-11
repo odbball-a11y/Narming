@@ -99,41 +99,81 @@ Both are tunable in `sim/tuning.py` (the Damage and Drafting sections).
 
 ## AI drivers
 
-The AI learns by evolution. A generation is 80 drivers, each a small neural
-network. Every driver is tested, the best survive, and the next generation is
-bred from mutated copies of the good ones.
+The AI learns by evolution, in two phases. A generation is 80 drivers, each a
+small neural network. Every driver is tested, the best survive, and the next
+generation is bred from mutated copies of the good ones.
 
-1. In a terminal in the `sprint` folder (with the virtual environment on):
-   ```
-   py train.py
-   ```
-   It breeds 50 generations and prints a line for each. Run it again to carry
-   on from where it stopped; Ctrl+C is safe. `py train.py --generations 200`
-   for a longer session, `--run NAME` to start a separate run.
-2. While it runs, open a **second** terminal, start the game (`py -m game`)
-   and choose **AI Lab**. The charts update as each generation finishes:
-   the champion's lap time, its collisions and damage in a race against three
-   scripted cars, and the generation's scores.
-3. In the AI Lab:
-   - **Watch a generation**: the whole population drives at once as ghosts,
-     exactly as it was tested. It moves on to the next generation by itself.
-     Left/Right change generation, PgUp/PgDn jump ten, T changes track, A
-     toggles auto-advance, hold F to fast-forward.
-   - **Race the champions**: an early, a middle and the latest champion race
-     each other and a scripted car, with collisions, damage and drafting.
-   - **Race against them**: you against two champions and a scripted car.
+- **Driving school (phase 1).** The whole generation drives the track at once
+  as ghosts that pass through each other. Score: distance covered, less
+  damage. It ends by itself once the champion laps both tracks cleanly.
+- **Racing school (phase 2).** Every driver runs four real races per
+  generation (two per track), with collisions, damage and drafting, starting
+  from every grid position. All drivers in a generation face the same races,
+  so the comparison is fair. Rivals are scripted cars for the first 10
+  generations, then a mix of scripted cars, the AI's own recent champions and
+  a hall of fame of older ones, so it has to race opponents that fight back.
+  Score: finishing place, distance, damage taken and collisions it caused.
+  Optionally (on by default) there are small bonuses early on for overtaking,
+  not being overtaken and time in the draft; they fade out over 60
+  generations.
 
-What to expect: generation 1 mostly drives into the first barrier. Within
-roughly 15 to 25 generations a champion laps Speedway about as fast as the
-scripted driver. Early generations are tested alone; once the champion can lap
-cleanly the tests switch to real races ("races begin" on the charts), where it
-learns to cope with traffic. That part is slower and noisier: collisions fall
-over tens of generations, not in a straight line, and Technical is the harder
-track. Solo generations take a couple of seconds each, race generations
-several times longer.
+The drivers see: their speed and slide, position and angle on the track,
+the bends ahead and how long the straight ahead is, their damage, the tow
+they get and the tow they give, the two cars ahead, the car behind, and cars
+alongside on either side. They also have a small memory they carry from one
+moment to the next.
 
-Trained runs are saved in `training/<run>/`. If you change the physics values
-in `sim/tuning.py`, drivers trained before the change may drive worse.
+### Training
+
+In a terminal in the `sprint` folder (with the virtual environment on):
+
+```
+py train.py                                   # 50 more generations of run "default"
+py train.py --generations 200
+py train.py --run big --hidden 32 32 --memory 8      # a separate run with a bigger brain
+py train.py --run plain --no-race-bonuses            # a separate run scored on results only
+```
+
+Each generation prints one line. Ctrl+C is safe; running the same command
+again carries on from where it stopped. The network size, memory and scoring
+are fixed when a run is created, so to compare settings give the new run its
+own `--run` name. Driving-school generations take a few seconds, racing-school
+ones about 25 seconds on 4 cores.
+
+### Watching
+
+While training runs, open a **second** terminal, start the game
+(`py -m game`) and choose **AI Lab**. It updates as each generation finishes.
+
+Charts (the yellow line marks where racing school began):
+- **Best lap alone**: the champion's time-trial lap on each track.
+- **Race from last on grid**: the champion's finishing place, passes made and
+  collisions it caused in a 3-lap race against three scripted cars, starting
+  last.
+- **Damage and drafting**: damage at the end of that race, and the share of
+  it spent in someone's slipstream.
+- **Score of the generation**: best and average. The score is calculated
+  differently in racing school, so the line jumps where it starts.
+
+Menu (pick a generation with **GEN**, Left/Right, PgUp/PgDn, End = latest):
+- **Ghost pack**: the whole generation driving at once, as in driving school.
+  It moves on to the next generation by itself (A toggles that, T changes
+  track, hold F to fast-forward).
+- **Top 4 race**: the generation's four best drivers race each other, with
+  the best starting last.
+- **Test race**: watch one of the races the generation was scored on
+  (Left/Right picks which), with its champion in the seat it was tested in.
+- **Champions race**: an early, a middle and the latest champion against a
+  scripted car.
+- **You v champions**: you against two champions and a scripted car.
+
+R switches between training runs, so you can compare a big-brain run with a
+standard one.
+
+Trained runs are saved in `training/<run>/`. Runs from the previous version
+of the trainer are moved to `<run>-v1` (not deleted) the first time you train
+with the same name. If you change the physics values in `sim/tuning.py`,
+drivers trained before the change may drive worse.
 
 ## Tuning the feel
 

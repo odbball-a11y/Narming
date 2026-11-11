@@ -12,7 +12,8 @@ poker project (`holdem/`, `web/`, root `tests/`); leave it alone.
 ```
 python -m game [--track T] [--no-sound] [--fullscreen]
 python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [--bench STEPS]
-python train.py [--run NAME] [--generations N] [--population N] [--workers N] [--race-from GEN]
+python train.py [--run NAME] [--generations N] [--hidden 24 16] [--memory 4] [--races 2]
+                [--no-race-bonuses] [--racing-from GEN] [--population N] [--workers N]
 python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest
 ```
@@ -152,38 +153,57 @@ AI training. The renderer draws smoke, tow streaks and the HUD damage bar.
 
 ## AI drivers (`ai/`)
 
-`ai/` imports `sim/` and NumPy only; `game/` imports `ai/`.
+`ai/` imports `sim/` and NumPy only; `game/` imports `ai/`. Method:
+neuroevolution in two phases (the user chose generations over PPO, and asked
+for "learn to drive first, then learn to race").
 
-- `brain.py`: `observe(world, i)` gives 18 inputs (speeds, offset, heading
-  error, six curvatures ahead, half-width, damage, draft, five traffic
-  values). `Population` runs many networks in one batched call. The network
-  is 18 -> 16 tanh -> 2 tanh (steering; throttle if positive, brake if
-  negative), 338 weights. `NeuralDriver` is the `Driver`; it decides every
-  `DECISION_TICKS` (4) ticks, the same as in training.
-- `evolve.py`: `PackRun` (whole population as ghosts on one track, also used
-  by the game's live view), `test_solo`, `test_race` (one real four-car race
-  per driver against a scripted car and two earlier champions),
-  `score_population`, `breed` (elites kept, tournament parents, crossover,
-  mixed mutation sizes), `exam` (a fixed report card per generation: solo
-  time trial plus a race against three scripted cars), `train`.
-- Solo tests until the champion covers 1.9 laps of each track with almost no
-  damage, then race mode: fitness = half solo score, half race score. Rivals
-  and grid slot change every `RIVAL_BLOCK` generations.
-- Runs live in `training/<run>/` (git-ignored): `config.json`, `history.json`
-  (rewritten atomically each generation; the game polls it), `gen_NNNN.npz`
-  (whole population, best first, float32). Training is seeded and resumable:
-  stop and continue gives the same run as never stopping (tested).
-- `roster.py` registers champions as `evo:<run>:<gen>` so the setup menu
-  lists them. `game/screens.py` `LabScreen` and `PackScreen` are the UI.
+- `brain.py`: `observe(world, i)` gives 28 inputs (`INPUT_NAMES`): speeds,
+  offset, heading error, six curvatures ahead, half-width, straight length
+  ahead, damage, tow received, tow given, two cars ahead / one behind (gap,
+  side, closing speed), nearest car alongside left / right. Network shape is
+  a per-run `arch` dict `{"hidden": [24, 16], "memory": 4}`; memory = extra
+  outputs fed back as inputs at the next decision (recurrence, no gradients
+  needed). `Population` (different weights per row), `Brain` (one network,
+  batch of cars), `NeuralDriver` (the `Driver`; decides every
+  `DECISION_TICKS` = 4 ticks, as in training; memory reset in `reset`).
+- `evolve.py`:
+  - Phase 1 (`mode: "solo"`): `PackRun`/`test_solo`, whole population as
+    ghosts; ends when the champion's exam shows >= 1.9 laps of every track
+    with <= 5% damage (`config.phase2_start` is then written).
+  - Phase 2 (`mode: "race"`): `make_scenarios` gives `races_per_track` races
+    per track per generation, the same for every driver, grid slots covering
+    0..3; rivals scripted for `SCRIPTED_ONLY_GENS`, then a mix of scripted,
+    recent champions and a hall of fame (`RIVAL_MIX`). `test_race` runs one
+    real race per driver, all worlds stepped together, rivals batched.
+    `RaceStats` counts collisions caused (I hit the car ahead) vs suffered,
+    walls, overtakes, times passed, draft time, final place. `race_score`:
+    place points + 0.5 laps - 0.8 damage - 0.08 caused - 0.02 walls, plus
+    optional bonuses (overtakes, being passed, draft) scaled by `bonus`,
+    which fades to 0 over `BONUS_FADE` generations. Fitness = 0.2 solo +
+    0.8 race mean.
+  - `exam`: identical report card every generation (solo time trial; 3-lap
+    race from the back vs three scripted cars) so the Lab charts are
+    comparable across both phases.
+  - `train`: runs in `training/<run>/` (git-ignored): `config.json` (format
+    2, arch, settings, `phase2_start`), `history.json` (rewritten atomically;
+    entries carry `exam`, and in phase 2 `training` averages and the
+    `scenarios` raced, rivals as "scripted" or a generation number),
+    `gen_NNNN.npz` (whole population, best first, float32). Seeded and
+    resumable across the phase change (tested). Older-format runs are renamed
+    `<run>-v1`, never deleted, and are ignored by `list_runs`.
+- `roster.py`: `champion(run, gen, label, rank)` builds a `NeuralDriver` for
+  any ranked driver of a generation; `register_champions` puts them in the
+  registry as `evo:<run>:<gen>`.
+- `game/screens.py` `LabScreen` (4 charts, generation picker, ghost pack,
+  top-4 reverse-grid race, the champion's test races, champions race, you v
+  champions) and `PackScreen`.
 
-Known weaknesses, in rough order of value:
-1. Traffic skill on Technical is poor after about 100 generations. Ideas:
-   more race generations; several races per driver with different rivals to
-   cut noise; a stuck-recovery reward or a reverse rule (drivers that hit a
-   wall nose-first rarely learn to back out).
-2. No ray-cast inputs (left out for speed; `Track.raycasts` exists).
+Results of the trial run are in Status above. Known weaknesses / next ideas:
+1. Racing-school scores are noisy with 4 races per driver; `--races 3` or a
+   bigger population trade time for steadier progress.
+2. No ray-cast inputs (`Track.raycasts` exists).
 3. Training is started from a terminal, not from the game menu.
-4. One network drives both tracks; it has not been tried on unseen tracks.
+4. One network drives both tracks; not tried on unseen tracks.
 
 ## Still to do: PPO as a rival method
 

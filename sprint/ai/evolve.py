@@ -1,15 +1,23 @@
-"""Neuroevolution: breed better drivers generation by generation.
+"""Neuroevolution in two phases: driving school, then racing school.
 
-Each generation is a population of small networks.  Every driver is tested,
-the best survive, and the next generation is made from mutated copies of the
-good ones.  Two kinds of test:
+Each generation is a population of neural-network drivers.  Every driver is
+tested, the best survive, and the next generation is bred from mutated copies
+of the good ones.
 
-  solo  the whole population drives the track at once as ghosts (no contact
-        between cars); score = distance covered in a fixed time.
-  race  each driver runs a real four-car race with collisions, damage and
-        drafting against scripted cars and champions of earlier generations.
+Phase 1, driving school: the whole population drives the track at once as
+ghosts (no contact between cars).  Score = distance covered in a fixed time,
+less damage.  It ends when the champion laps every track cleanly; that
+generation is the "base driver".
 
-Everything is seeded: the same seed gives the same run.
+Phase 2, racing school: every driver runs several real four-car races per
+generation, with collisions, damage and drafting, from every grid position.
+All drivers in a generation face the same races, so they are compared fairly.
+Rivals start as scripted cars, then include the driver's own recent
+champions (self-play) and a hall of fame of older ones.  Score = finishing
+place, distance, damage and collisions it caused; optionally, early on, small
+bonuses for overtakes, not being overtaken and time in the draft, fading out.
+
+Everything is seeded: the same settings and seed give the same run.
 """
 from __future__ import annotations
 
@@ -26,17 +34,38 @@ from sim.driver import Controls, create_driver
 from sim.track import Track
 from sim.world import World
 
-from .brain import DECISION_TICKS, N_HIDDEN, N_INPUTS, N_OUTPUTS, N_WEIGHTS, NeuralDriver, Population, \
-    observe, to_controls, unpack
+from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver, Population,
+                    n_weights, observe, random_weights, to_controls)
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "training"
+FORMAT = 2
 
-# Seconds each driver gets per track.  About two laps for a good driver.
-TEST_SECONDS = {"speedway": 30.0, "technical": 46.0}
-DEFAULT_TEST_SECONDS = 40.0
+# Seconds per test.  Solo is about two laps for a good driver, a training
+# race about one and a half.
+SOLO_SECONDS = {"speedway": 30.0, "technical": 46.0}
+RACE_SECONDS = {"speedway": 24.0, "technical": 36.0}
+DEFAULT_SECONDS = 40.0
 
-# A driver that makes no forward progress for this long is retired early.
+# A ghost that makes no forward progress for this long is retired early.
 STALL_SECONDS = 2.5
+
+# Driving school ends when the champion covers this many laps of every
+# track in the solo test with at most this much damage.
+PHASE1_LAPS = 1.9
+PHASE1_DAMAGE = 0.05
+
+# Racing school curriculum: scripted rivals only for the first generations,
+# then a mix.  Chances for each rival seat once the mix starts:
+SCRIPTED_ONLY_GENS = 10
+RIVAL_MIX = (("scripted", 0.4), ("recent", 0.4), ("hall", 0.2))
+RECENT_GENS = 6          # "recent" = champions of the last few generations
+HALL_EVERY = 10          # every 10th racing-school champion joins the hall of fame
+
+# Optional shaping bonuses fade to nothing over this many racing generations.
+BONUS_FADE = 60
+
+# In racing school, how much of the score is the solo test (keeps it fast).
+SOLO_SHARE = 0.2
 
 _tracks: dict[str, Track] = {}
 
@@ -47,14 +76,7 @@ def get_track(name: str) -> Track:
     return _tracks[name]
 
 
-def random_population(rng: np.random.Generator, size: int) -> np.ndarray:
-    pop = rng.normal(0.0, 0.5, (size, N_WEIGHTS))
-    # Start with a bias toward pressing the throttle, so generation 1 moves.
-    pop[:, -1] += 0.8
-    return pop
-
-
-# ------------------------------------------------------------------- tests
+# ---------------------------------------------------------------- progress
 
 class _Progress:
     """Distance each car has really covered along the lap (forwards counts
@@ -90,6 +112,8 @@ class _Progress:
                 car.retired = True
 
 
+# --------------------------------------------------------- phase 1 (solo)
+
 class PackRun:
     """A whole population on the track at once, as ghosts.
 
@@ -97,14 +121,13 @@ class PackRun:
     of a generation, so what you watch is exactly what was scored.
     """
 
-    def __init__(self, weights: np.ndarray, track_name: str, seconds: float | None = None):
+    def __init__(self, weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None):
         self.track = get_track(track_name)
         self.count = len(weights)
         self.world = World(self.track, slots=[0] * self.count, ghost=True, laps=10 ** 9)
-        self.brains = Population(weights)
+        self.brains = Population(weights, arch)
         self.progress = _Progress(self.world, range(self.count))
-        self.ticks = int((seconds or TEST_SECONDS.get(track_name, DEFAULT_TEST_SECONDS))
-                         * tuning.TICK_RATE)
+        self.ticks = int((seconds or SOLO_SECONDS.get(track_name, DEFAULT_SECONDS)) * tuning.TICK_RATE)
         self.controls = [Controls()] * self.count
         self.done = False
 
@@ -125,8 +148,7 @@ class PackRun:
                 self.done = True
                 return
             idle = [0.0] * N_INPUTS
-            obs = np.array([idle if cars[i].retired else observe(world, i)
-                            for i in range(self.count)])
+            obs = np.array([idle if cars[i].retired else observe(world, i) for i in range(self.count)])
             self.controls = [to_controls(s, p) for s, p in self.brains.act(obs).tolist()]
         world.step(self.controls)
         if world.tick >= self.ticks:
@@ -134,134 +156,203 @@ class PackRun:
             self.done = True
 
 
-def test_solo(weights: np.ndarray, track_name: str, seconds: float | None = None) -> dict:
+def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None) -> dict:
     """Run every driver in `weights` on the track at once, as ghosts."""
-    run = PackRun(weights, track_name, seconds)
+    run = PackRun(weights, arch, track_name, seconds)
     while not run.done:
         run.step()
     cars = run.world.cars
+    return {"laps": run.laps(), "damage": [car.damage for car in cars],
+            "best_lap": [car.best_lap for car in cars]}
+
+
+# --------------------------------------------------------- phase 2 (race)
+
+class RaceStats:
+    """Racecraft numbers for car 0 of a world: collisions it caused and
+    suffered, wall hits, overtakes made, times overtaken, time in the draft."""
+
+    MARGIN = 1.0    # a pass counts once the cars are this far apart
+
+    def __init__(self, world: World, me: int = 0):
+        self.world = world
+        self.me = me
+        self.others = [j for j in range(len(world.cars)) if j != me]
+        self.fault = 0.0
+        self.suffered = 0.0
+        self.walls = 0
+        self.overtakes = 0
+        self.passed = 0
+        self.draft_ticks = 0
+        self.ticks = 0
+        self.ahead = {j: self._diff(j) > 0.0 for j in self.others}
+
+    def _diff(self, j: int) -> float:
+        w = self.world
+        return w.race_progress(w.cars[self.me]) - w.race_progress(w.cars[j])
+
+    def on_tick(self, events) -> None:
+        world, me = self.world, self.me
+        car = world.cars[me]
+        self.ticks += 1
+        if car.draft > 0.1:
+            self.draft_ticks += 1
+        for event in events:
+            if event[0] == "wall" and event[1] == me:
+                self.walls += 1
+            elif event[0] == "car" and me in event[1:3]:
+                other = world.cars[event[2] if event[1] == me else event[1]]
+                half = world.track.length / 2.0
+                gap = (other.s - car.s + half) % world.track.length - half
+                if gap > 1.5:          # I ran into the back of them
+                    self.fault += 1.0
+                elif gap < -1.5:       # they ran into me
+                    self.suffered += 1.0
+                else:                  # side by side: shared
+                    self.fault += 0.5
+                    self.suffered += 0.5
+        if world.tick % DECISION_TICKS == 0:
+            for j in self.others:
+                d = self._diff(j)
+                if not self.ahead[j] and d > self.MARGIN:
+                    self.ahead[j] = True
+                    self.overtakes += 1
+                elif self.ahead[j] and d < -self.MARGIN:
+                    self.ahead[j] = False
+                    self.passed += 1
+
+    def place(self) -> int:
+        """1 = leading.  Ties count against me."""
+        return 1 + sum(1 for j in self.others if self._diff(j) <= 0.0)
+
+    def draft_share(self) -> float:
+        return self.draft_ticks / self.ticks if self.ticks else 0.0
+
+
+def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
+    """One real four-car race per driver in `weights`, all stepped together.
+
+    scenario: {"track", "slot" (the learner's grid place), "rivals": three
+    entries, each "scripted" or a weight vector, "seconds"}.
+    """
+    track = get_track(scenario["track"])
+    slot = scenario["slot"]
+    count = len(weights)
+    learners = Population(weights, arch)
+    others = [s for s in range(4) if s != slot]
+    worlds, scripted, stats = [], [], []
+    for _ in range(count):
+        world = World(track, slots=[slot] + others, laps=10 ** 9)
+        drivers = {}
+        for k, rival in enumerate(scenario["rivals"]):
+            if isinstance(rival, str):
+                drivers[k + 1] = create_driver(rival, slot=others[k])
+                drivers[k + 1].reset(world, k + 1)
+        worlds.append(world)
+        scripted.append(drivers)
+        stats.append(RaceStats(world))
+    brains = {k + 1: Brain(r, arch, batch=count)
+              for k, r in enumerate(scenario["rivals"]) if not isinstance(r, str)}
+    progress = [_Progress(w, [0]) for w in worlds]
+    seconds = scenario.get("seconds") or RACE_SECONDS.get(track.key, DEFAULT_SECONDS)
+    ticks = int(seconds * tuning.TICK_RATE)
+    mine = [Controls()] * count
+    theirs = {k: [Controls()] * count for k in brains}
+    for tick in range(ticks):
+        if tick % DECISION_TICKS == 0:
+            for p in progress:
+                p.update(retire=False)
+            obs = np.array([observe(w, 0) for w in worlds])
+            mine = [to_controls(s, p) for s, p in learners.act(obs).tolist()]
+            for k, brain in brains.items():
+                out = brain.act(np.array([observe(w, k) for w in worlds]))
+                theirs[k] = [to_controls(s, p) for s, p in out.tolist()]
+        for n, world in enumerate(worlds):
+            controls = [mine[n]]
+            for k in (1, 2, 3):
+                controls.append(theirs[k][n] if k in brains else scripted[n][k].act(world, k))
+            stats[n].on_tick(world.step(controls))
+    for p in progress:
+        p.update(retire=False)
     return {
-        "laps": run.laps(),
-        "damage": [car.damage for car in cars],
-        "best_lap": [car.best_lap for car in cars],
+        "place": [s.place() for s in stats],
+        "laps": [p.total[0] / track.length for p in progress],
+        "damage": [w.cars[0].damage for w in worlds],
+        "fault": [s.fault for s in stats],
+        "suffered": [s.suffered for s in stats],
+        "walls": [s.walls for s in stats],
+        "overtakes": [s.overtakes for s in stats],
+        "passed": [s.passed for s in stats],
+        "draft": [s.draft_share() for s in stats],
     }
 
 
-def test_race(weights: np.ndarray, track_name: str, rivals: list, slot: int,
-              seconds: float | None = None) -> dict:
-    """One real four-car race per driver, all stepped together.
+PLACE_POINTS = np.array([1.0, 0.6, 0.3, 0.0])
 
-    `rivals` is a list of three opponents, each "scripted" or a weight
-    vector (an earlier champion).  The driver under test starts from `slot`.
+
+def race_score(result: dict, bonus: float) -> np.ndarray:
+    """Score of each driver in one race (higher is better).
+
+    Results: finishing place, distance covered, damage, collisions caused.
+    `bonus` (0..1) scales the optional shaping terms.
     """
-    track = get_track(track_name)
-    count = len(weights)
-    brains = Population(weights)
-    order = [s for s in range(4) if s != slot]
-    worlds, opponents, trackers = [], [], []
-    for _ in range(count):
-        world = World(track, slots=[slot] + order, laps=10 ** 9)
-        drivers = []
-        for k, rival in enumerate(rivals):
-            if isinstance(rival, str):
-                drivers.append(create_driver(rival, slot=order[k]))
-            else:
-                drivers.append(NeuralDriver(rival))
-            drivers[-1].reset(world, k + 1)
-        worlds.append(world)
-        opponents.append(drivers)
-        trackers.append(_Progress(world, range(4)))
-    ticks = int((seconds or TEST_SECONDS.get(track_name, DEFAULT_TEST_SECONDS) * 0.7) * tuning.TICK_RATE)
-    mine = [Controls()] * count
-    hits = [0] * count
-    idle = [0.0] * N_INPUTS
-    for tick in range(ticks):
-        if tick % DECISION_TICKS == 0:
-            for tracker in trackers:
-                tracker.update(retire=False)
-            obs = np.array([observe(w, 0) for w in worlds])
-            mine = [to_controls(s, p) for s, p in brains.act(obs).tolist()]
-        for k, world in enumerate(worlds):
-            controls = [mine[k]] + [d.act(world, j + 1) for j, d in enumerate(opponents[k])]
-            for event in world.step(controls):
-                if (event[0] == "wall" and event[1] == 0) or (event[0] == "car" and 0 in event[1:3]):
-                    hits[k] += 1
-    laps, damage, beaten = [], [], []
-    for k, world in enumerate(worlds):
-        trackers[k].update(retire=False)
-        total = trackers[k].total
-        # Everyone started at a different grid place; compare distance gained.
-        laps.append(total[0] / track.length)
-        beaten.append(sum(1 for j in range(1, 4) if total[0] > total[j]))
-        damage.append(world.cars[0].damage)
-    return {"laps": laps, "damage": damage, "beaten": beaten, "hits": hits,
-            "best_lap": [w.cars[0].best_lap for w in worlds]}
+    r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
+    score = (PLACE_POINTS[r["place"].astype(int) - 1] + 0.5 * r["laps"] - 0.8 * r["damage"]
+             - 0.08 * r["fault"] - 0.02 * r["walls"])
+    if bonus:
+        score += bonus * (0.06 * r["overtakes"] - 0.06 * r["passed"] + 0.3 * r["draft"])
+    return score
 
+
+# --------------------------------------------------------------- scoring
 
 def _job(args):
-    kind, weights, track_name, extra = args
+    kind, weights, arch, task = args
     if kind == "solo":
-        return test_solo(weights, track_name)
-    return test_race(weights, track_name, *extra)
+        return test_solo(weights, arch, task)
+    return test_race(weights, arch, task)
 
 
-RIVAL_BLOCK = 5               # generations between changes of rivals
-RACE_TEST_FRACTION = 0.7     # race tests are this fraction of the solo test time
+def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=None,
+                     bonus: float = 0.0, pool=None, chunks: int = 1) -> tuple[np.ndarray, dict]:
+    """Fitness for every driver (higher is better) and per-driver averages.
 
-
-def test_race_timed(weights, track_name, rivals, slot):
-    seconds = TEST_SECONDS.get(track_name, DEFAULT_TEST_SECONDS) * RACE_TEST_FRACTION
-    return test_race(weights, track_name, rivals, slot, seconds)
-
-
-def _job(args):
-    kind, weights, track_name, extra = args
-    if kind == "solo":
-        return test_solo(weights, track_name)
-    return test_race_timed(weights, track_name, *extra)
-
-
-def score_population(pop: np.ndarray, tracks: list[str], mode: str, pool=None,
-                     rivals=None, slot: int = 0, chunks: int = 1) -> tuple[np.ndarray, dict]:
-    """Fitness for every driver (higher is better) and the raw results.
-
-    solo mode: laps covered in the test time, averaged over the tracks, less
-    a penalty for damage.
-
-    race mode: half that solo score (raw pace, and it is noise-free), half a
-    race score: laps covered in traffic, a bonus per rival beaten, and
-    penalties for damage and for every collision.
+    No scenarios: driving school (solo only).  With scenarios: racing school,
+    SOLO_SHARE of the solo score plus the rest from the races.
     """
     pieces = np.array_split(np.arange(len(pop)), max(1, min(chunks, len(pop))))
-    kinds = ["solo", "race"] if mode == "race" else ["solo"]
-    jobs = []
-    for kind in kinds:
-        for t, name in enumerate(tracks):
-            for piece in pieces:
-                extra = (rivals, (slot + t) % 4) if kind == "race" else None
-                jobs.append((kind, pop[piece], name, extra))
+    jobs = [("solo", pop[p], arch, name) for name in tracks for p in pieces]
+    for scenario in scenarios or []:
+        jobs += [("race", pop[p], arch, scenario) for p in pieces]
     results = list(pool.map(_job, jobs)) if pool else [_job(j) for j in jobs]
-    scores = {}
-    detail = {}
+
+    def merged(start: int) -> dict:
+        out: dict = {}
+        for k in range(len(pieces)):
+            for key, values in results[start + k].items():
+                out.setdefault(key, []).extend(values)
+        return out
+
+    solo = np.zeros(len(pop))
     k = 0
-    for kind in kinds:
-        total = np.zeros(len(pop))
-        for name in tracks:
-            merged: dict = {}
-            for piece in pieces:
-                for key, values in results[k].items():
-                    merged.setdefault(key, []).extend(values)
-                k += 1
-            detail[f"{kind}:{name}"] = merged
-            laps, damage = np.array(merged["laps"]), np.array(merged["damage"])
-            if kind == "solo":
-                total += laps - 0.25 * damage
-            else:
-                total += (laps / RACE_TEST_FRACTION - 0.6 * damage
-                          + 0.08 * np.array(merged["beaten"]) - 0.015 * np.array(merged["hits"]))
-        scores[kind] = total / len(tracks)
-    fitness = scores["solo"] if mode == "solo" else 0.5 * scores["solo"] + 0.5 * scores["race"]
-    return fitness, detail
+    for _ in tracks:
+        part = merged(k)
+        solo += np.array(part["laps"]) - 0.25 * np.array(part["damage"])
+        k += len(pieces)
+    solo /= len(tracks)
+    if not scenarios:
+        return solo, {}
+    race = np.zeros(len(pop))
+    totals: dict = {}
+    for _ in scenarios:
+        part = merged(k)
+        race += race_score(part, bonus)
+        for key in ("place", "damage", "fault", "overtakes", "passed", "draft"):
+            totals[key] = totals.get(key, 0.0) + np.asarray(part[key], dtype=float)
+        k += len(pieces)
+    race /= len(scenarios)
+    averages = {key: value / len(scenarios) for key, value in totals.items()}
+    return SOLO_SHARE * solo + (1.0 - SOLO_SHARE) * race, averages
 
 
 # ---------------------------------------------------------------- breeding
@@ -273,44 +364,42 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
     a good parent (sometimes mixed with a second parent) with random changes;
     some children get small changes, to refine, and some large, to explore.
     """
+    n = sorted_pop.shape[1]
     parents = max(2, len(sorted_pop) // 4)
     children = [sorted_pop[i].copy() for i in range(min(elites, len(sorted_pop)))]
     while len(children) < size:
-        a = sorted_pop[min(rng.integers(0, parents, 2))]       # 2-way tournament
-        child = a.copy()
+        child = sorted_pop[min(rng.integers(0, parents, 2))].copy()     # 2-way tournament
         if rng.random() < 0.3:
-            b = sorted_pop[min(rng.integers(0, parents, 2))]
-            mask = rng.random(N_WEIGHTS) < 0.5
-            child[mask] = b[mask]
+            other = sorted_pop[min(rng.integers(0, parents, 2))]
+            mask = rng.random(n) < 0.5
+            child[mask] = other[mask]
         sigma = rng.choice([0.02, 0.05, 0.1, 0.2])
-        touched = rng.random(N_WEIGHTS) < rng.choice([0.1, 0.3, 1.0])
-        child += rng.normal(0.0, sigma, N_WEIGHTS) * touched
+        touched = rng.random(n) < rng.choice([0.05, 0.2, 1.0])
+        child += rng.normal(0.0, sigma, n) * touched
         children.append(child)
     return np.array(children)
 
 
 # ------------------------------------------------------------------- exams
 
-def exam(weights: np.ndarray, tracks: list[str]) -> dict:
+def exam(weights: np.ndarray, arch: dict, tracks: list[str]) -> dict:
     """Standard report card for one driver, the same for every generation so
-    generations can be compared: a solo time trial and a race against three
-    scripted cars on each track."""
-    from sim.race import Race
+    generations can be compared: a solo time trial, and a three-lap race
+    against three scripted cars starting from the back of the grid."""
+    from sim.race import FINISHED, Race
     report = {}
     for name in tracks:
-        solo = test_solo(weights[None, :], name)
-        race = Race(name, [(0, NeuralDriver(weights, "Evolved")), (1, "scripted"),
-                           (2, "scripted"), (3, "scripted")], laps=3)
-        hits = 0
-
-        def count(r, event):
-            nonlocal hits
-            if (event[0] == "wall" and event[1] == 0) or (event[0] == "car" and 0 in event[1:3]):
-                hits += 1
-
-        race.run(max_seconds=150.0, on_event=count)
-        car = race.world.cars[0]
+        solo = test_solo(weights[None, :], arch, name)
+        race = Race(name, [(3, NeuralDriver(weights, arch, "Evolved")), (0, "scripted"),
+                           (1, "scripted"), (2, "scripted")], laps=3)
+        stats = RaceStats(race.world)
+        limit = int(150.0 * tuning.TICK_RATE)
+        while race.phase != FINISHED and race.world.tick < limit:
+            events = race.step()
+            if race.phase != "countdown" and not race.world.cars[0].finished:
+                stats.on_tick(events)
         row = next(r for r in race.results() if r["car"] == 0)
+        car = race.world.cars[0]
         report[name] = {
             "solo_laps": round(solo["laps"][0], 3),
             "solo_best_lap": solo["best_lap"][0],
@@ -320,7 +409,12 @@ def exam(weights: np.ndarray, tracks: list[str]) -> dict:
             "race_laps": row["laps"],
             "race_time": row["time"],
             "race_best_lap": row["best_lap"],
-            "race_hits": hits,
+            "race_hits": stats.fault + stats.suffered + stats.walls,
+            "race_fault": stats.fault,
+            "race_walls": stats.walls,
+            "race_overtakes": stats.overtakes,
+            "race_passed": stats.passed,
+            "race_draft": round(stats.draft_share(), 3),
             "race_damage": round(car.damage, 3),
         }
     return report
@@ -342,6 +436,10 @@ def load_generation(run_dir: Path, gen: int) -> dict:
         return {"pop": data["pop"].astype(np.float64), "fitness": data["fitness"]}
 
 
+def load_config(run_dir: Path) -> dict:
+    return json.loads((Path(run_dir) / "config.json").read_text(encoding="utf-8"))
+
+
 def load_history(run_dir: Path) -> list[dict]:
     path = Path(run_dir) / "history.json"
     if not path.exists():
@@ -353,9 +451,17 @@ def load_history(run_dir: Path) -> list[dict]:
 
 
 def list_runs() -> list[str]:
+    """Runs this version can read (older formats are skipped)."""
     if not RUNS_DIR.exists():
         return []
-    return sorted(p.name for p in RUNS_DIR.iterdir() if (p / "history.json").exists())
+    runs = []
+    for p in sorted(RUNS_DIR.iterdir()):
+        try:
+            if (p / "history.json").exists() and load_config(p).get("format") == FORMAT:
+                runs.append(p.name)
+        except (OSError, ValueError):
+            continue
+    return runs
 
 
 def _write_json(path: Path, data) -> None:
@@ -364,78 +470,138 @@ def _write_json(path: Path, data) -> None:
     tmp.replace(path)
 
 
+def _archive_old_run(run_dir: Path) -> Path:
+    """Move a run made by an older version aside (nothing is deleted)."""
+    k = 1
+    target = run_dir.with_name(f"{run_dir.name}-v1")
+    while target.exists():
+        k += 1
+        target = run_dir.with_name(f"{run_dir.name}-v1-{k}")
+    run_dir.rename(target)
+    return target
+
+
+def phase2_start(config: dict, history: list[dict]) -> int | None:
+    if config.get("phase2_start"):
+        return config["phase2_start"]
+    return next((h["gen"] for h in history if h["mode"] == "race"), None)
+
+
+def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) -> list[dict]:
+    """The racing-school races for generation `gen` (the same for every
+    driver in it).  Rivals are "scripted" or the generation number of a
+    champion whose weights to use."""
+    rng = np.random.default_rng([config["seed"], gen, 7])
+    tracks = config["tracks"]
+    count = config["races_per_track"] * len(tracks)
+    rel = gen - start
+    base = start - 1
+    recent = [g for g in history_gens if start <= g < gen][-RECENT_GENS:]
+    hall = [g for g in history_gens if g == base or (g >= start and (g - start) % HALL_EVERY == 0 and g < gen)]
+    slots = list(rng.permutation(4))
+    scenarios = []
+    for k in range(count):
+        rivals = []
+        for _ in range(3):
+            kind = "scripted"
+            if rel >= SCRIPTED_ONLY_GENS:
+                pick = rng.random()
+                for name, chance in RIVAL_MIX:
+                    if pick < chance:
+                        kind = name
+                        break
+                    pick -= chance
+            pool = {"recent": recent, "hall": hall}.get(kind)
+            rivals.append(int(rng.choice(pool)) if pool else "scripted")
+        scenarios.append({"track": tracks[k % len(tracks)], "slot": int(slots[k % 4]), "rivals": rivals,
+                          "seconds": RACE_SECONDS.get(tracks[k % len(tracks)], DEFAULT_SECONDS)})
+        if k % 4 == 3:
+            slots = list(rng.permutation(4))
+    return scenarios
+
+
 def train(run: str = "default", generations: int = 50, population: int = 80, elites: int = 6,
-          seed: int = 0, tracks: list[str] | None = None, race_from: int | None = None,
-          workers: int = 0, on_generation=None) -> Path:
+          seed: int = 0, tracks: list[str] | None = None, phase2_from: int | None = None,
+          arch: dict | None = None, races_per_track: int = 2, race_bonuses: bool = True,
+          workers: int = 0, on_generation=None, log=print) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
-    Solo ghost tests are used until generation `race_from`, real races from
-    then on.  `race_from=None` switches automatically once the champion can
-    cover the solo test cleanly.
+    Settings are fixed when a run is created; continuing a run uses the saved
+    ones.  `phase2_from=None` starts racing school automatically once the
+    champion laps every track cleanly.
     """
     run_dir = RUNS_DIR / run
-    run_dir.mkdir(parents=True, exist_ok=True)
     config_path = run_dir / "config.json"
+    if config_path.exists() and load_config(run_dir).get("format") != FORMAT:
+        moved = _archive_old_run(run_dir)
+        log(f"note: '{run}' was made by an older version; moved it to {moved.name}")
+    run_dir.mkdir(parents=True, exist_ok=True)
     if config_path.exists():
-        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config = load_config(run_dir)
     else:
-        config = {"population": population, "elites": elites, "seed": seed,
-                  "tracks": tracks or Track.available(), "race_from": race_from,
-                  "inputs": N_INPUTS, "hidden": N_HIDDEN, "outputs": N_OUTPUTS,
-                  "tuning_id": tuning.physics_fingerprint()}
+        config = {"format": FORMAT, "population": population, "elites": elites, "seed": seed,
+                  "tracks": tracks or Track.available(), "phase2_from": phase2_from,
+                  "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
+                  "races_per_track": races_per_track, "race_bonuses": race_bonuses,
+                  "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
-    size, tracks, seed = config["population"], config["tracks"], config["seed"]
+    arch, size, tracks, seed = config["arch"], config["population"], config["tracks"], config["seed"]
     history = load_history(run_dir)
     done = list_generations(run_dir)
     history = [h for h in history if h["gen"] in done]
-    start = (done[-1] + 1) if done else 1
+    start_gen = (done[-1] + 1) if done else 1
     if done:
         last = load_generation(run_dir, done[-1])
         pop = breed(last["pop"], np.random.default_rng([seed, done[-1]]), size, config["elites"])
     else:
-        pop = random_population(np.random.default_rng([seed, 0]), size)
-    race_start = config.get("race_from")
-    if race_start is None:
-        race_start = next((h["gen"] for h in history if h["mode"] == "race"), None)
+        pop = random_weights(np.random.default_rng([seed, 0]), size, arch)
+    assert pop.shape[1] == n_weights(arch)
+    champions: dict[int, np.ndarray] = {}
+
+    def champion_of(gen: int) -> np.ndarray:
+        if gen not in champions:
+            champions[gen] = load_generation(run_dir, gen)["pop"][0]
+        return champions[gen]
 
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:
-        for gen in range(start, start + generations):
-            ready = history and all(
-                t["solo_laps"] >= 1.9 and t["solo_damage"] <= 0.05 for t in history[-1]["exam"].values())
-            if race_start is None and ready:
-                race_start = gen
-            mode = "race" if race_start is not None and gen >= race_start else "solo"
-            rivals = None
-            if mode == "race":
-                # Rivals: one scripted car and two earlier champions.  They
-                # and the grid slot change only every few generations, so a
-                # generation is compared with its parents on the same test.
-                rng = np.random.default_rng([seed, (gen - race_start) // RIVAL_BLOCK, 7])
-                block_start = race_start + ((gen - race_start) // RIVAL_BLOCK) * RIVAL_BLOCK
-                past = [g for g in list_generations(run_dir) if g < block_start][-12:]
-                picks = rng.choice(past, 2, replace=len(past) < 2)
-                rivals = ["scripted"] + [load_generation(run_dir, int(g))["pop"][0] for g in picks]
-                slot = int(rng.integers(0, 4))
-            else:
-                slot = 0
-            fitness, detail = score_population(pop, tracks, mode, pool, rivals, slot,
-                                               chunks=max(1, workers))
+        for gen in range(start_gen, start_gen + generations):
+            start = phase2_start(config, history)
+            if start is None and history and all(
+                    t["solo_laps"] >= PHASE1_LAPS and t["solo_damage"] <= PHASE1_DAMAGE
+                    for t in history[-1]["exam"].values()):
+                start = gen
+                config["phase2_start"] = gen
+                _write_json(config_path, config)
+            racing = start is not None and gen >= start
+            scenarios, resolved, bonus = [], None, 0.0
+            if racing:
+                scenarios = make_scenarios(config, gen, start, [h["gen"] for h in history])
+                resolved = [dict(s, rivals=[r if r == "scripted" else champion_of(r) for r in s["rivals"]])
+                            for s in scenarios]
+                if config["race_bonuses"]:
+                    bonus = max(0.0, 1.0 - (gen - start) / BONUS_FADE)
+            fitness, averages = score_population(pop, arch, tracks, resolved, bonus, pool,
+                                                 chunks=max(1, workers))
             order = np.argsort(-fitness, kind="stable")
-            pop, fitness = pop[order], fitness[order]
-            np.savez_compressed(gen_path(run_dir, gen), pop=pop.astype(np.float32), fitness=fitness)
+            fitness = fitness[order]
+            np.savez_compressed(gen_path(run_dir, gen), pop=pop[order].astype(np.float32), fitness=fitness)
             # Carry on from exactly what was saved (float32), so stopping and
             # continuing a run gives the same result as never stopping.
             pop = load_generation(run_dir, gen)["pop"]
-            champion = pop[0]
             entry = {
-                "gen": gen, "mode": mode,
+                "gen": gen, "mode": "race" if racing else "solo",
                 "best": round(float(fitness[0]), 4),
                 "mean": round(float(fitness.mean()), 4),
                 "median": round(float(np.median(fitness)), 4),
-                "exam": exam(champion, tracks),
+                "bonus": round(bonus, 3),
+                "exam": exam(pop[0], arch, tracks),
             }
+            if racing:
+                best = order[0]
+                entry["training"] = {key: round(float(values[best]), 3) for key, values in averages.items()}
+                entry["scenarios"] = scenarios
             history.append(entry)
             _write_json(run_dir / "history.json", history)
             if on_generation:

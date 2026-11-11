@@ -2,8 +2,6 @@
 slot from the race setup menu, like any other driver."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from sim.driver import register_driver, unregister_drivers
 
 from . import evolve
@@ -22,12 +20,20 @@ def spread(generations: list[int], limit: int) -> list[int]:
     return [generations[i] for i in sorted(picks)]
 
 
-def champion(run: str, gen: int, label: str | None = None) -> NeuralDriver:
-    """The best driver of a generation, as a Driver."""
+def weights(run: str, gen: int, rank: int = 0):
+    """(weights, arch) of the driver ranked `rank` (0 = champion) in a generation."""
     key = (str(evolve.RUNS_DIR), run, gen)
     if key not in _cache:
-        _cache[key] = evolve.load_generation(evolve.RUNS_DIR / run, gen)["pop"][0]
-    return NeuralDriver(_cache[key], label or f"Evo gen {gen}")
+        run_dir = evolve.RUNS_DIR / run
+        _cache[key] = (evolve.load_generation(run_dir, gen)["pop"], evolve.load_config(run_dir)["arch"])
+    pop, arch = _cache[key]
+    return pop[min(rank, len(pop) - 1)], arch
+
+
+def champion(run: str, gen: int, label: str | None = None, rank: int = 0) -> NeuralDriver:
+    """A driver of a generation (the best by default), as a Driver."""
+    w, arch = weights(run, gen, rank)
+    return NeuralDriver(w, arch, label or f"Evo gen {gen}")
 
 
 def latest_run() -> str | None:

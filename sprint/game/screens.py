@@ -540,32 +540,43 @@ _reference_laps: dict = {}
 
 
 def scripted_reference(track_name: str):
-    """The scripted driver's best lap on a track, for comparison on charts."""
+    """The scripted driver's best lap on a track, for comparison."""
     if track_name not in _reference_laps:
         race = Race(track_name, [(0, "scripted")], laps=2).run(max_seconds=200)
         _reference_laps[track_name] = race.world.cars[0].best_lap
     return _reference_laps[track_name]
 
 
-class LabScreen(Screen):
-    """Charts of a training run, refreshed while the trainer is running, and
-    ways to watch the results."""
+def _mean(values):
+    values = [v for v in values if v is not None]
+    return sum(values) / len(values) if values else None
 
-    ITEMS = ["WATCH A GENERATION", "RACE THE CHAMPIONS", "RACE AGAINST THEM", "BACK"]
+
+class LabScreen(Screen):
+    """Charts of a training run (refreshed while the trainer runs), a
+    generation picker, and ways to watch that generation."""
+
+    ROWS = ["gen", "pack", "top4", "test", "champions", "versus", "back"]
     REFRESH = 1.5
 
     def __init__(self, app):
         super().__init__(app)
-        self.selected = 0
+        self.row = 1
         self.timer = 0.0
         self.message = ""
+        self.picked = None          # chosen generation; None = follow the latest
+        self.test_index = 0
         self.reload()
+
+    # ------------------------------------------------------------ data
 
     def reload(self) -> None:
         self.runs = evolve.list_runs()
         if self.app.ai_run not in self.runs:
             self.app.ai_run = roster.latest_run()
-        self.history = evolve.load_history(evolve.RUNS_DIR / self.app.ai_run) if self.app.ai_run else []
+        run = self.app.ai_run
+        self.history = evolve.load_history(evolve.RUNS_DIR / run) if run else []
+        self.config = evolve.load_config(evolve.RUNS_DIR / run) if run else {}
 
     def update(self, seconds: float) -> None:
         self.timer += seconds
@@ -575,6 +586,60 @@ class LabScreen(Screen):
 
     def generations(self) -> list[int]:
         return [h["gen"] for h in self.history]
+
+    @property
+    def gen(self):
+        gens = self.generations()
+        if not gens:
+            return None
+        if self.picked is None:
+            return gens[-1]
+        return min(gens, key=lambda g: abs(g - self.picked))
+
+    def entry(self):
+        gen = self.gen
+        return next((h for h in self.history if h["gen"] == gen), None)
+
+    def racing_start(self):
+        return next((h["gen"] for h in self.history if h["mode"] == "race"), None)
+
+    def pick(self, delta: int) -> None:
+        gens = self.generations()
+        if not gens:
+            return
+        i = max(0, min(len(gens) - 1, gens.index(self.gen) + delta))
+        self.picked = None if i == len(gens) - 1 else gens[i]
+        self.test_index = 0
+
+    # ------------------------------------------------------------ races
+
+    def start_race(self, track: str, entries: list, laps: int) -> None:
+        setup = self.app.setup
+        race = Race(track, entries, laps=laps, seed=setup["seed"])
+        self.app.show(RaceScreen(self.app, race, back=LabScreen))
+
+    def top4_race(self) -> None:
+        """The four best drivers of the chosen generation.  Reverse grid:
+        the best starts last, so it has to overtake."""
+        run, gen = self.app.ai_run, self.gen
+        entries = [(3 - rank, roster.champion(run, gen, f"G{gen} #{rank + 1}", rank=rank)) for rank in range(4)]
+        self.start_race(self.app.setup["track"], entries, self.app.setup["laps"])
+
+    def test_race(self) -> None:
+        """One of the races the chosen generation was scored on, with its
+        champion in the seat it was tested in."""
+        entry = self.entry()
+        scenarios = entry.get("scenarios") if entry else None
+        if not scenarios:
+            self.message = f"Gen {self.gen} was in driving school: no races yet."
+            return
+        sc = scenarios[self.test_index % len(scenarios)]
+        run = self.app.ai_run
+        others = [s for s in range(4) if s != sc["slot"]]
+        entries = [(sc["slot"], roster.champion(run, self.gen, f"Gen {self.gen}"))]
+        for slot, rival in zip(others, sc["rivals"]):
+            entries.append((slot, "scripted" if rival == "scripted" else roster.champion(run, rival, f"Gen {rival}")))
+        self.start_race(sc["track"], entries, 2)
 
     def champions_race(self, with_human: bool) -> None:
         gens = self.generations()
@@ -587,44 +652,67 @@ class LabScreen(Screen):
         for gen in picks:
             entries.append((len(entries), roster.champion(run, gen, f"Gen {gen}")))
         entries.append((len(entries), "scripted"))
-        setup = self.app.setup
-        race = Race(setup["track"], entries[:4], laps=setup["laps"], seed=setup["seed"])
-        self.app.show(RaceScreen(self.app, race, back=LabScreen))
+        self.start_race(self.app.setup["track"], entries[:4], self.app.setup["laps"])
+
+    # ------------------------------------------------------------ input
 
     def handle_event(self, event) -> None:
         if event.type != pygame.KEYDOWN:
             return
-        if event.key in BACK:
+        key = event.key
+        row = self.ROWS[self.row] if self.history else "back"
+        if key in BACK:
             self.app.show(MainMenu(self.app))
-        elif event.key in UP:
-            self.selected = (self.selected - 1) % len(self.ITEMS)
+        elif key in UP and self.history:
+            self.row = (self.row - 1) % len(self.ROWS)
             self.app.audio.play("blip")
-        elif event.key in DOWN:
-            self.selected = (self.selected + 1) % len(self.ITEMS)
+        elif key in DOWN and self.history:
+            self.row = (self.row + 1) % len(self.ROWS)
             self.app.audio.play("blip")
-        elif event.key in LEFT + RIGHT and len(self.runs) > 1:
-            step = 1 if event.key in RIGHT else -1
-            self.app.ai_run = self.runs[(self.runs.index(self.app.ai_run) + step) % len(self.runs)]
+        elif key == pygame.K_PAGEUP:
+            self.pick(10)
+        elif key == pygame.K_PAGEDOWN:
+            self.pick(-10)
+        elif key == pygame.K_END:
+            self.picked = None
+        elif key == pygame.K_HOME:
+            self.pick(-10 ** 6)
+        elif key in LEFT + RIGHT:
+            step = 1 if key in RIGHT else -1
+            if row == "test":
+                self.test_index += step
+            else:
+                self.pick(step)
+            self.app.audio.play("blip")
+        elif key == pygame.K_r and len(self.runs) > 1:
+            self.app.ai_run = self.runs[(self.runs.index(self.app.ai_run) + 1) % len(self.runs)]
+            self.picked = None
             self.reload()
-        elif event.key == pygame.K_t:
+        elif key == pygame.K_t:
             tracks = Track.available()
             self.app.setup["track"] = tracks[(tracks.index(self.app.setup["track"]) + 1) % len(tracks)]
-        elif event.key in ACCEPT:
+        elif key in ACCEPT:
             self.app.audio.play("select")
-            item = self.ITEMS[self.selected]
-            if item == "BACK":
+            self.message = ""
+            if row == "back":
                 self.app.show(MainMenu(self.app))
-            elif not self.history:
-                self.message = "Nothing trained yet."
-            elif item == "WATCH A GENERATION":
-                self.app.show(PackScreen(self.app, self.app.ai_run))
-            else:
-                self.champions_race(with_human=item == "RACE AGAINST THEM")
+            elif row == "pack":
+                self.app.show(PackScreen(self.app, self.app.ai_run, self.gen))
+            elif row == "top4":
+                self.top4_race()
+            elif row == "test":
+                self.test_race()
+            elif row == "champions":
+                self.champions_race(with_human=False)
+            elif row == "versus":
+                self.champions_race(with_human=True)
+
+    # ------------------------------------------------------------ draw
 
     def draw(self, screen) -> None:
         ui = self.app.ui
         ui.backdrop(screen)
-        ui.text(screen, "big", "AI LAB", C_HUD_ACCENT, 8, 4, shadow=True)
+        ui.text(screen, "big", "AI LAB", C_HUD_ACCENT, 4, 3, shadow=True)
         if not self.history:
             lines = [
                 "No trained drivers yet.",
@@ -640,57 +728,96 @@ class LabScreen(Screen):
                 ui.text(screen, "mid", line, C_HUD_ACCENT if "train.py" in line else C_HUD_TEXT, 12, 18 + k * 5)
             draw_list(ui, screen, ["BACK"], 0, 14, 70, 6, "mid")
             return
-        last = self.history[-1]
-        testing = "real races" if last["mode"] == "race" else "solo ghost runs"
-        ui.text(screen, "small", f"run '{self.app.ai_run}'    generation {last['gen']}    "
-                f"now testing with {testing}", C_HUD_TEXT, 40, 5.6)
+
         gens = self.generations()
-        tracks = list(last["exam"].keys())
+        tracks = list(self.history[-1]["exam"].keys())
         colours = [C_CYAN, C_PINK, C_HUD_ACCENT, (60, 220, 110)]
-        race_start = next((h["gen"] for h in self.history if h["mode"] == "race"), None)
-        marker = (race_start, "races begin") if race_start else None
+        start = self.racing_start()
+        marker = (start, "racing school") if start else None
+        exams = [h["exam"] for h in self.history]
 
-        series = []
-        for k, name in enumerate(tracks):
-            series.append((name, colours[k % 4],
-                           [h["exam"][name]["solo_best_lap"] for h in self.history]))
-        ui.chart(screen, 4, 12, 76, 36, "CHAMPION'S BEST LAP, ALONE (s)", gens, series, "{:.1f}", marker)
-        for k, name in enumerate(tracks):
-            ui.text(screen, "small", f"scripted driver on {name}: {scripted_reference(name):.2f}s",
-                    colours[k % 4], 6 + k * 38, 48.6)
+        def avg(key, scale=1.0):
+            return [None if _mean([e[t][key] for t in e]) is None else _mean([e[t][key] for t in e]) * scale
+                    for e in exams]
 
-        hits = [sum(e["race_hits"] for e in h["exam"].values()) for h in self.history]
-        damage = [100.0 * sum(e["race_damage"] for e in h["exam"].values()) / len(h["exam"])
-                  for h in self.history]
-        ui.chart(screen, 82, 12, 74, 36, "CHAMPION IN A RACE v 3 SCRIPTED", gens,
-                 [("collisions", C_PINK, hits), ("damage %", C_HUD_ACCENT, damage)], "{:.0f}", marker, floor=0.0)
-        ui.chart(screen, 4, 53, 76, 32, "SCORE OF THE GENERATION", gens,
+        ui.chart(screen, 3, 10.5, 53, 37.5, "BEST LAP ALONE (s)", gens,
+                 [(t, colours[k % 4], [e[t]["solo_best_lap"] for e in exams]) for k, t in enumerate(tracks)],
+                 "{:.1f}", marker)
+        ui.chart(screen, 58, 10.5, 53, 37.5, "RACE FROM LAST ON GRID", gens,
+                 [("place (1 = won)", C_HUD_TEXT, avg("race_place")), ("passes", C_CYAN, avg("race_overtakes")),
+                  ("hits caused", C_PINK, avg("race_fault"))], "{:.0f}", marker, floor=0.0)
+        ui.chart(screen, 3, 50, 53, 36, "DAMAGE AND DRAFTING (%)", gens,
+                 [("damage", C_PINK, avg("race_damage", 100.0)), ("in draft", C_CYAN, avg("race_draft", 100.0))],
+                 "{:.0f}", marker, floor=0.0)
+        ui.chart(screen, 58, 50, 53, 36, "SCORE OF THE GENERATION", gens,
                  [("best", C_CYAN, [h["best"] for h in self.history]),
                   ("average", (150, 140, 200), [h["mean"] for h in self.history])], "{:.2f}", marker)
 
-        draw_list(ui, screen, self.ITEMS, self.selected, 92, 55, 6.0, "mid")
-        ui.text(screen, "small", f"track for races: {self.app.setup['track'].upper()}  (T to change)",
-                C_HUD_DIM, 88, 80)
+        # Right-hand column: run facts and the menu.
+        x = 114
+        entry = self.entry()
+        arch = self.config.get("arch")
+        ui.text(screen, "small", f"RUN '{self.app.ai_run}'", C_HUD_DIM, x, 4.0)
+        if arch:
+            from ai.brain import describe
+            ui.text(screen, "small", describe(arch), C_HUD_DIM, x, 6.6)
+        school = "racing school" if entry["mode"] == "race" else "driving school"
+        rows = {
+            "gen": f"GEN < {self.gen} >" + ("" if self.picked else "  latest"),
+            "pack": "GHOST PACK",
+            "top4": "TOP 4 RACE",
+            "test": f"TEST RACE < {self.test_index % max(1, len(entry.get('scenarios') or [1])) + 1}"
+                    f"/{len(entry.get('scenarios') or [])} >" if entry.get("scenarios") else "TEST RACE  (none)",
+            "champions": "CHAMPIONS RACE",
+            "versus": "YOU v CHAMPIONS",
+            "back": "BACK",
+        }
+        y = 12.0
+        for i, row in enumerate(self.ROWS):
+            selected = i == self.row
+            if selected:
+                ui.text(screen, "mid", ">", C_PINK, x - 3, y)
+            ui.text(screen, "mid", rows[row], C_HUD_ACCENT if selected else C_HUD_TEXT, x, y, shadow=True)
+            if row == "gen":
+                y += 4.4
+                ui.text(screen, "small", f"{school}, of {gens[-1]}", C_HUD_DIM, x, y)
+                y += 4.0
+            else:
+                y += 5.4
+        e = entry["exam"]
+        y += 1.0
+        ui.text(screen, "small", f"GEN {self.gen} CHAMPION", C_HUD_ACCENT, x, y)
+        for t in tracks:
+            y += 3.0
+            lap = e[t]["solo_best_lap"]
+            ref = scripted_reference(t)
+            place = f"P{e[t]['race_place']}" if e[t]["race_finished"] else "DNF"
+            ui.text(screen, "small", f"{t[:5]} {lap:.2f}s (ai) v {ref:.2f}s" if lap else f"{t[:5]} no lap",
+                    C_HUD_TEXT, x, y)
+            y += 2.6
+            ui.text(screen, "small", f"  {place}, {e[t]['race_overtakes']} passes, "
+                    f"{e[t]['race_fault']:g} hits", C_HUD_DIM, x, y)
+        ui.text(screen, "small", f"race track {self.app.setup['track'].upper()}", C_HUD_DIM, x, 80.5)
         if self.message:
-            ui.text(screen, "small", self.message, C_PINK, 88, 83.5)
-        elif len(self.runs) > 1:
-            ui.text(screen, "small", "LEFT/RIGHT switch training run", C_HUD_DIM, 88, 83.5)
+            ui.text(screen, "small", self.message, C_PINK, x, 83.2)
+        ui.text(screen, "small", "UP/DOWN choose   LEFT/RIGHT change   PGUP/PGDN gen +/-10   END latest   "
+                "T track   R run   ESC back", C_HUD_DIM, WORLD_W / 2, 88.6, "midbottom")
 
 
 class PackScreen(Screen):
     """Watch a whole generation drive at once, as ghosts, exactly as it was
-    tested, and step through the generations to see them improve."""
+    tested in driving school, and step through the generations."""
 
     def __init__(self, app, run: str, gen: int | None = None):
         super().__init__(app)
         self.run = run
         self.run_dir = evolve.RUNS_DIR / run
+        self.arch = evolve.load_config(self.run_dir)["arch"]
         self.track_name = app.setup["track"]
         self.auto = True
         self.accumulator = 0.0
         self.alpha = 1.0
         self.wait = 0.0
-        self.scan = 0.0
         self.gens = evolve.list_generations(self.run_dir)
         self.load(gen if gen is not None else self.gens[0])
 
@@ -699,7 +826,7 @@ class PackScreen(Screen):
         gen = min(self.gens, key=lambda g: abs(g - gen))
         self.gen = gen
         data = evolve.load_generation(self.run_dir, gen)
-        self.pack = evolve.PackRun(data["pop"], self.track_name)
+        self.pack = evolve.PackRun(data["pop"], self.arch, self.track_name)
         self.renderer = self.app.renderer_for(self.pack.track)
         self.accumulator = 0.0
         self.wait = 0.0

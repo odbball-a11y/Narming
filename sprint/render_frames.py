@@ -86,7 +86,7 @@ def main() -> int:
         app.current.tick()
     shot(f"8_{args.track}_replay_results")
 
-    # AI lab: charts, a generation as a ghost pack, and a champions race.
+    # AI lab: charts, a generation as a ghost pack, and the racing views.
     app.show(LabScreen(app))
     shot("9_lab")
     run = roster.latest_run()
@@ -98,12 +98,18 @@ def main() -> int:
             for _ in range(int(6.0 * tuning.TICK_RATE)):
                 pack.pack.step()
             shot(f"10_{args.track}_pack_gen{gen:04d}")
-        lab = LabScreen(app)
-        lab.champions_race(with_human=False)
-        view = app.current
-        while view.race.world.time < 9.0:
-            view.tick()
-        shot(f"11_{args.track}_champions")
+        for name, action in (("top4", lambda lab: lab.top4_race()),
+                             ("test_race", lambda lab: lab.test_race()),
+                             ("champions", lambda lab: lab.champions_race(with_human=False))):
+            lab = LabScreen(app)
+            app.show(lab)
+            action(lab)
+            view = app.current
+            if view is lab:
+                continue
+            while view.race.world.time < 9.0 and not view.over:
+                view.tick()
+            shot(f"11_{args.track}_{name}")
     pygame.quit()
     return 0
 
