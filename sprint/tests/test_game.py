@@ -66,6 +66,11 @@ def test_setup_assigns_any_driver_to_any_slot(app):
     assert app.setup["laps"] == 2
     choices = [k for k, _ in setup_screen.driver_choices()]
     assert choices[0] is None and "scripted" in choices and "human3" in choices
+    press(app, pygame.K_DOWN)                            # start type
+    assert app.setup["rolling"] is True
+    press(app, pygame.K_RIGHT)
+    assert app.setup["rolling"] is False
+    press(app, pygame.K_RIGHT)
     press(app, pygame.K_DOWN)                            # car 1
     for _ in range(len(choices)):                        # cycle all the way round
         press(app, pygame.K_RIGHT)
@@ -89,7 +94,7 @@ def test_full_race_pause_results_and_replay(app):
     press(app, pygame.K_UP, pygame.K_RETURN)             # START RACE
     view = app.current
     assert isinstance(view, RaceScreen) and view.race.slots == [1, 3]
-    assert view.race.phase == COUNTDOWN
+    assert view.race.phase == COUNTDOWN and view.race.rolling
 
     run_seconds(app, 3.2)
     assert view.race.phase == RACING

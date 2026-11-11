@@ -183,11 +183,11 @@ DAMAGE_ACCEL_LOSS = 0.35
 
 # How far behind another car the tow reaches (units; a car is about 4 long).
 # Longer: easier to pick up a tow.
-DRAFT_LENGTH = 16.0
+DRAFT_LENGTH = 24.0
 
 # Half-width of the tow right behind the lead car, and how much wider it gets
 # per unit of distance behind.  Wider: less precision needed to stay in it.
-DRAFT_HALF_WIDTH = 1.4
+DRAFT_HALF_WIDTH = 1.7
 DRAFT_SPREAD = 0.10
 
 # The lead car must be going at least this fast to punch a hole in the air.
@@ -195,8 +195,8 @@ DRAFT_MIN_SPEED = 12.0
 
 # Extra top speed and acceleration at full tow (right on the leader's tail).
 # Higher: slipstream passes are easy, packs form.  0 switches drafting off.
-DRAFT_TOP_SPEED_GAIN = 0.10
-DRAFT_ACCEL_GAIN = 0.30
+DRAFT_TOP_SPEED_GAIN = 0.15
+DRAFT_ACCEL_GAIN = 0.40
 
 
 # --------------------------------------------------------------------------
@@ -263,6 +263,16 @@ SCRIPT_REVERSE_TIME = 0.9
 # Seconds between the 3, 2, 1 lights; the race starts after three of them.
 COUNTDOWN_STEP = 1.0
 
+# Rolling start: the cars begin in single file on the run to the line, already
+# moving at ROLLING_START_SPEED, ROLLING_START_GAP apart (centre to centre; a
+# car is about 4 long).  The gap is well inside the tow, so every car behind
+# the leader starts in a slipstream.
+# Smaller gap: tighter pack, more contact at the first corner.
+ROLLING_START_SPEED = 21.0
+ROLLING_START_GAP = 9.0
+# How far before the line the leading car starts.
+ROLLING_START_LEAD = 4.0
+
 # Once the winner finishes, the others get this many seconds to finish too.
 FINISH_GRACE = 30.0
 
@@ -277,5 +287,6 @@ def physics_fingerprint() -> str:
     parts = (TICK_RATE, CAR_PARAMS, GRASS_GRIP, GRASS_DRAG, WALL_RESTITUTION,
              WALL_FRICTION, CAR_RESTITUTION, DAMAGE_MIN_IMPACT, WALL_DAMAGE, CAR_DAMAGE,
              DAMAGE_TOP_SPEED_LOSS, DAMAGE_ACCEL_LOSS, DRAFT_LENGTH, DRAFT_HALF_WIDTH,
-             DRAFT_SPREAD, DRAFT_MIN_SPEED, DRAFT_TOP_SPEED_GAIN, DRAFT_ACCEL_GAIN)
+             DRAFT_SPREAD, DRAFT_MIN_SPEED, DRAFT_TOP_SPEED_GAIN, DRAFT_ACCEL_GAIN,
+             ROLLING_START_SPEED, ROLLING_START_GAP, ROLLING_START_LEAD)
     return hashlib.sha256(repr(parts).encode()).hexdigest()[:16]

@@ -47,7 +47,8 @@ Main menu: **Race**, **AI Lab**, **Controls**, **Replays**, **Quit**. Menus use 
 keys, Enter and Esc.
 
 **Race setup:** pick the track (Speedway or Technical), the number of laps,
-and who drives each of the four cars: `None`, any of the four keyboard sets,
+the start (rolling, the default: single file and already at speed, car 1
+leading; or a standing grid), and who drives each of the four cars: `None`, any of the four keyboard sets,
 any connected gamepad, `Scripted` (the computer), or a trained AI champion
 (`Evo gen N`, once you have trained some). Any driver type can go in any slot. The default is you on the arrow keys against three scripted cars.
 
@@ -91,8 +92,8 @@ the DMG bar in its HUD panel and by smoke. Damage is permanent for the race
 and only costs speed: a wrecked car loses 30% of its top speed and 35% of its
 acceleration, but steers as before.
 
-**Drafting.** Sit close behind a fast car, in line with it, and you get a
-tow: up to 10% more top speed and 30% more acceleration. Blue-white streaks
+**Drafting.** Sit behind a fast car, in line with it and within about six car
+lengths, and you get a tow: up to 15% more top speed and 40% more acceleration. Blue-white streaks
 stream from the lead car to yours and DRAFT shows in your HUD panel.
 
 Both are tunable in `sim/tuning.py` (the Damage and Drafting sections).
@@ -107,8 +108,8 @@ generation is bred from mutated copies of the good ones.
   as ghosts that pass through each other. Score: distance covered, less
   damage. It ends by itself once the champion laps both tracks cleanly.
 - **Racing school (phase 2).** Every driver runs four real races per
-  generation (two per track), with collisions, damage and drafting, starting
-  from every grid position. All drivers in a generation face the same races,
+  generation (two per track), with collisions, damage and drafting, from a
+  single-file rolling start in every position. All drivers in a generation face the same races,
   so the comparison is fair. Rivals are scripted cars for the first 10
   generations, then a mix of scripted cars, the AI's own recent champions and
   a hall of fame of older ones, so it has to race opponents that fight back.
@@ -133,6 +134,7 @@ py train.py --generations 200
 py train.py --run big --hidden 32 32 --memory 8      # a separate run with a bigger brain
 py train.py --run plain --no-race-bonuses            # a separate run scored on results only
 py train.py --run long --race-laps 3                 # a separate run with longer training races
+py train.py --run speedway --tracks speedway --races 4 --race-laps 3   # one track only
 ```
 
 Each generation prints one line. Ctrl+C is safe; running the same command

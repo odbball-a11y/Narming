@@ -58,6 +58,12 @@ Training trials so far (population 80, 24x16 + memory 4, 4 cores):
    generations; more races per driver or a bigger population; PPO for
    the racing phase.
 
+After trial 4 the user asked for: Speedway-only training first
+(`--tracks speedway --races 4`), single-file rolling starts always
+(`World(rolling=True)`: training, exam, Lab races; default in race setup), a
+stronger, longer tow (`DRAFT_*` in tuning), and, later, more than four cars.
+AI drivers now never practise standing starts.
+
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
 

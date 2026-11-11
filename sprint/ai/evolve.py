@@ -135,7 +135,7 @@ class PackRun:
                  slot: int = 0, damage: float = 0.0):
         self.track = get_track(track_name)
         self.count = len(weights)
-        self.world = World(self.track, slots=[slot] * self.count, ghost=True, laps=10 ** 9)
+        self.world = World(self.track, slots=[slot] * self.count, ghost=True, laps=10 ** 9, rolling=True)
         for car in self.world.cars:
             car.damage = damage
         self.brains = Population(weights, arch)
@@ -257,7 +257,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
     others = [s for s in range(4) if s != slot]
     worlds, scripted, stats = [], [], []
     for _ in range(count):
-        world = World(track, slots=[slot] + others, laps=10 ** 9)
+        world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True)
         drivers = {}
         for k, rival in enumerate(scenario["rivals"]):
             if isinstance(rival, str):
@@ -346,7 +346,7 @@ def _job(args):
 
 def solo_setup(gen: int) -> dict:
     """Driving-test conditions for a generation (the same for all its
-    drivers): the grid box and the damage the car starts with rotate, so
+    drivers): the place in the rolling-start file and the damage the car starts with rotate, so
     drivers learn to cope with any start and with a damaged car.  Without
     this they only ever practised from box 1 with a perfect car, and drove
     badly the first time either changed."""
@@ -433,7 +433,7 @@ def exam(weights: np.ndarray, arch: dict, tracks: list[str]) -> dict:
     for name in tracks:
         solo = test_solo(weights[None, :], arch, name)
         race = Race(name, [(3, NeuralDriver(weights, arch, "Evolved")), (0, "scripted"),
-                           (1, "scripted"), (2, "scripted")], laps=3)
+                           (1, "scripted"), (2, "scripted")], laps=3, rolling=True)
         stats = RaceStats(race.world)
         limit = int(150.0 * tuning.TICK_RATE)
         while race.phase != FINISHED and race.world.tick < limit:

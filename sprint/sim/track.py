@@ -169,6 +169,14 @@ class Track:
             y = self._py[idx] + self._tx[idx] * lat
             self.grid.append((x, y, self._heading[idx]))
 
+    def rolling_start(self, place: int) -> tuple[float, float, float]:
+        """(x, y, heading) of the car `place` back in a single-file rolling
+        start (0 = leading), on the centreline before the start line."""
+        from . import tuning
+        s = -(tuning.ROLLING_START_LEAD + tuning.ROLLING_START_GAP * place)
+        idx = int(round(s / self.ds)) % self.n
+        return self._px[idx], self._py[idx], self._heading[idx]
+
     # ------------------------------------------------------------------ I/O
 
     @classmethod

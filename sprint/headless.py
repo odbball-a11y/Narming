@@ -51,6 +51,7 @@ def main() -> int:
     ap.add_argument("--laps", type=int, default=3)
     ap.add_argument("--driver", default="scripted")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--rolling", action="store_true", help="single-file rolling start")
     ap.add_argument("--record", metavar="FILE", help="save the race's controls to FILE")
     ap.add_argument("--replay", metavar="FILE", help="play back FILE and check it reproduces")
     ap.add_argument("--bench", type=int, default=0, metavar="STEPS",
@@ -71,7 +72,7 @@ def main() -> int:
         print(f"replay of {recording.track}: {len(recording.slots)} car(s), {recording.laps} laps")
     else:
         race = Race(args.track, [(slot, args.driver) for slot in range(args.cars)],
-                    laps=args.laps, seed=args.seed)
+                    laps=args.laps, seed=args.seed, rolling=args.rolling)
         print(f"{args.track}: {args.cars} car(s), driver={args.driver}, {args.laps} laps")
 
     start = time.perf_counter()

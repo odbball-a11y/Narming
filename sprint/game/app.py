@@ -30,6 +30,7 @@ class App:
             "track": "speedway",
             "laps": 3,
             "seed": 0,
+            "rolling": True,
             "drivers": ["human1", "scripted", "scripted", "scripted"],
         }
         self.ai_run = None          # training run shown in the AI lab (None = latest)

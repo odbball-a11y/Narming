@@ -21,12 +21,15 @@ from .track import GRASS, Track
 class World:
     def __init__(self, track: Track, num_cars: int = 1, seed: int = 0,
                  slots: Sequence[int] | None = None, laps: int | None = None,
-                 ghost: bool = False):
+                 ghost: bool = False, rolling: bool = False):
         """`slots` says which grid slot / parameter set each car uses
         (default 0..num_cars-1).  `laps` is the race distance.  With
         `ghost` the cars pass through each other and give no tow: used to
         test a whole population of AI drivers on the track at once."""
         self.ghost = ghost
+        # Rolling start: single file at speed; `slots` then also gives each
+        # car's place in the file (0 = leading).
+        self.rolling = rolling
         self.track = track
         self.seed = seed
         self.slots = list(slots) if slots is not None else list(range(num_cars))
@@ -46,8 +49,15 @@ class World:
         self.tick = 0
         for car, slot in zip(self.cars, self.slots):
             car.params = tuning.car_params(slot)
-            x, y, heading = self.track.grid[slot % len(self.track.grid)]
-            self.place_car(car, x, y, heading)
+            if self.rolling:
+                x, y, heading = self.track.rolling_start(slot)
+                self.place_car(car, x, y, heading)
+                car.vx = math.cos(heading) * tuning.ROLLING_START_SPEED
+                car.vy = math.sin(heading) * tuning.ROLLING_START_SPEED
+                car.refresh_speed()
+            else:
+                x, y, heading = self.track.grid[slot % len(self.track.grid)]
+                self.place_car(car, x, y, heading)
 
     def place_car(self, car: Car, x: float, y: float, heading: float) -> None:
         car.place(x, y, heading)

@@ -8,6 +8,7 @@ import pytest
 
 from ai import brain, evolve, roster
 from ai.brain import N_INPUTS, Brain, NeuralDriver, Population, n_weights, observe, random_weights
+from sim import tuning
 from sim.driver import create_driver, driver_types
 from sim.race import FINISHED, Race
 from sim.replay import Recording
@@ -140,7 +141,9 @@ def test_driving_tests_rotate_grid_box_and_starting_damage():
     assert all(car.damage == 0.5 for car in run.world.cars)
     result = evolve.test_solo(pop, ARCH, "speedway", seconds=1.0, slot=2, damage=0.5)
     assert all(d >= 0.0 for d in result["damage"]) and min(result["damage"]) < 0.5   # only new damage counts
-    assert (run.world.cars[0].x, run.world.cars[0].y) == run.track.grid[2][:2]
+    car = run.world.cars[0]
+    assert (car.x, car.y) == run.track.rolling_start(2)[:2]      # third in the rolling file
+    assert car.speed == pytest.approx(tuning.ROLLING_START_SPEED)
 
 
 def test_breeding_keeps_the_elites_and_is_seeded():
@@ -339,6 +342,7 @@ def test_lab_watch_options(app):
     assert isinstance(view, RaceScreen)
     assert [d.label for d in view.race.drivers] == ["G6 #1", "G6 #2", "G6 #3", "G6 #4"]
     assert view.race.slots == [3, 2, 1, 0]          # reverse grid: the best starts last
+    assert view.race.rolling
     for _ in range(300):
         app.update(1 / 60)
     press(app, pygame.K_ESCAPE, pygame.K_UP, pygame.K_RETURN)      # quit goes back to the lab

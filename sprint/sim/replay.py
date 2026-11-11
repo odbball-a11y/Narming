@@ -32,7 +32,8 @@ def track_fingerprint(track: Track) -> str:
 class Recording:
     def __init__(self, track: str, slots, laps: int, seed: int, controls,
                  drivers=None, final_hash=None, results=None,
-                 tuning_id=None, track_id=None, tick_rate=tuning.TICK_RATE):
+                 tuning_id=None, track_id=None, tick_rate=tuning.TICK_RATE, rolling=False):
+        self.rolling = bool(rolling)
         self.track = track
         self.slots = list(slots)
         self.laps = laps
@@ -52,6 +53,7 @@ class Recording:
             controls=race.controls_log, drivers=[d.label for d in race.drivers],
             final_hash=race.final_hash, results=race.results(),
             tuning_id=tuning.physics_fingerprint(), track_id=track_fingerprint(race.track),
+            rolling=race.rolling,
         )
 
     # ----------------------------------------------------------------- I/O
@@ -62,6 +64,7 @@ class Recording:
         data = {
             "format": FORMAT, "track": self.track, "slots": self.slots, "laps": self.laps,
             "seed": self.seed, "tick_rate": self.tick_rate, "drivers": self.drivers,
+            "rolling": self.rolling,
             "tuning_id": self.tuning_id, "track_id": self.track_id,
             "final_hash": self.final_hash, "results": self.results,
             "controls": self.controls,
@@ -84,7 +87,7 @@ class Recording:
             controls=data["controls"], drivers=data.get("drivers"),
             final_hash=data.get("final_hash"), results=data.get("results"),
             tuning_id=data.get("tuning_id"), track_id=data.get("track_id"),
-            tick_rate=data.get("tick_rate", tuning.TICK_RATE),
+            tick_rate=data.get("tick_rate", tuning.TICK_RATE), rolling=data.get("rolling", False),
         )
 
     # ------------------------------------------------------------ playback
@@ -95,7 +98,7 @@ class Recording:
         for i, slot in enumerate(self.slots):
             label = self.drivers[i] if i < len(self.drivers) else "Replay"
             entries.append((slot, ReplayDriver(self, i, label)))
-        return Race(self.track, entries, laps=self.laps, seed=self.seed)
+        return Race(self.track, entries, laps=self.laps, seed=self.seed, rolling=self.rolling)
 
     def compatibility_problems(self, track: Track | None = None) -> list[str]:
         """Reasons this recording may not replay exactly (empty = none)."""

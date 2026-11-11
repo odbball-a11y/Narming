@@ -128,6 +128,31 @@ def test_finished_cars_park_and_never_reverse_into_the_race():
     assert not race.world.cars[0].retired
 
 
+def test_rolling_start_is_single_file_at_speed_and_in_the_tow():
+    race = Race("speedway", [(slot, "scripted") for slot in range(4)], laps=1, rolling=True)
+    cars = race.world.cars
+    track = race.track
+    for k, car in enumerate(cars):
+        assert car.speed == pytest.approx(tuning.ROLLING_START_SPEED)
+        assert abs(car.lateral) < 0.2 and car.surface == 0            # single file on the road
+        assert car.s > track.length / 2                               # behind the line
+        if k:
+            gap = cars[k - 1].s - car.s
+            assert gap == pytest.approx(tuning.ROLLING_START_GAP, abs=0.6)
+            assert gap < tuning.DRAFT_LENGTH
+    before = race.world.state_hash()
+    for _ in range(3 * tuning.TICK_RATE):                             # frozen during the countdown
+        race.step()
+    assert race.world.state_hash() == before
+    for _ in range(30):
+        race.step()
+    assert all(car.draft > 0.2 for car in cars[1:]) and cars[0].draft == 0.0
+    race.run(max_seconds=120)
+    assert race.phase == FINISHED and all(r["finished"] for r in race.results())
+    replay = Recording.from_race(race)
+    assert replay.rolling and replay.make_race().run(max_seconds=120).final_hash == race.final_hash
+
+
 def test_restart_gives_the_same_race_again():
     race = scripted_race("speedway", cars=2, laps=1).run()
     first = race.final_hash

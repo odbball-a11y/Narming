@@ -132,7 +132,7 @@ class SetupScreen(Screen):
         return [(None, "None")] + driver_types()
 
     def rows(self) -> list[str]:
-        return ["track", "laps", 0, 1, 2, 3, "start"]
+        return ["track", "laps", "grid", 0, 1, 2, 3, "start"]
 
     def change(self, row, delta: int) -> None:
         setup = self.setup
@@ -145,6 +145,8 @@ class SetupScreen(Screen):
             choices = self.LAP_CHOICES
             i = choices.index(laps) if laps in choices else 2
             setup["laps"] = choices[(i + delta) % len(choices)]
+        elif row == "grid":
+            setup["rolling"] = not setup["rolling"]
         elif isinstance(row, int):
             keys = [k for k, _ in self.driver_choices()]
             current = setup["drivers"][row]
@@ -184,7 +186,8 @@ class SetupScreen(Screen):
         if not entries:
             return
         self.app.audio.play("select")
-        race = Race(self.setup["track"], entries, laps=self.setup["laps"], seed=self.setup["seed"])
+        race = Race(self.setup["track"], entries, laps=self.setup["laps"], seed=self.setup["seed"],
+                    rolling=self.setup["rolling"])
         self.app.show(RaceScreen(self.app, race))
 
     def draw(self, screen) -> None:
@@ -208,7 +211,12 @@ class SetupScreen(Screen):
             elif row == "laps":
                 ui.text(screen, "mid", "LAPS", C_HUD_DIM, 8, y)
                 ui.text(screen, "mid", f"<  {setup['laps']}  >", colour, 34, y)
-                y += 9
+                y += 7
+            elif row == "grid":
+                ui.text(screen, "mid", "START", C_HUD_DIM, 8, y)
+                ui.text(screen, "mid", "<  ROLLING, SINGLE FILE  >" if setup["rolling"] else "<  STANDING GRID  >",
+                        colour, 34, y)
+                y += 8
             elif row == "start":
                 y += 2
                 ok = bool(self.entries())
@@ -225,7 +233,7 @@ class SetupScreen(Screen):
                 elif key and key.startswith("pad"):
                     ui.text(screen, "small", "stick steers, right trigger / A go, left trigger / B brake",
                             C_HUD_DIM, 13, y + 4.2)
-                y += 8.6
+                y += 8.0
         # Track preview
         size = (int(ui.unit * 64), int(ui.unit * 36))
         key = (setup["track"], size)
@@ -615,7 +623,7 @@ class LabScreen(Screen):
 
     def start_race(self, track: str, entries: list, laps: int) -> None:
         setup = self.app.setup
-        race = Race(track, entries, laps=laps, seed=setup["seed"])
+        race = Race(track, entries, laps=laps, seed=setup["seed"], rolling=True)
         self.app.show(RaceScreen(self.app, race, back=LabScreen))
 
     def top4_race(self) -> None:
@@ -910,7 +918,7 @@ class PackScreen(Screen):
         ui.text(screen, "small", "BEST LAP SO FAR", C_HUD_DIM, 100, 1.0)
         ui.text(screen, "big", format_time(min(laps) if laps else None), C_HUD_TEXT, 100, 3.6)
         setup = evolve.solo_setup(self.gen)
-        ui.text(screen, "small", f"grid box {setup['slot'] + 1}, starting damage {setup['damage'] * 100:.0f}%",
+        ui.text(screen, "small", f"start place {setup['slot'] + 1}, starting damage {setup['damage'] * 100:.0f}%",
                 C_HUD_DIM, 64, 8.2)
         ui.text(screen, "small", "TIME", C_HUD_DIM, 136, 1.0)
         ui.text(screen, "big", f"{world.time:4.1f}s", C_HUD_TEXT, 136, 3.6)

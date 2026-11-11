@@ -27,17 +27,20 @@ PARK_SPEED = 1.0
 
 
 class Race:
-    def __init__(self, track, entries: Sequence[tuple], laps: int | None = None, seed: int = 0):
+    def __init__(self, track, entries: Sequence[tuple], laps: int | None = None, seed: int = 0,
+                 rolling: bool = False):
         """`entries` is a list of (slot, driver) for the cars taking part,
         where driver is a registry key such as "scripted" or a Driver object.
-        Slot (0-3) picks the grid position, colour and parameter set."""
+        Slot (0-3) picks the grid position, colour and parameter set.  With
+        `rolling` the cars start in single file at speed, slot 0 leading."""
+        self.rolling = rolling
         self.track = track if isinstance(track, Track) else Track.load(track)
         self.slots = [int(slot) for slot, _ in entries]
         self.driver_keys = [d if isinstance(d, str) else type(d).__name__ for _, d in entries]
         self.drivers: list[Driver] = [
             create_driver(d, slot=slot) if isinstance(d, str) else d for slot, d in entries
         ]
-        self.world = World(self.track, slots=self.slots, seed=seed, laps=laps)
+        self.world = World(self.track, slots=self.slots, seed=seed, laps=laps, rolling=rolling)
         self.restart()
 
     def restart(self) -> None:
