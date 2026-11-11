@@ -62,7 +62,17 @@ After trial 4 the user asked for: Speedway-only training first
 (`--tracks speedway --races 4`), single-file rolling starts always
 (`World(rolling=True)`: training, exam, Lab races; default in race setup), a
 stronger, longer tow (`DRAFT_*` in tuning), and, later, more than four cars.
-AI drivers now never practise standing starts.
+AI drivers now never practise standing starts. The user then asked that
+every finishing place matter: place points went from 1/0.6/0.3/0 to 3/2/1/0.
+
+5. Run "speedway" (`--tracks speedway --races 4 --race-laps 3`) with all of
+   the above: the first trial that learned to race. Racing school began at
+   gen 18. Exam (start last v three scripted, 3 laps), 10-generation
+   averages: place 4.0 -> 1.6-2.0, passes 0 -> ~3, time in draft 5% ->
+   20-40%, caused collisions peaked ~6 around gen 70 then fell to ~2, damage
+   31% -> 12%, solo lap 16.3 -> 12.8 s. Single exam races still swing
+   (a win one generation, last the next). ~20 s per racing generation.
+   Not yet tried: Technical with these settings, more than four cars.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
