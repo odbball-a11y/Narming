@@ -40,10 +40,10 @@ from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver,
 RUNS_DIR = Path(__file__).resolve().parent.parent / "training"
 FORMAT = 2
 
-# Seconds per test.  Solo is about two laps for a good driver, a training
-# race about one and a half.
+# Seconds per test: about two laps for a good driver.  Training races must be
+# long enough for damage to cost real time, or barging pays.
 SOLO_SECONDS = {"speedway": 30.0, "technical": 46.0}
-RACE_SECONDS = {"speedway": 24.0, "technical": 36.0}
+RACE_SECONDS = {"speedway": 30.0, "technical": 46.0}
 DEFAULT_SECONDS = 40.0
 
 # A ghost that makes no forward progress for this long is retired early.
@@ -287,20 +287,35 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
     }
 
 
-PLACE_POINTS = np.array([1.0, 0.6, 0.3, 0.0])
+# How a racing-school race is scored.  Saved in each run's config, so a run
+# keeps the weights it was started with.  Lesson from the first trial: with a
+# damage weight of 0.8 and a caused-collision weight of 0.08, drivers learned
+# to win by barging (place went up, damage and collisions did not come down).
+RACE_WEIGHTS = {
+    "place": [1.0, 0.6, 0.3, 0.0],   # points for finishing 1st..4th
+    "laps": 0.5,                     # per lap covered
+    "damage": 2.0,                   # per unit of damage (1 = wrecked)
+    "fault": 0.25,                   # per collision it caused
+    "walls": 0.03,                   # per barrier hit
+    "bonus_overtake": 0.06,          # optional, fading: per pass made
+    "bonus_passed": 0.06,            # optional, fading: per time overtaken
+    "bonus_draft": 0.3,              # optional, fading: per share of time in a tow
+}
 
 
-def race_score(result: dict, bonus: float) -> np.ndarray:
+def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.ndarray:
     """Score of each driver in one race (higher is better).
 
     Results: finishing place, distance covered, damage, collisions caused.
     `bonus` (0..1) scales the optional shaping terms.
     """
+    w = weights or RACE_WEIGHTS
     r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
-    score = (PLACE_POINTS[r["place"].astype(int) - 1] + 0.5 * r["laps"] - 0.8 * r["damage"]
-             - 0.08 * r["fault"] - 0.02 * r["walls"])
+    score = (np.asarray(w["place"])[r["place"].astype(int) - 1] + w["laps"] * r["laps"]
+             - w["damage"] * r["damage"] - w["fault"] * r["fault"] - w["walls"] * r["walls"])
     if bonus:
-        score += bonus * (0.06 * r["overtakes"] - 0.06 * r["passed"] + 0.3 * r["draft"])
+        score += bonus * (w["bonus_overtake"] * r["overtakes"] - w["bonus_passed"] * r["passed"]
+                          + w["bonus_draft"] * r["draft"])
     return score
 
 
@@ -314,7 +329,8 @@ def _job(args):
 
 
 def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=None,
-                     bonus: float = 0.0, pool=None, chunks: int = 1) -> tuple[np.ndarray, dict]:
+                     bonus: float = 0.0, pool=None, chunks: int = 1,
+                     weights: dict | None = None) -> tuple[np.ndarray, dict]:
     """Fitness for every driver (higher is better) and per-driver averages.
 
     No scenarios: driving school (solo only).  With scenarios: racing school,
@@ -346,7 +362,7 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
     totals: dict = {}
     for _ in scenarios:
         part = merged(k)
-        race += race_score(part, bonus)
+        race += race_score(part, bonus, weights)
         for key in ("place", "damage", "fault", "overtakes", "passed", "draft"):
             totals[key] = totals.get(key, 0.0) + np.asarray(part[key], dtype=float)
         k += len(pieces)
@@ -514,7 +530,8 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
             pool = {"recent": recent, "hall": hall}.get(kind)
             rivals.append(int(rng.choice(pool)) if pool else "scripted")
         scenarios.append({"track": tracks[k % len(tracks)], "slot": int(slots[k % 4]), "rivals": rivals,
-                          "seconds": RACE_SECONDS.get(tracks[k % len(tracks)], DEFAULT_SECONDS)})
+                          "seconds": config.get("race_seconds", RACE_SECONDS).get(
+                              tracks[k % len(tracks)], DEFAULT_SECONDS)})
         if k % 4 == 3:
             slots = list(rng.permutation(4))
     return scenarios
@@ -544,6 +561,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "tracks": tracks or Track.available(), "phase2_from": phase2_from,
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
                   "races_per_track": races_per_track, "race_bonuses": race_bonuses,
+                  "race_weights": dict(RACE_WEIGHTS), "race_seconds": dict(RACE_SECONDS),
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
     arch, size, tracks, seed = config["arch"], config["population"], config["tracks"], config["seed"]
@@ -583,7 +601,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 if config["race_bonuses"]:
                     bonus = max(0.0, 1.0 - (gen - start) / BONUS_FADE)
             fitness, averages = score_population(pop, arch, tracks, resolved, bonus, pool,
-                                                 chunks=max(1, workers))
+                                                 chunks=max(1, workers),
+                                                 weights=config.get("race_weights"))
             order = np.argsort(-fitness, kind="stable")
             fitness = fitness[order]
             np.savez_compressed(gen_path(run_dir, gen), pop=pop[order].astype(np.float32), fitness=fitness)
