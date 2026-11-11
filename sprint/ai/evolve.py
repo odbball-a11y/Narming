@@ -48,6 +48,11 @@ RACE_SECONDS = {"speedway": 30.0, "technical": 46.0}
 LAP_SECONDS = {"speedway": 14.0, "technical": 23.0}
 DEFAULT_SECONDS = 40.0
 
+# Driving-school score: laps covered minus this per unit of damage picked up.
+# At 0.25 drivers learned to bounce off the barriers on Technical rather
+# than brake (about 50% damage in a clean-air time trial).
+SOLO_DAMAGE_WEIGHT = 1.0
+
 # Starting damage used in driving tests, rotating by generation.
 SOLO_DAMAGE = (0.0, 0.25, 0.5)
 
@@ -172,7 +177,7 @@ def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float |
     while not run.done:
         run.step()
     cars = run.world.cars
-    return {"laps": run.laps(), "damage": [car.damage for car in cars],
+    return {"laps": run.laps(), "damage": [car.damage - damage for car in cars],
             "best_lap": [car.best_lap for car in cars]}
 
 
@@ -374,7 +379,7 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
     k = 0
     for _ in tracks:
         part = merged(k)
-        solo += np.array(part["laps"]) - 0.25 * np.array(part["damage"])
+        solo += np.array(part["laps"]) - SOLO_DAMAGE_WEIGHT * np.array(part["damage"])
         k += len(pieces)
     solo /= len(tracks)
     if not scenarios:

@@ -168,7 +168,8 @@ for "learn to drive first, then learn to race").
   `DECISION_TICKS` = 4 ticks, as in training; memory reset in `reset`).
 - `evolve.py`:
   - Phase 1 (`mode: "solo"`): `PackRun`/`test_solo`, whole population as
-    ghosts; ends when the champion's exam shows >= 1.9 laps of every track
+    ghosts; score laps - `SOLO_DAMAGE_WEIGHT` x damage picked up; grid box and
+    starting damage rotate by generation (`solo_setup`); ends when the champion's exam shows >= 1.9 laps of every track
     with <= 5% damage (`config.phase2_start` is then written).
   - Phase 2 (`mode: "race"`): `make_scenarios` gives `races_per_track` races
     per track per generation, the same for every driver, grid slots covering

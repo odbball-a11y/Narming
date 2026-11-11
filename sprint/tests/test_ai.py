@@ -138,6 +138,8 @@ def test_driving_tests_rotate_grid_box_and_starting_damage():
     pop = random_weights(np.random.default_rng(6), 3, ARCH)
     run = evolve.PackRun(pop, ARCH, "speedway", seconds=1.0, slot=2, damage=0.5)
     assert all(car.damage == 0.5 for car in run.world.cars)
+    result = evolve.test_solo(pop, ARCH, "speedway", seconds=1.0, slot=2, damage=0.5)
+    assert all(d >= 0.0 for d in result["damage"]) and min(result["damage"]) < 0.5   # only new damage counts
     assert (run.world.cars[0].x, run.world.cars[0].y) == run.track.grid[2][:2]
 
 
