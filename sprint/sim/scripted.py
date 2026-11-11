@@ -37,6 +37,33 @@ class ScriptedDriver(Driver):
         # --- steer toward a look-ahead point on the racing line ------------
         look = tuning.SCRIPT_LOOKAHEAD_BASE + tuning.SCRIPT_LOOKAHEAD_TIME * speed
         tx, ty = track.racing_line_point(car.s + look)
+
+        # --- traffic: go round a car just ahead, lift if about to hit it ----
+        lift = False
+        if len(world.cars) > 1 and not world.ghost:
+            L = track.length
+            reach = tuning.SCRIPT_TRAFFIC_RANGE
+            nearest = reach
+            other = None
+            for j, o in enumerate(world.cars):
+                if j == car_index or o.retired:
+                    continue
+                gap = (o.s - car.s) % L
+                if 0.0 < gap < nearest:
+                    nearest, other = gap, o
+            if other is not None:
+                side = car.lateral - other.lateral
+                if abs(side) < 3.0:
+                    # Pass on the side we are already on (or the roomier one).
+                    way = 1.0 if (side > 0.0 or (side == 0.0 and other.lateral < 0.0)) else -1.0
+                    idx = track.index_at(car.s + look)
+                    room = track._hw[idx] - 1.6
+                    want = max(-room, min(room, other.lateral + way * tuning.SCRIPT_PASS_OFFSET))
+                    weight = 1.0 - nearest / reach
+                    shift = (want - track.racing_offset[idx]) * weight
+                    tx += -track._ty[idx] * shift
+                    ty += track._tx[idx] * shift
+                    lift = nearest < 5.5 and abs(side) < 2.4 and speed > other.speed
         angle = wrap_angle(math.atan2(ty - car.y, tx - car.x) - car.heading)
         steering = max(-1.0, min(1.0, tuning.SCRIPT_STEER_GAIN * angle))
 
@@ -71,6 +98,8 @@ class ScriptedDriver(Driver):
                     target = allowed
             d += 2.0
 
+        if lift:
+            return Controls(steering, 0.0, 0.25)
         if speed > target * 1.03:
             return Controls(steering, 0.0, min(1.0, (speed - target) / 4.0 + 0.3))
         if speed < target:

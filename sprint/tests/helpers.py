@@ -30,6 +30,7 @@ def put_on_track(world, car, s, lateral=0.0, heading_offset=0.0, speed=0.0):
     world.place_car(car, float(x), float(y), heading)
     car.vx = math.cos(heading) * speed
     car.vy = math.sin(heading) * speed
+    car.refresh_speed()
     return car
 
 

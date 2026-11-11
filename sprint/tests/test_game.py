@@ -8,10 +8,11 @@ from pathlib import Path
 import pygame
 import pytest
 
+from ai import evolve
 from game import screens
 from game.app import App
 from game.audio import Audio
-from game.screens import ControlsScreen, MainMenu, RaceScreen, ReplayScreen, SetupScreen
+from game.screens import ControlsScreen, LabScreen, MainMenu, RaceScreen, ReplayScreen, SetupScreen
 from sim import tuning
 from sim.race import COUNTDOWN, FINISHED, RACING
 
@@ -24,6 +25,7 @@ def app(tmp_path, monkeypatch):
     pygame.font.init()
     screen = pygame.display.set_mode((640, 360))
     monkeypatch.setattr(screens, "REPLAY_DIR", tmp_path / "replays")
+    monkeypatch.setattr(evolve, "RUNS_DIR", tmp_path / "training")
     return App(screen, Audio())
 
 
@@ -42,9 +44,12 @@ def run_seconds(app, seconds, frame=1 / 60):
 def test_main_menu_navigation(app):
     assert isinstance(app.current, MainMenu)
     press(app, pygame.K_DOWN, pygame.K_RETURN)
-    assert isinstance(app.current, ControlsScreen)
+    assert isinstance(app.current, LabScreen)
     press(app, pygame.K_ESCAPE)
     press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)
+    assert isinstance(app.current, ControlsScreen)
+    press(app, pygame.K_ESCAPE)
+    press(app, pygame.K_UP, pygame.K_UP, pygame.K_RETURN)          # wraps to REPLAYS
     assert isinstance(app.current, ReplayScreen) and app.current.files == []
     press(app, pygame.K_ESCAPE)
     press(app, pygame.K_UP, pygame.K_RETURN)             # wraps to QUIT
@@ -115,7 +120,7 @@ def test_full_race_pause_results_and_replay(app):
 
     press(app, pygame.K_DOWN, pygame.K_RETURN)           # BACK TO MENU
     assert isinstance(app.current, MainMenu)
-    press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)      # REPLAYS lists the file
+    press(app, pygame.K_UP, pygame.K_UP, pygame.K_RETURN)          # REPLAYS lists the file
     assert len(app.current.files) == 1
     press(app, pygame.K_RETURN)
     assert isinstance(app.current, RaceScreen) and app.current.is_replay

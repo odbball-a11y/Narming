@@ -20,9 +20,13 @@ from .track import GRASS, Track
 
 class World:
     def __init__(self, track: Track, num_cars: int = 1, seed: int = 0,
-                 slots: Sequence[int] | None = None, laps: int | None = None):
+                 slots: Sequence[int] | None = None, laps: int | None = None,
+                 ghost: bool = False):
         """`slots` says which grid slot / parameter set each car uses
-        (default 0..num_cars-1).  `laps` is the race distance."""
+        (default 0..num_cars-1).  `laps` is the race distance.  With
+        `ghost` the cars pass through each other and give no tow: used to
+        test a whole population of AI drivers on the track at once."""
+        self.ghost = ghost
         self.track = track
         self.seed = seed
         self.slots = list(slots) if slots is not None else list(range(num_cars))
@@ -72,8 +76,11 @@ class World:
           ("finish", car_index, race_time)
         """
         events: list[tuple] = []
-        track = self.track
+        if not self.ghost and len(self.cars) > 1:
+            self._update_draft()
         for i, car in enumerate(self.cars):
+            if car.retired:
+                continue
             c = controls[i]
             steering = c[0]
             throttle = c[1]
@@ -85,12 +92,52 @@ class World:
             self._relocate(car, car.idx)
             self._collide_wall(i, car, events)
 
-        self._collide_cars(events)
+        if not self.ghost:
+            self._collide_cars(events)
 
         self.tick += 1
         for i, car in enumerate(self.cars):
-            self._update_checkpoints(i, car, events)
+            if not car.retired:
+                self._update_checkpoints(i, car, events)
         return events
+
+    # ------------------------------------------------------------ drafting
+
+    def _update_draft(self) -> None:
+        """Set each car's tow strength from the cars ahead of it.
+
+        The tow is a narrow wedge behind a fast car, pointing back along its
+        direction of travel: strongest on its tail and on its line, fading to
+        nothing at DRAFT_LENGTH and at the wedge's edge.
+        """
+        cars = self.cars
+        length = tuning.DRAFT_LENGTH
+        min_speed = tuning.DRAFT_MIN_SPEED
+        for car in cars:
+            car.draft = 0.0
+            car.draft_source = -1
+        for j, lead in enumerate(cars):
+            if lead.retired or lead.speed < min_speed:
+                continue
+            dx, dy = lead.vx / lead.speed, lead.vy / lead.speed
+            power = min(1.0, (lead.speed - min_speed) / min_speed)
+            for i, car in enumerate(cars):
+                if i == j or car.retired:
+                    continue
+                rx, ry = car.x - lead.x, car.y - lead.y
+                behind = -(rx * dx + ry * dy)
+                if behind <= 0.0 or behind >= length:
+                    continue
+                if car.vx * dx + car.vy * dy <= 0.0:
+                    continue  # not travelling the same way
+                half = tuning.DRAFT_HALF_WIDTH + tuning.DRAFT_SPREAD * behind
+                side = abs(rx * dy - ry * dx)
+                if side >= half:
+                    continue
+                strength = power * (1.0 - behind / length) * (1.0 - side / half)
+                if strength > car.draft:
+                    car.draft = strength
+                    car.draft_source = j
 
     # --------------------------------------------------------- collisions
 
@@ -123,6 +170,7 @@ class World:
             car.vx = nx * bounce + tx * vt
             car.vy = ny * bounce + ty * vt
             car.refresh_speed()
+            car.add_damage(tuning.WALL_DAMAGE * (-vn - tuning.DAMAGE_MIN_IMPACT))
             if -vn >= tuning.MIN_IMPACT_SPEED:
                 events.append(("wall", i, -vn))
         self._relocate(car, idx)
@@ -132,8 +180,12 @@ class World:
         count = len(cars)
         for a in range(count):
             ca = cars[a]
+            if ca.retired:
+                continue
             for b in range(a + 1, count):
                 cb = cars[b]
+                if cb.retired:
+                    continue
                 dx = cb.x - ca.x
                 dy = cb.y - ca.y
                 reach = ca.params.radius + cb.params.radius
@@ -163,6 +215,9 @@ class World:
                     cb.vy += j * ma * ny
                     ca.refresh_speed()
                     cb.refresh_speed()
+                    hurt = tuning.CAR_DAMAGE * (closing - tuning.DAMAGE_MIN_IMPACT)
+                    ca.add_damage(hurt)
+                    cb.add_damage(hurt)
                     if closing >= tuning.MIN_IMPACT_SPEED:
                         events.append(("car", a, b, closing))
                 self._relocate(ca, ca.idx)

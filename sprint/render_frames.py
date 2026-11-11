@@ -19,7 +19,9 @@ import pygame  # noqa: E402
 
 from game.app import App  # noqa: E402
 from game.audio import Audio  # noqa: E402
-from game.screens import ControlsScreen, MainMenu, RaceScreen, SetupScreen  # noqa: E402
+from ai import roster  # noqa: E402
+from game.screens import (ControlsScreen, LabScreen, MainMenu, PackScreen, RaceScreen,  # noqa: E402
+                          SetupScreen)
 from sim import tuning  # noqa: E402
 from sim.race import Race  # noqa: E402
 from sim.replay import Recording  # noqa: E402
@@ -83,6 +85,25 @@ def main() -> int:
     while not app.current.over:
         app.current.tick()
     shot(f"8_{args.track}_replay_results")
+
+    # AI lab: charts, a generation as a ghost pack, and a champions race.
+    app.show(LabScreen(app))
+    shot("9_lab")
+    run = roster.latest_run()
+    if run:
+        pack = PackScreen(app, run)
+        app.show(pack)
+        for gen in roster.spread(pack.gens, 3):
+            pack.load(gen)
+            for _ in range(int(6.0 * tuning.TICK_RATE)):
+                pack.pack.step()
+            shot(f"10_{args.track}_pack_gen{gen:04d}")
+        lab = LabScreen(app)
+        lab.champions_race(with_human=False)
+        view = app.current
+        while view.race.world.time < 9.0:
+            view.tick()
+        shot(f"11_{args.track}_champions")
     pygame.quit()
     return 0
 

@@ -156,6 +156,50 @@ MIN_IMPACT_SPEED = 2.0
 
 
 # --------------------------------------------------------------------------
+# Damage (permanent for the race; affects speed only, never steering)
+# --------------------------------------------------------------------------
+
+# Impacts gentler than this (closing speed, units/s) do no damage.
+# Higher: only real crashes hurt.  Lower: every little tap counts.
+DAMAGE_MIN_IMPACT = 3.0
+
+# Damage added per unit of impact speed above the minimum.  Damage runs from
+# 0 (new) to 1 (wrecked).  With 0.012 a flat-out head-on barrier hit (about
+# 30 units/s) costs roughly a third of the car.
+WALL_DAMAGE = 0.012
+
+# Same for car-to-car hits; both cars take it.
+CAR_DAMAGE = 0.008
+
+# What a fully wrecked car loses.  0.30 means top speed falls to 70%.
+# Higher: crashes decide races.  Lower: damage is cosmetic.
+DAMAGE_TOP_SPEED_LOSS = 0.30
+DAMAGE_ACCEL_LOSS = 0.35
+
+
+# --------------------------------------------------------------------------
+# Drafting (slipstream)
+# --------------------------------------------------------------------------
+
+# How far behind another car the tow reaches (units; a car is about 4 long).
+# Longer: easier to pick up a tow.
+DRAFT_LENGTH = 16.0
+
+# Half-width of the tow right behind the lead car, and how much wider it gets
+# per unit of distance behind.  Wider: less precision needed to stay in it.
+DRAFT_HALF_WIDTH = 1.4
+DRAFT_SPREAD = 0.10
+
+# The lead car must be going at least this fast to punch a hole in the air.
+DRAFT_MIN_SPEED = 12.0
+
+# Extra top speed and acceleration at full tow (right on the leader's tail).
+# Higher: slipstream passes are easy, packs form.  0 switches drafting off.
+DRAFT_TOP_SPEED_GAIN = 0.10
+DRAFT_ACCEL_GAIN = 0.30
+
+
+# --------------------------------------------------------------------------
 # Human keyboard input (used by game/, kept here so all tuning is in one file)
 # --------------------------------------------------------------------------
 
@@ -203,6 +247,12 @@ SCRIPT_SLOT_HANDICAP = 0.04
 # If a scripted car has been almost stationary for this long (seconds) it
 # assumes it is stuck on a barrier and reverses out for SCRIPT_REVERSE_TIME.
 SCRIPT_STUCK_TIME = 1.0
+
+# Traffic: when another car is this close ahead (units along the track) the
+# scripted driver moves off its line to go round it, by up to
+# SCRIPT_PASS_OFFSET units sideways, and lifts if it is about to hit it.
+SCRIPT_TRAFFIC_RANGE = 14.0
+SCRIPT_PASS_OFFSET = 3.0
 SCRIPT_REVERSE_TIME = 0.9
 
 
@@ -225,5 +275,7 @@ def physics_fingerprint() -> str:
     with a different fingerprint may not play back identically."""
     import hashlib
     parts = (TICK_RATE, CAR_PARAMS, GRASS_GRIP, GRASS_DRAG, WALL_RESTITUTION,
-             WALL_FRICTION, CAR_RESTITUTION)
+             WALL_FRICTION, CAR_RESTITUTION, DAMAGE_MIN_IMPACT, WALL_DAMAGE, CAR_DAMAGE,
+             DAMAGE_TOP_SPEED_LOSS, DAMAGE_ACCEL_LOSS, DRAFT_LENGTH, DRAFT_HALF_WIDTH,
+             DRAFT_SPREAD, DRAFT_MIN_SPEED, DRAFT_TOP_SPEED_GAIN, DRAFT_ACCEL_GAIN)
     return hashlib.sha256(repr(parts).encode()).hexdigest()[:16]

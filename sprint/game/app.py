@@ -32,6 +32,7 @@ class App:
             "seed": 0,
             "drivers": ["human1", "scripted", "scripted", "scripted"],
         }
+        self.ai_run = None          # training run shown in the AI lab (None = latest)
         self.current = MainMenu(self)
 
     # ----------------------------------------------------------- services

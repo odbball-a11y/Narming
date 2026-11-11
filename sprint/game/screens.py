@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pygame
 
+from ai import evolve, roster
 from sim import race as race_module
 from sim import tuning
 from sim.driver import driver_types
@@ -68,7 +69,7 @@ def draw_list(ui, screen, items, selected: int, x: float, y: float, step: float 
 # ------------------------------------------------------------------ menus
 
 class MainMenu(Screen):
-    ITEMS = ["RACE", "CONTROLS", "REPLAYS", "QUIT"]
+    ITEMS = ["RACE", "AI LAB", "CONTROLS", "REPLAYS", "QUIT"]
 
     def __init__(self, app):
         super().__init__(app)
@@ -88,6 +89,8 @@ class MainMenu(Screen):
             choice = self.ITEMS[self.selected]
             if choice == "RACE":
                 self.app.show(SetupScreen(self.app))
+            elif choice == "AI LAB":
+                self.app.show(LabScreen(self.app))
             elif choice == "CONTROLS":
                 self.app.show(ControlsScreen(self.app))
             elif choice == "REPLAYS":
@@ -101,7 +104,7 @@ class MainMenu(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         draw_title(ui, screen)
-        draw_list(ui, screen, self.ITEMS, self.selected, 66, 38, 7.5)
+        draw_list(ui, screen, self.ITEMS, self.selected, 66, 34, 7.5)
         ui.text(screen, "small", "ARROWS move    ENTER select    ESC back    F11 fullscreen",
                 C_HUD_DIM, WORLD_W / 2, 84, "center")
 
@@ -114,6 +117,9 @@ class SetupScreen(Screen):
     def __init__(self, app):
         super().__init__(app)
         self.tracks = Track.available()
+        roster.register_champions(app.ai_run)      # trained drivers join the list
+        known = {k for k, _ in driver_types()}
+        app.setup["drivers"] = [k if k in known else None for k in app.setup["drivers"]]
         self.row = 0
         self.thumb_key = None
         self.thumb = None
@@ -331,10 +337,11 @@ class RaceScreen(Screen):
 
     PAUSE_ITEMS = ["RESUME", "RESTART", "QUIT TO MENU"]
 
-    def __init__(self, app, race: Race, recording: Recording | None = None):
+    def __init__(self, app, race: Race, recording: Recording | None = None, back=None):
         super().__init__(app)
         self.race = race
         self.recording = recording
+        self.back = back or MainMenu          # screen class to return to
         self.renderer = app.renderer_for(race.track)
         self.renderer.clear_skids()
         self.accumulator = 0.0
@@ -373,7 +380,7 @@ class RaceScreen(Screen):
 
     def leave(self) -> None:
         self.app.audio.silence()
-        self.app.show(MainMenu(self.app))
+        self.app.show(self.back(self.app))
 
     def focus_car(self) -> int:
         for i, key in enumerate(self.race.driver_keys):
@@ -440,7 +447,8 @@ class RaceScreen(Screen):
         elif item == "WATCH REPLAY":
             recording = Recording.from_race(self.race)
             self.app.audio.silence()
-            self.app.show(RaceScreen(self.app, recording.make_race(), recording=recording))
+            self.app.show(RaceScreen(self.app, recording.make_race(), recording=recording,
+                                     back=self.back))
         elif item == "SAVE REPLAY":
             self.save_replay()
         else:
@@ -451,7 +459,7 @@ class RaceScreen(Screen):
     def tick(self) -> None:
         events = self.race.step()
         if self.race.phase != race_module.COUNTDOWN:
-            self.renderer.add_skid_marks(self.race.world)
+            self.renderer.on_tick(self.race.world)
         self.app.audio.handle_events(events)
 
     def update(self, seconds: float) -> None:
@@ -498,17 +506,20 @@ class RaceScreen(Screen):
         title = "REPLAY FINISHED" if self.is_replay else "RACE RESULTS"
         ui.text(screen, "big", title, C_HUD_ACCENT, 80, 18.5, "center")
         y = 24.5
-        for x, head in ((28, "POS"), (42, "CAR"), (62, "DRIVER"), (96, "RACE TIME"), (118, "BEST LAP")):
+        for x, head in ((26, "POS"), (37, "CAR"), (55, "DRIVER"), (88, "RACE TIME"), (108, "BEST LAP"),
+                        (126, "DAMAGE")):
             ui.text(screen, "small", head, C_HUD_DIM, x, y)
         y += 3.6
         for row in self.race.results():
             colour = CAR_COLOURS[row["slot"] % 4]
-            ui.text(screen, "mid", PLACES[row["place"] - 1], colour, 28, y)
-            ui.text(screen, "mid", CAR_NAMES[row["slot"] % 4], colour, 42, y)
-            ui.text(screen, "mid", row["driver"].upper()[:18], C_HUD_TEXT, 62, y)
+            ui.text(screen, "mid", PLACES[row["place"] - 1], colour, 26, y)
+            ui.text(screen, "mid", CAR_NAMES[row["slot"] % 4], colour, 37, y)
+            ui.text(screen, "mid", row["driver"].upper()[:16], C_HUD_TEXT, 55, y)
             total = format_time(row["time"]) if row["finished"] else f"DNF ({row['laps']} laps)"
-            ui.text(screen, "mid", total, C_HUD_TEXT, 96, y)
-            ui.text(screen, "mid", format_time(row["best_lap"]), C_HUD_ACCENT, 118, y)
+            ui.text(screen, "mid", total, C_HUD_TEXT, 88, y)
+            ui.text(screen, "mid", format_time(row["best_lap"]), C_HUD_ACCENT, 108, y)
+            damage = self.race.world.cars[row["car"]].damage
+            ui.text(screen, "mid", f"{damage * 100:.0f}%", C_PINK if damage > 0.5 else C_HUD_TEXT, 126, y)
             y += 5.2
         if self.is_replay:
             same = self.race.final_hash == self.recording.final_hash
@@ -521,3 +532,256 @@ class RaceScreen(Screen):
         elif self.message:
             ui.text(screen, "small", self.message, C_CYAN, 80, 51.5, "center")
         draw_list(ui, screen, self.result_items(), self.menu_index, 62, 56, 6.2, "mid")
+
+
+# ----------------------------------------------------------------- AI lab
+
+_reference_laps: dict = {}
+
+
+def scripted_reference(track_name: str):
+    """The scripted driver's best lap on a track, for comparison on charts."""
+    if track_name not in _reference_laps:
+        race = Race(track_name, [(0, "scripted")], laps=2).run(max_seconds=200)
+        _reference_laps[track_name] = race.world.cars[0].best_lap
+    return _reference_laps[track_name]
+
+
+class LabScreen(Screen):
+    """Charts of a training run, refreshed while the trainer is running, and
+    ways to watch the results."""
+
+    ITEMS = ["WATCH A GENERATION", "RACE THE CHAMPIONS", "RACE AGAINST THEM", "BACK"]
+    REFRESH = 1.5
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.selected = 0
+        self.timer = 0.0
+        self.message = ""
+        self.reload()
+
+    def reload(self) -> None:
+        self.runs = evolve.list_runs()
+        if self.app.ai_run not in self.runs:
+            self.app.ai_run = roster.latest_run()
+        self.history = evolve.load_history(evolve.RUNS_DIR / self.app.ai_run) if self.app.ai_run else []
+
+    def update(self, seconds: float) -> None:
+        self.timer += seconds
+        if self.timer >= self.REFRESH:
+            self.timer = 0.0
+            self.reload()
+
+    def generations(self) -> list[int]:
+        return [h["gen"] for h in self.history]
+
+    def champions_race(self, with_human: bool) -> None:
+        gens = self.generations()
+        if not gens:
+            self.message = "Nothing trained yet."
+            return
+        run = self.app.ai_run
+        picks = roster.spread(gens, 2 if with_human else 3)
+        entries = [(0, "human1")] if with_human else []
+        for gen in picks:
+            entries.append((len(entries), roster.champion(run, gen, f"Gen {gen}")))
+        entries.append((len(entries), "scripted"))
+        setup = self.app.setup
+        race = Race(setup["track"], entries[:4], laps=setup["laps"], seed=setup["seed"])
+        self.app.show(RaceScreen(self.app, race, back=LabScreen))
+
+    def handle_event(self, event) -> None:
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in BACK:
+            self.app.show(MainMenu(self.app))
+        elif event.key in UP:
+            self.selected = (self.selected - 1) % len(self.ITEMS)
+            self.app.audio.play("blip")
+        elif event.key in DOWN:
+            self.selected = (self.selected + 1) % len(self.ITEMS)
+            self.app.audio.play("blip")
+        elif event.key in LEFT + RIGHT and len(self.runs) > 1:
+            step = 1 if event.key in RIGHT else -1
+            self.app.ai_run = self.runs[(self.runs.index(self.app.ai_run) + step) % len(self.runs)]
+            self.reload()
+        elif event.key == pygame.K_t:
+            tracks = Track.available()
+            self.app.setup["track"] = tracks[(tracks.index(self.app.setup["track"]) + 1) % len(tracks)]
+        elif event.key in ACCEPT:
+            self.app.audio.play("select")
+            item = self.ITEMS[self.selected]
+            if item == "BACK":
+                self.app.show(MainMenu(self.app))
+            elif not self.history:
+                self.message = "Nothing trained yet."
+            elif item == "WATCH A GENERATION":
+                self.app.show(PackScreen(self.app, self.app.ai_run))
+            else:
+                self.champions_race(with_human=item == "RACE AGAINST THEM")
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        ui.text(screen, "big", "AI LAB", C_HUD_ACCENT, 8, 4, shadow=True)
+        if not self.history:
+            lines = [
+                "No trained drivers yet.",
+                "",
+                "Open a second terminal in the sprint folder, switch on the",
+                "virtual environment, and run:",
+                "",
+                "        py train.py",
+                "",
+                "Leave it running. This screen updates as each generation finishes.",
+            ]
+            for k, line in enumerate(lines):
+                ui.text(screen, "mid", line, C_HUD_ACCENT if "train.py" in line else C_HUD_TEXT, 12, 18 + k * 5)
+            draw_list(ui, screen, ["BACK"], 0, 14, 70, 6, "mid")
+            return
+        last = self.history[-1]
+        testing = "real races" if last["mode"] == "race" else "solo ghost runs"
+        ui.text(screen, "small", f"run '{self.app.ai_run}'    generation {last['gen']}    "
+                f"now testing with {testing}", C_HUD_TEXT, 40, 5.6)
+        gens = self.generations()
+        tracks = list(last["exam"].keys())
+        colours = [C_CYAN, C_PINK, C_HUD_ACCENT, (60, 220, 110)]
+        race_start = next((h["gen"] for h in self.history if h["mode"] == "race"), None)
+        marker = (race_start, "races begin") if race_start else None
+
+        series = []
+        for k, name in enumerate(tracks):
+            series.append((name, colours[k % 4],
+                           [h["exam"][name]["solo_best_lap"] for h in self.history]))
+        ui.chart(screen, 4, 12, 76, 36, "CHAMPION'S BEST LAP, ALONE (s)", gens, series, "{:.1f}", marker)
+        for k, name in enumerate(tracks):
+            ui.text(screen, "small", f"scripted driver on {name}: {scripted_reference(name):.2f}s",
+                    colours[k % 4], 6 + k * 38, 48.6)
+
+        hits = [sum(e["race_hits"] for e in h["exam"].values()) for h in self.history]
+        damage = [100.0 * sum(e["race_damage"] for e in h["exam"].values()) / len(h["exam"])
+                  for h in self.history]
+        ui.chart(screen, 82, 12, 74, 36, "CHAMPION IN A RACE v 3 SCRIPTED", gens,
+                 [("collisions", C_PINK, hits), ("damage %", C_HUD_ACCENT, damage)], "{:.0f}", marker, floor=0.0)
+        ui.chart(screen, 4, 53, 76, 32, "SCORE OF THE GENERATION", gens,
+                 [("best", C_CYAN, [h["best"] for h in self.history]),
+                  ("average", (150, 140, 200), [h["mean"] for h in self.history])], "{:.2f}", marker)
+
+        draw_list(ui, screen, self.ITEMS, self.selected, 92, 55, 6.0, "mid")
+        ui.text(screen, "small", f"track for races: {self.app.setup['track'].upper()}  (T to change)",
+                C_HUD_DIM, 88, 80)
+        if self.message:
+            ui.text(screen, "small", self.message, C_PINK, 88, 83.5)
+        elif len(self.runs) > 1:
+            ui.text(screen, "small", "LEFT/RIGHT switch training run", C_HUD_DIM, 88, 83.5)
+
+
+class PackScreen(Screen):
+    """Watch a whole generation drive at once, as ghosts, exactly as it was
+    tested, and step through the generations to see them improve."""
+
+    def __init__(self, app, run: str, gen: int | None = None):
+        super().__init__(app)
+        self.run = run
+        self.run_dir = evolve.RUNS_DIR / run
+        self.track_name = app.setup["track"]
+        self.auto = True
+        self.accumulator = 0.0
+        self.alpha = 1.0
+        self.wait = 0.0
+        self.scan = 0.0
+        self.gens = evolve.list_generations(self.run_dir)
+        self.load(gen if gen is not None else self.gens[0])
+
+    def load(self, gen: int) -> None:
+        self.gens = evolve.list_generations(self.run_dir)
+        gen = min(self.gens, key=lambda g: abs(g - gen))
+        self.gen = gen
+        data = evolve.load_generation(self.run_dir, gen)
+        self.pack = evolve.PackRun(data["pop"], self.track_name)
+        self.renderer = self.app.renderer_for(self.pack.track)
+        self.accumulator = 0.0
+        self.wait = 0.0
+
+    def step_generation(self, delta: int) -> None:
+        i = self.gens.index(self.gen) + delta
+        self.load(self.gens[max(0, min(len(self.gens) - 1, i))])
+
+    def handle_event(self, event) -> None:
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in BACK:
+            self.app.show(LabScreen(self.app))
+        elif event.key in RIGHT:
+            self.step_generation(1)
+        elif event.key in LEFT:
+            self.step_generation(-1)
+        elif event.key == pygame.K_PAGEUP:
+            self.step_generation(10)
+        elif event.key == pygame.K_PAGEDOWN:
+            self.step_generation(-10)
+        elif event.key == pygame.K_HOME:
+            self.load(self.gens[0])
+        elif event.key == pygame.K_END:
+            self.load(evolve.list_generations(self.run_dir)[-1])
+        elif event.key == pygame.K_a:
+            self.auto = not self.auto
+        elif event.key == pygame.K_t:
+            tracks = Track.available()
+            self.track_name = tracks[(tracks.index(self.track_name) + 1) % len(tracks)]
+            self.app.setup["track"] = self.track_name
+            self.load(self.gen)
+        elif event.key in ACCEPT:
+            self.load(self.gen)
+
+    def update(self, seconds: float) -> None:
+        if self.pack.done:
+            # Pause on the final positions, then move on.
+            self.alpha = 1.0
+            self.wait += seconds
+            if self.wait > 1.5:
+                self.gens = evolve.list_generations(self.run_dir)
+                later = [g for g in self.gens if g > self.gen]
+                if self.auto and later:
+                    self.load(later[0])
+                elif self.auto:
+                    self.load(self.gen)       # newest one: run it again while we wait
+            return
+        if pygame.key.get_pressed()[pygame.K_f]:
+            seconds *= 4.0
+        self.accumulator += min(seconds, MAX_FRAME_TIME)
+        while self.accumulator >= tuning.DT and not self.pack.done:
+            self.pack.step()
+            self.accumulator -= tuning.DT
+        self.alpha = self.accumulator / tuning.DT
+
+    def on_resize(self) -> None:
+        self.renderer = self.app.renderer_for(self.pack.track)
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        pack = self.pack
+        world = pack.world
+        totals = pack.progress.total
+        leader = max(range(pack.count), key=lambda i: totals[i])
+        screen.fill((0, 0, 0))
+        self.renderer.draw_pack(screen, world, self.alpha, leader)
+        strip = ui.rect(0, 0, WORLD_W, HUD_H)
+        pygame.draw.rect(screen, (12, 8, 28), strip)
+        pygame.draw.line(screen, C_HUD_ACCENT, strip.bottomleft, strip.bottomright, max(1, int(ui.unit * 0.3)))
+        ui.text(screen, "small", "GENERATION", C_HUD_DIM, 3, 1.0)
+        ui.text(screen, "big", f"{self.gen}", C_HUD_ACCENT, 3, 3.6)
+        ui.text(screen, "small", f"of {self.gens[-1]}", C_HUD_DIM, 15, 5.4)
+        ui.text(screen, "small", "STILL DRIVING", C_HUD_DIM, 34, 1.0)
+        ui.text(screen, "big", f"{pack.alive}/{pack.count}", C_CYAN, 34, 3.6)
+        ui.text(screen, "small", "LEADER HAS DONE", C_HUD_DIM, 64, 1.0)
+        ui.text(screen, "big", f"{max(totals[leader], 0.0) / pack.track.length:.2f} laps", C_HUD_ACCENT, 64, 3.6)
+        laps = [car.best_lap for car in world.cars if car.best_lap is not None]
+        ui.text(screen, "small", "BEST LAP SO FAR", C_HUD_DIM, 100, 1.0)
+        ui.text(screen, "big", format_time(min(laps) if laps else None), C_HUD_TEXT, 100, 3.6)
+        ui.text(screen, "small", "TIME", C_HUD_DIM, 136, 1.0)
+        ui.text(screen, "big", f"{world.time:4.1f}s", C_HUD_TEXT, 136, 3.6)
+        mode = "AUTO: next generation follows" if self.auto else "AUTO OFF"
+        ui.text(screen, "small", f"LEFT/RIGHT generation   PGUP/PGDN jump 10   T track   A {mode}   "
+                "hold F fast   ESC back", C_HUD_TEXT, WORLD_W / 2, WORLD_H - 0.8, "midbottom", shadow=True)

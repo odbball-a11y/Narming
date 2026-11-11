@@ -5,6 +5,7 @@ Everything is drawn with pygame primitives; there are no image files.
 from __future__ import annotations
 
 import math
+import random
 
 import numpy as np
 import pygame
@@ -275,6 +276,53 @@ class UI:
         pygame.draw.rect(screen, border, r, max(2, int(self.unit * 0.35)), border_radius=int(self.unit * 1.2))
         return r
 
+    def chart(self, screen, x, y, w, h, title: str, xs: list, series: list,
+              fmt="{:.1f}", marker=None, floor=None) -> None:
+        """Line chart.  `series` is [(label, colour, values)], values aligned
+        with `xs` and possibly None.  `marker` = (x value, label) draws a
+        vertical line.  `floor` forces the bottom of the y axis."""
+        frame = self.panel(screen, x, y, w, h, border=(70, 56, 120))
+        self.text(screen, "small", title, C_HUD_TEXT, x + 2, y + 1.2)
+        values = [v for _, _, vals in series for v in vals if v is not None]
+        if not values or len(xs) < 1:
+            self.text(screen, "small", "no data yet", C_HUD_DIM, x + w / 2, y + h / 2, "center")
+            return
+        lo = min(values) if floor is None else floor
+        hi = max(values)
+        if hi - lo < 1e-9:
+            hi = lo + 1.0
+        pad = (hi - lo) * 0.08
+        lo, hi = (lo - pad if floor is None else lo), hi + pad
+        left, right, top, bottom = x + 11, x + w - 3, y + 6.5, y + h - 5
+        x0, x1 = xs[0], max(xs[-1], xs[0] + 1)
+
+        def pos(xv, yv):
+            return self.px(left + (xv - x0) / (x1 - x0) * (right - left),
+                           bottom - (yv - lo) / (hi - lo) * (bottom - top))
+
+        for frac in (0.0, 0.5, 1.0):
+            yv = lo + (hi - lo) * frac
+            a, b = pos(x0, yv), pos(x1, yv)
+            pygame.draw.line(screen, (56, 44, 100), a, b)
+            self.text(screen, "small", fmt.format(yv), C_HUD_DIM, left - 1, bottom - (bottom - top) * frac,
+                      "midright")
+        self.text(screen, "small", str(x0), C_HUD_DIM, left, bottom + 0.6, "midtop")
+        self.text(screen, "small", f"gen {x1}", C_HUD_DIM, right, bottom + 0.6, "topright")
+        if marker and x0 <= marker[0] <= x1:
+            a, b = pos(marker[0], lo), pos(marker[0], hi)
+            pygame.draw.line(screen, C_HUD_ACCENT, a, b)
+            self.text(screen, "small", marker[1], C_HUD_ACCENT, left + (marker[0] - x0) / (x1 - x0)
+                      * (right - left) + 0.6, top - 0.4)
+        lx = x + w - 2
+        for label, colour, vals in reversed(series):
+            pts = [pos(xv, v) for xv, v in zip(xs, vals) if v is not None]
+            if len(pts) > 1:
+                pygame.draw.lines(screen, colour, False, pts, max(2, int(self.unit * 0.35)))
+            elif pts:
+                pygame.draw.circle(screen, colour, pts[0], max(2, int(self.unit * 0.5)))
+            r = self.text(screen, "small", label, colour, lx, y + 1.2, "topright")
+            lx -= r.width / self.unit + 2.5
+
     def backdrop(self, screen) -> None:
         """Plain menu background: night-sky grid with a sunset stripe band."""
         screen.fill(C_BACKDROP)
@@ -305,9 +353,101 @@ class RaceRenderer:
         self.shadow = pygame.Surface((size, size), pygame.SRCALPHA)
         pygame.draw.ellipse(self.shadow, (0, 0, 0, 70),
                             pygame.Rect(size * 0.08, size * 0.28, size * 0.84, size * 0.44))
+        # Smoke puffs, pre-drawn at a few ages (bigger and fainter as they age).
+        self.puffs = []
+        for k in range(6):
+            radius = max(2, int(cam.scale * (0.5 + 0.28 * k)))
+            puff = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            shade = 70 + 18 * k
+            pygame.draw.circle(puff, (shade, shade, shade + 6, 150 - 22 * k), (radius, radius), radius)
+            self.puffs.append(puff)
+        self.smoke: list[list] = []          # [x, y, vx, vy, age]
+        self.fx_random = random.Random(7)    # visual only, never touches the sim
+        # Ghost-pack sprites: translucent runner, bright leader, faded retiree.
+        self.ghost = make_car_sprite((120, 225, 255), cam.scale)
+        self.ghost.set_alpha(120)
+        self.ghost_leader = make_car_sprite((255, 214, 10), cam.scale)
+        self.ghost_out = make_car_sprite((150, 60, 80), cam.scale)
+        self.ghost_out.set_alpha(70)
 
     def clear_skids(self) -> None:
         self.skid_layer.fill((0, 0, 0, 0))
+        self.smoke = []
+
+    def on_tick(self, world) -> None:
+        """Visual effects that build up over time; call once per sim tick."""
+        self.add_skid_marks(world)
+        rnd = self.fx_random
+        for car in world.cars:
+            # Damaged cars smoke: the worse the damage, the thicker.
+            if car.damage > 0.12 and rnd.random() < car.damage * 0.3:
+                c, s = math.cos(car.heading), math.sin(car.heading)
+                self.smoke.append([car.x - c * 1.6, car.y - s * 1.6,
+                                   car.vx * 0.25 + rnd.uniform(-1.5, 1.5),
+                                   car.vy * 0.25 + rnd.uniform(-1.5, 1.5) - 1.0, 0.0])
+        dt = tuning.DT
+        for p in self.smoke:
+            p[0] += p[2] * dt
+            p[1] += p[3] * dt
+            p[4] += dt
+        if self.smoke and self.smoke[0][4] > 0.9:
+            self.smoke = [p for p in self.smoke if p[4] <= 0.9]
+
+    def draw_effects(self, screen, world, poses) -> None:
+        """Slipstream streaks and smoke, drawn over the cars."""
+        cam = self.camera
+        # A tow: dashes streaming from the lead car's tail to the car behind.
+        for i, car in enumerate(world.cars):
+            j = car.draft_source
+            if car.draft <= 0.08 or j < 0 or car.finished:
+                continue
+            lx, ly, lh = poses[j]
+            fx, fy, fh = poses[i]
+            ax, ay = lx - math.cos(lh) * 2.2, ly - math.sin(lh) * 2.2
+            bx, by = fx + math.cos(fh) * 2.0, fy + math.sin(fh) * 2.0
+            dx, dy = bx - ax, by - ay
+            dist = math.hypot(dx, dy)
+            if dist < 0.5:
+                continue
+            nx, ny = -dy / dist, dx / dist
+            phase = (world.tick * 0.035) % 1.0
+            width = max(1, int(cam.scale * (0.18 + 0.25 * car.draft)))
+            for lane in (-0.75, 0.0, 0.75):
+                t = phase * 0.34 - 0.34
+                while t < 1.0:
+                    t0, t1 = max(t, 0.0), min(t + 0.17, 1.0)
+                    if t1 > t0:
+                        spread0 = lane * (0.6 + 0.8 * t0)
+                        spread1 = lane * (0.6 + 0.8 * t1)
+                        p0 = cam.to_screen(ax + dx * t0 + nx * spread0, ay + dy * t0 + ny * spread0)
+                        p1 = cam.to_screen(ax + dx * t1 + nx * spread1, ay + dy * t1 + ny * spread1)
+                        pygame.draw.line(screen, (190, 245, 255) if lane == 0.0 else (110, 215, 255),
+                                         p0, p1, width)
+                    t += 0.34
+        for x, y, _, _, age in self.smoke:
+            puff = self.puffs[min(int(age / 0.9 * len(self.puffs)), len(self.puffs) - 1)]
+            screen.blit(puff, puff.get_rect(center=cam.to_screen(x, y)))
+
+    def draw_pack(self, screen, world, alpha: float, leader: int) -> None:
+        """A whole generation at once: translucent ghosts, the current leader
+        in gold, retired drivers faded where they stopped."""
+        cam = self.camera
+        screen.blit(self.track_surface, (0, 0))
+        cars = world.cars
+        order = sorted(range(len(cars)), key=lambda i: (i == leader, not cars[i].retired))
+        for i in order:
+            car = cars[i]
+            if car.retired:
+                x, y, heading, sprite = car.x, car.y, car.heading, self.ghost_out
+            else:
+                x = car.prev_x + (car.x - car.prev_x) * alpha
+                y = car.prev_y + (car.y - car.prev_y) * alpha
+                heading = lerp_angle(car.prev_heading, car.heading, alpha)
+                sprite = self.ghost_leader if i == leader else self.ghost
+            image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom)
+            if sprite is not self.ghost_leader:
+                image.set_alpha(sprite.get_alpha())
+            screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))
 
     # ------------------------------------------------------------- drawing
 
@@ -345,6 +485,7 @@ class RaceRenderer:
             sprite = self.sprites[world.slots[i] % len(self.sprites)]
             image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom)
             screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))
+        self.draw_effects(screen, world, poses)
 
     def draw_hud(self, screen: pygame.Surface, race, banner: str = "") -> None:
         """Top strip: one panel per car (in its slot's place) with position,
@@ -364,7 +505,10 @@ class RaceRenderer:
             place = order.index(i)
             ui.text(screen, "big", PLACES[place], colour, x0 + 2.4, 0.9)
             label = race.drivers[i].label.upper()
-            ui.text(screen, "small", label[:14], C_HUD_DIM, x0 + 2.4, 5.4)
+            if car.draft > 0.08 and not car.finished:
+                ui.text(screen, "small", "DRAFT >>>"[:6 + (world.tick // 12) % 4], C_CYAN, x0 + 2.4, 5.4)
+            else:
+                ui.text(screen, "small", label[:14], C_HUD_DIM, x0 + 2.4, 5.4)
             ui.text(screen, "small", f"SPEED {int(round(car.speed * 6)):3d}", C_HUD_TEXT, x0 + 2.4, 7.8)
             lap_now = min(car.laps + 1, world.laps)
             ui.text(screen, "small", f"LAP {lap_now}/{world.laps}", C_HUD_ACCENT, x0 + 14.5, 0.9)
@@ -373,7 +517,15 @@ class RaceRenderer:
             else:
                 ui.text(screen, "mid", format_time(max(0.0, world.time - car.lap_start_time)),
                         C_HUD_TEXT, x0 + 14.5, 3.1)
-            ui.text(screen, "small", "FINISHED" if car.finished else "", C_CYAN, x0 + 14.5, 7.8)
+            # Damage bar: green to red as the car is wrecked.
+            ui.text(screen, "small", "DMG", C_HUD_DIM, x0 + 14.5, 7.8)
+            bar = ui.rect(x0 + 19.3, 8.0, 6.4, 1.5)
+            pygame.draw.rect(screen, (50, 44, 80), bar)
+            if car.damage > 0.0:
+                d = car.damage
+                fill = pygame.Rect(bar.left, bar.top, max(1, int(bar.width * d)), bar.height)
+                pygame.draw.rect(screen, (int(90 + 165 * min(1.0, d * 2)), int(220 - 180 * d), 60), fill)
+            pygame.draw.rect(screen, C_HUD_DIM, bar, 1)
             ui.text(screen, "small", "LAST", C_HUD_DIM, x0 + 27.5, 0.9)
             ui.text(screen, "small", format_time(car.last_lap), C_HUD_TEXT, x0 + 27.5, 3.0)
             ui.text(screen, "small", "BEST", C_HUD_DIM, x0 + 27.5, 5.6)

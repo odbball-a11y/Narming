@@ -25,6 +25,7 @@ class Car:
         "next_checkpoint", "crossed_start", "laps", "lap_start_time",
         "last_lap", "best_lap", "lap_times", "checkpoints_passed",
         "finished", "finish_time",
+        "damage", "draft", "draft_source", "retired",
     )
 
     def __init__(self, params: CarParams):
@@ -53,6 +54,14 @@ class Car:
         self.checkpoints_passed = 0
         self.finished = False
         self.finish_time = None
+        self.damage = 0.0          # 0 = new, 1 = wrecked; permanent for the race
+        self.draft = 0.0           # 0..1 strength of the tow this tick
+        self.draft_source = -1     # index of the car giving the tow, or -1
+        self.retired = False       # retired cars are not simulated (AI training)
+
+    def add_damage(self, amount: float) -> None:
+        if amount > 0.0:
+            self.damage = min(1.0, self.damage + amount)
 
     def refresh_speed(self) -> None:
         """Recompute the derived speeds after something changed vx, vy."""
@@ -66,7 +75,8 @@ class Car:
         return (self.x, self.y, self.vx, self.vy, self.heading, self.idx,
                 self.next_checkpoint, self.crossed_start, self.laps,
                 self.lap_start_time, tuple(self.lap_times),
-                self.checkpoints_passed, self.finished, self.finish_time)
+                self.checkpoints_passed, self.finished, self.finish_time,
+                self.damage, self.retired)
 
     def step(self, steering: float, throttle: float, brake: float, on_grass: bool) -> None:
         """Advance one tick.  Inputs must already be clamped."""
@@ -91,9 +101,15 @@ class Car:
         vl = -self.vx * sh + self.vy * ch      # sideways speed (+ = to the right)
 
         # --- engine, brake, reverse ----------------------------------------
+        # Damage saps the engine; a tow from the car ahead helps it.
+        damage, draft = self.damage, self.draft
+        top = (p.top_speed * (1.0 - tuning.DAMAGE_TOP_SPEED_LOSS * damage)
+               * (1.0 + tuning.DRAFT_TOP_SPEED_GAIN * draft))
+        accel = (p.accel * (1.0 - tuning.DAMAGE_ACCEL_LOSS * damage)
+                 * (1.0 + tuning.DRAFT_ACCEL_GAIN * draft))
         if throttle > 0.0:
-            if vf < p.top_speed:
-                vf += throttle * p.accel * (1.0 - max(vf, 0.0) / p.top_speed) ** 0.5 * dt
+            if vf < top:
+                vf += throttle * accel * (1.0 - max(vf, 0.0) / top) ** 0.5 * dt
         if brake > 0.0:
             if vf > 0.3:
                 vf = max(vf - brake * p.brake_decel * dt, 0.0)

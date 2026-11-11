@@ -58,6 +58,12 @@ def register_driver(key: str, label: str, factory: Callable[..., Driver]) -> Non
     _REGISTRY[key] = (label, factory)
 
 
+def unregister_drivers(prefix: str) -> None:
+    """Remove every driver type whose key starts with `prefix`."""
+    for key in [k for k in _REGISTRY if k.startswith(prefix)]:
+        del _REGISTRY[key]
+
+
 def create_driver(key: str, slot: int = 0) -> Driver:
     if key not in _REGISTRY:
         raise KeyError(f"unknown driver type {key!r}; known: {sorted(_REGISTRY)}")

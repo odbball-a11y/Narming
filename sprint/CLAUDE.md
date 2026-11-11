@@ -12,6 +12,7 @@ poker project (`holdem/`, `web/`, root `tests/`); leave it alone.
 ```
 python -m game [--track T] [--no-sound] [--fullscreen]
 python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [--bench STEPS]
+python train.py [--run NAME] [--generations N] [--population N] [--workers N] [--race-from GEN]
 python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest
 ```
@@ -22,18 +23,24 @@ installed and none may be added in Stage 1.
 
 ## Status
 
-Stage 1 is complete: Speedway and Technical tracks, four cars, scripted
-driver, race management, menus, HUD, pause, results, sound, gamepads, replays,
-77 tests. The driving feel has NOT yet been judged by a human; expect tuning
-requests against `sim/tuning.py`. Never run on real Windows, real audio or a
-real gamepad (developed headless with SDL dummy drivers).
+Done: the Stage 1 game (two tracks, four cars, menus, HUD, sound, gamepads,
+replays); damage and drafting; Stage 2 AI by **neuroevolution** (the user
+chose real generations over PPO); AI Lab screen with live charts, ghost-pack
+view of any generation, champion races. 101 tests.
 
-Reference numbers (scripted driver, 3 laps, flying lap): Speedway 13.98 s,
-Technical 22.20 s. If physics tuning changes these move; the tests accept
-11-19 s and 19-31 s.
+The user has driven the game on Windows and is happy with the car feel.
+Damage, drafting, the AI Lab and training have NOT been tried by the user yet.
+PPO is deliberately kept for later as a rival method (see the end).
 
-Verify changes the way Stage 1 was verified: pytest, `headless.py` on both
-tracks, and `render_frames.py` then look at the PNGs.
+Reference numbers: scripted flying lap Speedway 13.98 s, Technical 22.20 s.
+A 110-generation trial (population 80, seed 0) reached champion solo laps of
+about 12.8 s and 22.1 s; in the exam race against three scripted cars it won
+on Speedway with 2 collisions, but on Technical still had about 11 collisions
+and often failed to finish. Solo generations took about 2 s, race generations
+about 8 s, on 4 cores.
+
+Verify changes the way the rest was verified: pytest, `headless.py` on both
+tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
 
 ## Architecture rules
 
@@ -132,28 +139,62 @@ pause and results overlays, replay mode). `game/audio.py` `Audio` degrades to
 no-ops if the mixer cannot open. Slot index fixes colour, grid place, HUD panel
 and parameter set.
 
-## Stage 2 plan
+## Damage and drafting (in `sim/`)
 
-1. `sim/env.py`: a Gymnasium `Env` wrapping `World` (or `Race` without the
-   countdown) for one learning car, other slots filled from the registry.
-   Observation from the track queries above: speed, forward / lateral
-   velocity, lateral offset / half width, heading error, curvature at several
-   distances ahead, ray distances, maybe nearest-car relative position.
-   Action = the three Controls values. Reward = progress along `s` per tick
-   (`World.race_progress`), penalties for grass and wall events. Seed via
-   `World.reset(seed)`. Keep it pygame-free so training runs headless.
-2. Better rule-based driver: fill `racing_line_offsets` in the track files
-   (or compute a minimum-curvature line) and reuse `ScriptedDriver`, which
-   already follows `track.racing_line_point`. It has no overtaking logic:
-   scripted cars queue behind each other and bump.
-3. PPO with Stable-Baselines3; save checkpoints during training.
-4. A `PolicyDriver(Driver)` that loads a checkpoint; register one registry
-   entry per saved model so the existing setup menu can put any saved driver
-   in any slot. A "watch training progress" mode can race successive
-   checkpoints against each other using the same `RaceScreen`.
-5. Speed: one car steps at about 90k ticks/s, four at about 25k (pure
-   Python, scripted drivers included). `Track.raycasts` is vectorised NumPy
-   over all boundary segments (about 2,000 to 4,000); if it dominates the env
-   step, restrict it to segments near the car's index, and consider acting
-   every 4 to 6 ticks (20 to 30 Hz decisions) rather than every tick.
-6. Human-vs-learned replays work already, since a replay only stores controls.
+`car.damage` 0..1: added in `World` on wall and car impacts above
+`DAMAGE_MIN_IMPACT`, permanent until `World.reset`, part of `state()`. It
+scales top speed and acceleration in `Car.step` and nothing else.
+`car.draft` 0..1 and `car.draft_source` are recomputed at the start of every
+tick by `World._update_draft` (a wedge behind any fast car) and also scale top
+speed and acceleration. `World(ghost=True)` turns off car-to-car collisions
+and drafting; `car.retired = True` stops a car being simulated. Both exist for
+AI training. The renderer draws smoke, tow streaks and the HUD damage bar.
+
+## AI drivers (`ai/`)
+
+`ai/` imports `sim/` and NumPy only; `game/` imports `ai/`.
+
+- `brain.py`: `observe(world, i)` gives 18 inputs (speeds, offset, heading
+  error, six curvatures ahead, half-width, damage, draft, five traffic
+  values). `Population` runs many networks in one batched call. The network
+  is 18 -> 16 tanh -> 2 tanh (steering; throttle if positive, brake if
+  negative), 338 weights. `NeuralDriver` is the `Driver`; it decides every
+  `DECISION_TICKS` (4) ticks, the same as in training.
+- `evolve.py`: `PackRun` (whole population as ghosts on one track, also used
+  by the game's live view), `test_solo`, `test_race` (one real four-car race
+  per driver against a scripted car and two earlier champions),
+  `score_population`, `breed` (elites kept, tournament parents, crossover,
+  mixed mutation sizes), `exam` (a fixed report card per generation: solo
+  time trial plus a race against three scripted cars), `train`.
+- Solo tests until the champion covers 1.9 laps of each track with almost no
+  damage, then race mode: fitness = half solo score, half race score. Rivals
+  and grid slot change every `RIVAL_BLOCK` generations.
+- Runs live in `training/<run>/` (git-ignored): `config.json`, `history.json`
+  (rewritten atomically each generation; the game polls it), `gen_NNNN.npz`
+  (whole population, best first, float32). Training is seeded and resumable:
+  stop and continue gives the same run as never stopping (tested).
+- `roster.py` registers champions as `evo:<run>:<gen>` so the setup menu
+  lists them. `game/screens.py` `LabScreen` and `PackScreen` are the UI.
+
+Known weaknesses, in rough order of value:
+1. Traffic skill on Technical is poor after about 100 generations. Ideas:
+   more race generations; several races per driver with different rivals to
+   cut noise; a stuck-recovery reward or a reverse rule (drivers that hit a
+   wall nose-first rarely learn to back out).
+2. No ray-cast inputs (left out for speed; `Track.raycasts` exists).
+3. Training is started from a terminal, not from the game menu.
+4. One network drives both tracks; it has not been tried on unseen tracks.
+
+## Still to do: PPO as a rival method
+
+The user wants PPO later, to race against the evolved drivers.
+
+1. `ai/env.py`: a Gymnasium `Env` around `World`, reusing `brain.observe`
+   for observations and the same two-value action. Reward = progress along
+   `s` per decision, minus damage taken. Keep it pygame-free.
+2. Train with Stable-Baselines3 PPO (needs `gymnasium`, `stable-baselines3`
+   and PyTorch installed; none are installed now). Save checkpoints.
+3. A `PolicyDriver(Driver)` that loads a checkpoint, registered like
+   `roster.register_champions` does, so "Evolved v PPO" is just a race setup.
+4. `exam` already gives a method-independent report card; reuse it so PPO
+   checkpoints appear on the same AI Lab charts.

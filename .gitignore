@@ -6,3 +6,4 @@ table.json
 .pytest_cache/
 shots/
 replays/
+training/
