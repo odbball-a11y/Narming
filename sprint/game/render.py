@@ -485,9 +485,13 @@ class RaceRenderer:
             sx, sy = cam.to_screen(x, y)
             shadow = pygame.transform.rotate(self.shadow, -math.degrees(heading))
             screen.blit(shadow, shadow.get_rect(center=(sx + cam.scale * 0.3, sy + cam.scale * 0.4)))
-        for i, (x, y, heading) in enumerate(poses):
+        # Parked (finished) cars first and faded: they are no longer solid.
+        for i in sorted(range(len(poses)), key=lambda k: not world.cars[k].retired):
+            x, y, heading = poses[i]
             sprite = self.sprites[world.slots[i] % len(self.sprites)]
             image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom)
+            if world.cars[i].retired:
+                image.set_alpha(90)
             screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))
         self.draw_effects(screen, world, poses)
 

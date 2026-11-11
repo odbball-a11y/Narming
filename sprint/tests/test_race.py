@@ -98,7 +98,34 @@ def test_finished_cars_stop_and_slow_cars_get_a_grace_period(monkeypatch):
     assert rows[1]["slot"] == 1 and not rows[1]["finished"] and rows[1]["time"] is None
     winner = race.world.cars[0]
     assert race.world.time == pytest.approx(winner.finish_time + 2.0 + tuning.COOLDOWN, abs=0.05)
-    assert winner.speed < 12.0                      # braking after the flag
+    assert winner.retired and winner.speed == 0.0   # braked to a stop and parked
+
+
+def test_finished_cars_park_and_never_reverse_into_the_race():
+    class Slow(Driver):
+        label = "Slow"
+
+        def __init__(self):
+            self.inner = create_driver("scripted")
+
+        def act(self, world, i):
+            c = self.inner.act(world, i)
+            return Controls(c.steering, min(c.throttle, 0.45), c.brake)
+
+    race = Race("speedway", [(0, "scripted"), (1, Slow())], laps=1)
+    winner = race.world.cars[0]
+    hits_after_flag = 0
+    while race.phase != FINISHED and race.world.tick < 120 * 200:
+        events = race.step()
+        if winner.finished:
+            assert winner.forward_speed > -0.01          # never rolls backwards
+            hits_after_flag += sum(1 for e in events if e[0] == "car")
+    assert race.phase == FINISHED
+    assert winner.retired and winner.speed == 0.0        # parked, and no longer solid
+    assert hits_after_flag == 0
+    assert all(r["finished"] for r in race.results())
+    race.restart()
+    assert not race.world.cars[0].retired
 
 
 def test_restart_gives_the_same_race_again():

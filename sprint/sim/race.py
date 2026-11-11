@@ -18,8 +18,12 @@ COUNTDOWN = "countdown"
 RACING = "racing"
 FINISHED = "finished"
 
-# What a car does after it has taken the flag: straight wheel, firm brake.
-_AFTER_FLAG = Controls(0.0, 0.0, 0.6)
+# After the flag a car brakes at this strength (its driver still steers)
+# until it is slower than PARK_SPEED.  It is then parked: no longer simulated
+# and no longer solid, so cars still racing cannot hit it.  The brake must be
+# released at that point, because holding it on a stopped car means reverse.
+AFTER_FLAG_BRAKE = 0.6
+PARK_SPEED = 1.0
 
 
 class Race:
@@ -102,12 +106,22 @@ class Race:
         world = self.world
         controls = []
         for i, driver in enumerate(self.drivers):
-            if world.cars[i].finished:
-                controls.append(_AFTER_FLAG)
+            car = world.cars[i]
+            if car.retired:
+                controls.append(Controls())
+            elif car.finished:
+                steering = Controls(*driver.act(world, i)).clamped().steering
+                controls.append(Controls(steering, 0.0, AFTER_FLAG_BRAKE))
             else:
                 controls.append(Controls(*driver.act(world, i)).clamped())
         self.controls_log.append(tuple(v for c in controls for v in c))
         events = world.step(controls)
+        for car in world.cars:
+            if car.finished and not car.retired and car.speed < PARK_SPEED:
+                car.vx = car.vy = 0.0
+                car.refresh_speed()
+                car.prev_x, car.prev_y, car.prev_heading = car.x, car.y, car.heading
+                car.retired = True
 
         if self.first_finish_tick is None and any(e[0] == "finish" for e in events):
             self.first_finish_tick = world.tick
