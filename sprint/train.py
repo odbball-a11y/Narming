@@ -4,6 +4,7 @@
     python train.py --generations 200
     python train.py --run big --hidden 32 32 --memory 8     # a separate run, bigger brain
     python train.py --run plain --no-race-bonuses           # results-only scoring
+    python train.py --run long --race-laps 3                # longer training races
     python train.py --workers 4                             # use 4 CPU cores
 
 Phase 1, driving school: the whole generation drives the track as ghosts.
@@ -42,6 +43,9 @@ def main() -> int:
     ap.add_argument("--memory", type=int, default=DEFAULT_ARCH["memory"],
                     help="memory values the network carries between decisions (new runs; 0 = none)")
     ap.add_argument("--races", type=int, default=2, help="racing-school races per driver per track (new runs)")
+    ap.add_argument("--race-laps", type=float, default=None,
+                    help="length of racing-school races in laps (new runs; default about 2). Longer races "
+                         "make crashes cost more but each generation takes longer")
     ap.add_argument("--no-race-bonuses", action="store_true",
                     help="score racing school on results only, no early bonuses for overtaking and "
                          "drafting (new runs)")
@@ -72,6 +76,7 @@ def main() -> int:
         evolve.train(run=args.run, generations=args.generations, population=args.population,
                      seed=args.seed, tracks=args.tracks, phase2_from=args.racing_from, arch=arch,
                      races_per_track=args.races, race_bonuses=not args.no_race_bonuses,
+                     race_laps=args.race_laps,
                      workers=args.workers, on_generation=report,
                      log=lambda m: print(m, flush=True))
         config = evolve.load_config(run_dir)

@@ -44,6 +44,8 @@ FORMAT = 2
 # long enough for damage to cost real time, or barging pays.
 SOLO_SECONDS = {"speedway": 30.0, "technical": 46.0}
 RACE_SECONDS = {"speedway": 30.0, "technical": 46.0}
+# Roughly how long a good lap takes, to turn --race-laps into seconds.
+LAP_SECONDS = {"speedway": 14.0, "technical": 23.0}
 DEFAULT_SECONDS = 40.0
 
 # A ghost that makes no forward progress for this long is retired early.
@@ -540,6 +542,7 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
 def train(run: str = "default", generations: int = 50, population: int = 80, elites: int = 6,
           seed: int = 0, tracks: list[str] | None = None, phase2_from: int | None = None,
           arch: dict | None = None, races_per_track: int = 2, race_bonuses: bool = True,
+          race_laps: float | None = None,
           workers: int = 0, on_generation=None, log=print) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
@@ -561,7 +564,10 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "tracks": tracks or Track.available(), "phase2_from": phase2_from,
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
                   "races_per_track": races_per_track, "race_bonuses": race_bonuses,
-                  "race_weights": dict(RACE_WEIGHTS), "race_seconds": dict(RACE_SECONDS),
+                  "race_weights": dict(RACE_WEIGHTS),
+                  "race_seconds": ({t: round(race_laps * LAP_SECONDS.get(t, DEFAULT_SECONDS / 2), 1)
+                                    for t in (tracks or Track.available())}
+                                   if race_laps else dict(RACE_SECONDS)),
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
     arch, size, tracks, seed = config["arch"], config["population"], config["tracks"], config["seed"]

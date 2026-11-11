@@ -218,11 +218,13 @@ def test_training_run_writes_both_phases(run_dir):
     assert list(data["fitness"]) == sorted(data["fitness"], reverse=True)
 
 
-def test_no_bonuses_option(tmp_path, monkeypatch):
+def test_no_bonuses_and_race_length_options(tmp_path, monkeypatch):
     monkeypatch.setattr(evolve, "RUNS_DIR", tmp_path)
     evolve.train(run="plain", generations=2, population=4, elites=1, tracks=["speedway"],
-                 phase2_from=2, arch=FLAT, races_per_track=1, race_bonuses=False)
-    assert evolve.load_history(tmp_path / "plain")[-1]["bonus"] == 0.0
+                 phase2_from=2, arch=FLAT, races_per_track=1, race_bonuses=False, race_laps=3)
+    last = evolve.load_history(tmp_path / "plain")[-1]
+    assert last["bonus"] == 0.0
+    assert last["scenarios"][0]["seconds"] == 3 * evolve.LAP_SECONDS["speedway"]
 
 
 def test_stopping_and_continuing_gives_the_same_run(run_dir, tmp_path, monkeypatch):

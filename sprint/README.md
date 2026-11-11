@@ -132,6 +132,7 @@ py train.py                                   # 50 more generations of run "defa
 py train.py --generations 200
 py train.py --run big --hidden 32 32 --memory 8      # a separate run with a bigger brain
 py train.py --run plain --no-race-bonuses            # a separate run scored on results only
+py train.py --run long --race-laps 3                 # a separate run with longer training races
 ```
 
 Each generation prints one line. Ctrl+C is safe; running the same command

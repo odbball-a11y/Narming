@@ -13,7 +13,7 @@ poker project (`holdem/`, `web/`, root `tests/`); leave it alone.
 python -m game [--track T] [--no-sound] [--fullscreen]
 python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [--bench STEPS]
 python train.py [--run NAME] [--generations N] [--hidden 24 16] [--memory 4] [--races 2]
-                [--no-race-bonuses] [--racing-from GEN] [--population N] [--workers N]
+                [--no-race-bonuses] [--race-laps L] [--racing-from GEN] [--population N] [--workers N]
 python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest
 ```
