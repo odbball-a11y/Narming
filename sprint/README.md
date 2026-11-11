@@ -113,7 +113,8 @@ generation is bred from mutated copies of the good ones.
   so the comparison is fair. Rivals are scripted cars for the first 10
   generations, then a mix of scripted cars, the AI's own recent champions and
   a hall of fame of older ones, so it has to race opponents that fight back.
-  Score: finishing place, distance, damage taken and collisions it caused.
+  Score: finishing place above all (3, 2, 1, 0 points for 1st to 4th), then
+  distance, less damage taken and collisions it caused.
   Optionally (on by default) there are small bonuses early on for overtaking,
   not being overtaken and time in the draft; they fade out over 60
   generations.

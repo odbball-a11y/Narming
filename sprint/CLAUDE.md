@@ -202,7 +202,7 @@ for "learn to drive first, then learn to race").
     real race per driver, all worlds stepped together, rivals batched.
     `RaceStats` counts collisions caused (I hit the car ahead) vs suffered,
     walls, overtakes, times passed, draft time, final place. `race_score`:
-    `RACE_WEIGHTS` (saved per run): place points + 0.5 laps - 2.0 damage
+    `RACE_WEIGHTS` (saved per run): place 3/2/1/0 + 0.5 laps - 2.0 damage
     - 0.25 caused - 0.03 walls, plus
     optional bonuses (overtakes, being passed, draft) scaled by `bonus`,
     which fades to 0 over `BONUS_FADE` generations. Fitness = 0.2 solo +

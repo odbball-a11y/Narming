@@ -307,7 +307,9 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
 # damage weight of 0.8 and a caused-collision weight of 0.08, drivers learned
 # to win by barging (place went up, damage and collisions did not come down).
 RACE_WEIGHTS = {
-    "place": [1.0, 0.6, 0.3, 0.0],   # points for finishing 1st..4th
+    "place": [3.0, 2.0, 1.0, 0.0],   # points for finishing 1st..4th: every place
+                                     # gained is worth a full point, more than a
+                                     # typical crash costs, so racing beats hiding
     "laps": 0.5,                     # per lap covered
     "damage": 2.0,                   # per unit of damage (1 = wrecked)
     "fault": 0.25,                   # per collision it caused
