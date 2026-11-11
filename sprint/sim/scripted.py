@@ -16,9 +16,17 @@ from .track import wrap_angle
 class ScriptedDriver(Driver):
     label = "Scripted"
 
-    def __init__(self, slot: int = 0, skill: float = 1.0):
-        # skill scales the cornering speed it dares; 1.0 = tuning default.
+    def __init__(self, slot: int = 0, skill: float | None = None):
+        # skill scales the cornering grip it dares to use; 1.0 = tuning default.
+        if skill is None:
+            skill = 1.0 - tuning.SCRIPT_SLOT_HANDICAP * slot
         self.skill = skill
+        self.stuck_ticks = 0
+        self.reverse_ticks = 0
+
+    def reset(self, world, car_index: int) -> None:
+        self.stuck_ticks = 0
+        self.reverse_ticks = 0
 
     def act(self, world, car_index: int) -> Controls:
         car = world.cars[car_index]
@@ -31,6 +39,20 @@ class ScriptedDriver(Driver):
         tx, ty = track.racing_line_point(car.s + look)
         angle = wrap_angle(math.atan2(ty - car.y, tx - car.x) - car.heading)
         steering = max(-1.0, min(1.0, tuning.SCRIPT_STEER_GAIN * angle))
+
+        # --- unstick: if we have stopped (nose on a barrier), back out ------
+        if self.reverse_ticks > 0:
+            self.reverse_ticks -= 1
+            # Steering acts reversed when rolling backwards, so the same sign
+            # swings the nose toward the target.
+            return Controls(-steering if car.forward_speed < 0 else 0.0, 0.0, 1.0)
+        if speed < 1.0:
+            self.stuck_ticks += 1
+            if self.stuck_ticks > tuning.SCRIPT_STUCK_TIME * tuning.TICK_RATE:
+                self.stuck_ticks = 0
+                self.reverse_ticks = int(tuning.SCRIPT_REVERSE_TIME * tuning.TICK_RATE)
+        else:
+            self.stuck_ticks = 0
 
         # --- pick a speed the bends ahead allow ----------------------------
         # A bend of curvature k can be taken at sqrt(grip / |k|).  For each

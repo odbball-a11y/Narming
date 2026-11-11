@@ -9,8 +9,11 @@ from helpers import make_world
 
 
 def test_registry_lists_and_creates_drivers():
+    game_input.register_human_drivers()
     keys = [k for k, _ in driver_types()]
-    assert "scripted" in keys and "human" in keys
+    assert "scripted" in keys
+    assert {"human1", "human2", "human3", "human4"} <= set(keys)
+    assert create_driver("human2", slot=3).binding["name"] == "WASD"   # any input, any slot
     for key in keys:
         assert isinstance(create_driver(key, slot=1), Driver)
     with pytest.raises(KeyError):

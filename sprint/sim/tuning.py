@@ -194,3 +194,36 @@ SCRIPT_CORNER_GRIP = 0.72
 
 # Fraction of the car's braking the scripted driver plans with.
 SCRIPT_BRAKE_USE = 0.6
+
+# Each scripted car is a little slower than the one in the slot before it, so
+# a field of scripted cars spreads out instead of queueing nose to tail.
+# This is the fraction of cornering grip given up per slot.
+SCRIPT_SLOT_HANDICAP = 0.04
+
+# If a scripted car has been almost stationary for this long (seconds) it
+# assumes it is stuck on a barrier and reverses out for SCRIPT_REVERSE_TIME.
+SCRIPT_STUCK_TIME = 1.0
+SCRIPT_REVERSE_TIME = 0.9
+
+
+# --------------------------------------------------------------------------
+# Race rules
+# --------------------------------------------------------------------------
+
+# Seconds between the 3, 2, 1 lights; the race starts after three of them.
+COUNTDOWN_STEP = 1.0
+
+# Once the winner finishes, the others get this many seconds to finish too.
+FINISH_GRACE = 30.0
+
+# Seconds the cars keep rolling after the last finisher before the results.
+COOLDOWN = 1.5
+
+
+def physics_fingerprint() -> str:
+    """Identifies the values a recorded replay depends on.  A replay made
+    with a different fingerprint may not play back identically."""
+    import hashlib
+    parts = (TICK_RATE, CAR_PARAMS, GRASS_GRIP, GRASS_DRAG, WALL_RESTITUTION,
+             WALL_FRICTION, CAR_RESTITUTION)
+    return hashlib.sha256(repr(parts).encode()).hexdigest()[:16]

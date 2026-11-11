@@ -102,9 +102,62 @@ def bindings() -> list[dict]:
     return _bindings_cache
 
 
-def _make_human(slot: int = 0) -> Driver:
-    b = bindings()[slot % len(DEFAULT_BINDINGS)]
-    return KeyboardDriver(b, label=f"Human ({b['name']})")
+def key_label(binding: dict) -> str:
+    """Human-readable summary of one player's keys, for menus."""
+    return "  ".join(f"{action} [{str(binding[action]).upper()}]"
+                     for action in ("left", "right", "throttle", "brake"))
 
 
-register_driver("human", "Human", _make_human)
+class GamepadDriver(Driver):
+    """Left stick steers; right trigger or A accelerates; left trigger, B or X
+    brakes.  Analogue, so no smoothing is needed beyond a small dead zone."""
+
+    DEAD_ZONE = 0.12
+
+    def __init__(self, joystick, label: str = "Gamepad"):
+        self.joystick = joystick
+        self.label = label
+
+    def _axis(self, index: int, default: float = 0.0) -> float:
+        js = self.joystick
+        return js.get_axis(index) if index < js.get_numaxes() else default
+
+    def _button(self, index: int) -> bool:
+        js = self.joystick
+        return bool(js.get_button(index)) if index < js.get_numbuttons() else False
+
+    def act(self, world, car_index: int) -> Controls:
+        x = self._axis(0)
+        dz = self.DEAD_ZONE
+        steering = 0.0 if abs(x) < dz else (abs(x) - dz) / (1.0 - dz) * (1.0 if x > 0 else -1.0)
+        # Triggers rest at -1 and reach +1 when pulled.
+        throttle = max((self._axis(5, -1.0) + 1.0) / 2.0, 1.0 if self._button(0) else 0.0)
+        brake = max((self._axis(4, -1.0) + 1.0) / 2.0,
+                    1.0 if (self._button(1) or self._button(2)) else 0.0)
+        return Controls(steering, throttle, brake)
+
+
+_registered = False
+
+
+def register_human_drivers() -> None:
+    """Add every human input to the driver registry: one entry per keyboard
+    binding set ("human1".."human4") and one per connected gamepad ("pad1"..).
+    Any of them can then be assigned to any car slot."""
+    global _registered
+    if _registered:
+        return
+    _registered = True
+    for i, binding in enumerate(bindings()):
+        label = f"Human: {binding['name']}"
+        register_driver(f"human{i + 1}", label,
+                        lambda slot=0, b=binding, lab=label: KeyboardDriver(b, label=lab))
+    try:
+        pygame.joystick.init()
+        for i in range(min(pygame.joystick.get_count(), 4)):
+            js = pygame.joystick.Joystick(i)
+            label = f"Gamepad {i + 1}"
+            register_driver(f"pad{i + 1}", label,
+                            lambda slot=0, j=js, lab=label: GamepadDriver(j, label=lab))
+    except pygame.error as exc:
+        print(f"gamepads: unavailable ({exc})")

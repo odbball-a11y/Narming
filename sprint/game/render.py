@@ -33,6 +33,10 @@ C_HUD_DIM = (150, 140, 200)
 C_HUD_ACCENT = (255, 214, 10)
 CAR_COLOURS = [(236, 52, 60), (48, 140, 255), (255, 214, 10), (60, 220, 110)]
 CAR_NAMES = ["RED", "BLUE", "YELLOW", "GREEN"]
+PLACES = ["1ST", "2ND", "3RD", "4TH"]
+C_PANEL = (20, 14, 44)
+C_PINK = (255, 64, 160)
+C_CYAN = (64, 220, 255)
 
 
 def format_time(seconds) -> str:
@@ -223,15 +227,72 @@ def lerp_angle(a: float, b: float, t: float) -> float:
     return a + d * t
 
 
+class UI:
+    """Fonts and text helpers scaled to the window (shared by all screens)."""
+
+    def __init__(self, size: tuple[int, int]):
+        pygame.font.init()
+        self.camera = Camera(size)
+        u = self.camera.scale
+        self.unit = u
+        self.fonts = {
+            "title": pygame.font.Font(None, max(20, int(u * 13))),
+            "huge": pygame.font.Font(None, max(20, int(u * 22))),
+            "big": pygame.font.Font(None, max(14, int(u * 5.6))),
+            "mid": pygame.font.Font(None, max(12, int(u * 3.9))),
+            "small": pygame.font.Font(None, max(10, int(u * 2.7))),
+        }
+
+    def px(self, x: float, y: float) -> tuple[float, float]:
+        return self.camera.to_screen(x, y)
+
+    def rect(self, x: float, y: float, w: float, h: float) -> pygame.Rect:
+        sx, sy = self.px(x, y)
+        return pygame.Rect(int(sx), int(sy), int(w * self.unit), int(h * self.unit))
+
+    def text(self, screen, font: str, string: str, colour, x: float, y: float,
+             anchor: str = "topleft", shadow: bool = False) -> pygame.Rect:
+        """Draw text at world-unit position (x, y)."""
+        f = self.fonts[font]
+        pos = self.px(x, y)
+        if shadow:
+            img = f.render(string, True, (0, 0, 0))
+            off = max(1, int(self.unit * 0.3))
+            screen.blit(img, img.get_rect(**{anchor: (pos[0] + off, pos[1] + off)}))
+        img = f.render(string, True, colour)
+        rect = img.get_rect(**{anchor: pos})
+        screen.blit(img, rect)
+        return rect
+
+    def dim(self, screen, alpha: int = 150) -> None:
+        veil = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        veil.fill((8, 4, 24, alpha))
+        screen.blit(veil, (0, 0))
+
+    def panel(self, screen, x, y, w, h, border=C_HUD_ACCENT) -> pygame.Rect:
+        r = self.rect(x, y, w, h)
+        pygame.draw.rect(screen, C_PANEL, r, border_radius=int(self.unit * 1.2))
+        pygame.draw.rect(screen, border, r, max(2, int(self.unit * 0.35)), border_radius=int(self.unit * 1.2))
+        return r
+
+    def backdrop(self, screen) -> None:
+        """Plain menu background: night-sky grid with a sunset stripe band."""
+        screen.fill(C_BACKDROP)
+        u = self.unit
+        cam = self.camera
+        for i in range(0, 161, 5):
+            x = cam.ox + i * u
+            pygame.draw.line(screen, C_BACKDROP_GRID, (x, cam.oy), (x, cam.oy + WORLD_H * u))
+        for j in range(0, 91, 5):
+            y = cam.oy + j * u
+            pygame.draw.line(screen, C_BACKDROP_GRID, (cam.ox, y), (cam.ox + WORLD_W * u, y))
+
+
 class RaceRenderer:
     def __init__(self, track: Track, size: tuple[int, int]):
-        pygame.font.init()
         self.track = track
-        self.camera = Camera(size)
-        self._build()
-
-    def resize(self, size: tuple[int, int]) -> None:
-        self.camera.resize(size)
+        self.ui = UI(size)
+        self.camera = self.ui.camera
         self._build()
 
     def _build(self) -> None:
@@ -240,10 +301,10 @@ class RaceRenderer:
         self.skid_layer = pygame.Surface(cam.size, pygame.SRCALPHA)
         self.sprites = [make_car_sprite(c, cam.scale) for c in CAR_COLOURS]
         self.sprite_zoom = cam.scale * tuning.CAR_LENGTH / (self.sprites[0].get_width() - 4)
-        unit = cam.scale
-        self.font_big = pygame.font.Font(None, max(14, int(unit * 5.2)))
-        self.font = pygame.font.Font(None, max(12, int(unit * 3.4)))
-        self.font_small = pygame.font.Font(None, max(10, int(unit * 2.4)))
+        size = int(cam.scale * 5)
+        self.shadow = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.ellipse(self.shadow, (0, 0, 0, 70),
+                            pygame.Rect(size * 0.08, size * 0.28, size * 0.84, size * 0.44))
 
     def clear_skids(self) -> None:
         self.skid_layer.fill((0, 0, 0, 0))
@@ -271,65 +332,85 @@ class RaceRenderer:
         cam = self.camera
         screen.blit(self.track_surface, (0, 0))
         screen.blit(self.skid_layer, (0, 0))
-        for i, car in enumerate(world.cars):
+        poses = []
+        for car in world.cars:
             x = car.prev_x + (car.x - car.prev_x) * alpha
             y = car.prev_y + (car.y - car.prev_y) * alpha
-            heading = lerp_angle(car.prev_heading, car.heading, alpha)
+            poses.append((x, y, lerp_angle(car.prev_heading, car.heading, alpha)))
+        for x, y, heading in poses:
             sx, sy = cam.to_screen(x, y)
-            # soft shadow
-            shadow = pygame.Surface((int(cam.scale * 4), int(cam.scale * 4)), pygame.SRCALPHA)
-            pygame.draw.ellipse(shadow, (0, 0, 0, 70), shadow.get_rect().inflate(-cam.scale, -cam.scale * 1.6))
-            shadow = pygame.transform.rotate(shadow, -math.degrees(heading))
-            screen.blit(shadow, shadow.get_rect(center=(sx + cam.scale * 0.25, sy + cam.scale * 0.35)))
+            shadow = pygame.transform.rotate(self.shadow, -math.degrees(heading))
+            screen.blit(shadow, shadow.get_rect(center=(sx + cam.scale * 0.3, sy + cam.scale * 0.4)))
+        for i, (x, y, heading) in enumerate(poses):
             sprite = self.sprites[world.slots[i] % len(self.sprites)]
             image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom)
-            screen.blit(image, image.get_rect(center=(sx, sy)))
+            screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))
 
-    def text(self, screen, font, string, colour, pos, anchor="topleft") -> pygame.Rect:
-        img = font.render(string, True, colour)
-        rect = img.get_rect(**{anchor: pos})
-        screen.blit(img, rect)
-        return rect
-
-    def draw_hud(self, screen: pygame.Surface, world, focus: int = 0, hint: str = "") -> None:
-        cam = self.camera
-        u = cam.scale
-        strip = pygame.Rect(cam.ox, cam.oy, WORLD_W * u, HUD_H * u)
+    def draw_hud(self, screen: pygame.Surface, race, banner: str = "") -> None:
+        """Top strip: one panel per car (in its slot's place) with position,
+        lap, current / last / best lap time and speed."""
+        ui = self.ui
+        world = race.world
+        strip = ui.rect(0, 0, WORLD_W, HUD_H)
         pygame.draw.rect(screen, C_HUD_BG, strip)
-        pygame.draw.line(screen, C_HUD_ACCENT, strip.bottomleft, strip.bottomright, max(1, int(u * 0.3)))
-        car = world.cars[focus]
-        colour = CAR_COLOURS[world.slots[focus] % len(CAR_COLOURS)]
-        top = strip.top + u * 1.2
-        low = strip.top + u * 4.4
+        pygame.draw.line(screen, C_HUD_ACCENT, strip.bottomleft, strip.bottomright, max(1, int(ui.unit * 0.3)))
+        order = world.standings()
+        panel_w = WORLD_W / 4.0
+        for i, car in enumerate(world.cars):
+            slot = world.slots[i] % 4
+            colour = CAR_COLOURS[slot]
+            x0 = slot * panel_w
+            pygame.draw.rect(screen, colour, ui.rect(x0 + 0.6, 0.9, 0.9, HUD_H - 2.0))
+            place = order.index(i)
+            ui.text(screen, "big", PLACES[place], colour, x0 + 2.4, 0.9)
+            label = race.drivers[i].label.upper()
+            ui.text(screen, "small", label[:14], C_HUD_DIM, x0 + 2.4, 5.4)
+            ui.text(screen, "small", f"SPEED {int(round(car.speed * 6)):3d}", C_HUD_TEXT, x0 + 2.4, 7.8)
+            lap_now = min(car.laps + 1, world.laps)
+            ui.text(screen, "small", f"LAP {lap_now}/{world.laps}", C_HUD_ACCENT, x0 + 14.5, 0.9)
+            if car.finished:
+                ui.text(screen, "mid", format_time(car.finish_time), C_CYAN, x0 + 14.5, 3.1)
+            else:
+                ui.text(screen, "mid", format_time(max(0.0, world.time - car.lap_start_time)),
+                        C_HUD_TEXT, x0 + 14.5, 3.1)
+            ui.text(screen, "small", "FINISHED" if car.finished else "", C_CYAN, x0 + 14.5, 7.8)
+            ui.text(screen, "small", "LAST", C_HUD_DIM, x0 + 27.5, 0.9)
+            ui.text(screen, "small", format_time(car.last_lap), C_HUD_TEXT, x0 + 27.5, 3.0)
+            ui.text(screen, "small", "BEST", C_HUD_DIM, x0 + 27.5, 5.6)
+            ui.text(screen, "small", format_time(car.best_lap), C_HUD_ACCENT, x0 + 27.5, 7.7)
+        if banner:
+            ui.text(screen, "small", banner, C_HUD_TEXT, WORLD_W / 2, WORLD_H - 0.8, "midbottom", shadow=True)
 
-        def field(x_units, label, value, value_colour=C_HUD_TEXT):
-            x = strip.left + x_units * u
-            self.text(screen, self.font_small, label, C_HUD_DIM, (x, top))
-            self.text(screen, self.font_big, value, value_colour, (x, low))
-
-        self.text(screen, self.font_small, self.track.name.upper(), C_HUD_ACCENT, (strip.left + 3 * u, top))
-        self.text(screen, self.font_big, CAR_NAMES[world.slots[focus] % 4], colour, (strip.left + 3 * u, low))
-        lap_now = min(car.laps + 1, world.laps)
-        field(30, "LAP", f"{lap_now}/{world.laps}")
-        current = car.finish_time if car.finished else world.time - car.lap_start_time
-        field(48, "TIME" if not car.finished else "RACE", format_time(current))
-        field(78, "LAST", format_time(car.last_lap))
-        field(108, "BEST", format_time(car.best_lap), C_HUD_ACCENT)
-        field(138, "SPEED", f"{int(round(car.speed * 6))}")
-        if hint:
-            self.text(screen, self.font_small, hint, C_HUD_DIM,
-                      (cam.ox + WORLD_W * u / 2, cam.oy + (WORLD_H - 1.0) * u), "midbottom")
+    def draw_countdown(self, screen, race) -> None:
+        """Start lights and the 3-2-1-GO numerals."""
+        ui = self.ui
+        number = race.countdown_number
+        go = number == 0 and race.world.time < 0.9
+        if number == 0 and not go:
+            return
+        lit = 4 - number if number else 3
+        cx, cy = WORLD_W / 2, 30.0
+        ui.panel(screen, cx - 17, cy - 6.5, 34, 13, border=(60, 60, 80))
+        for k in range(3):
+            centre = ui.px(cx - 10 + k * 10, cy)
+            if go:
+                colour = (60, 240, 110)
+            else:
+                colour = (255, 48, 56) if k < lit else (60, 24, 32)
+            pygame.draw.circle(screen, colour, centre, int(ui.unit * 3.6))
+            pygame.draw.circle(screen, (0, 0, 0), centre, int(ui.unit * 3.6), max(1, int(ui.unit * 0.3)))
+        ui.text(screen, "huge", "GO!" if go else str(number), (60, 240, 110) if go else C_HUD_ACCENT,
+                cx, 52, "center", shadow=True)
 
     def draw_debug(self, screen, world, focus: int = 0) -> None:
         car = world.cars[focus]
-        cam = self.camera
         lines = [
             f"forward {car.forward_speed:6.2f}   slip {car.slip:5.2f} {'SLIDING' if car.sliding else ''}",
             f"steer {car.steering:+.2f}  throttle {car.throttle:.2f}  brake {car.brake:.2f}",
             f"s {car.s:6.1f}  lateral {car.lateral:+5.2f}  {'grass' if car.surface else 'tarmac'}",
             f"next gate {car.next_checkpoint}  tick {world.tick}",
         ]
-        y = cam.oy + (HUD_H + 1.5) * cam.scale
+        y = HUD_H + 1.5
         for line in lines:
-            rect = self.text(screen, self.font_small, line, (255, 255, 255), (cam.ox + 2 * cam.scale, y))
-            y = rect.bottom + 2
+            self.ui.text(screen, "small", line, (255, 255, 255), 2, y, shadow=True)
+            y += 2.6

@@ -4,10 +4,9 @@ A top-down, single-screen arcade racer in the spirit of the 1980s sprint
 games: small cars, the whole circuit in view, quick laps, sliding. All art is
 drawn in code and the track layouts are original.
 
-**Status: Stage 1, milestone 1 (prototype).** One car on the Speedway track
-with keyboard control, the full physics model, lap timing, a headless runner
-and tests. Menus, the second track, four-car races, sound and replays come in
-milestone 2. Stage 2 (a later project) adds AI drivers.
+**Status: Stage 1 complete.** Two tracks, up to four cars (human, gamepad or
+scripted in any slot), menus, countdown, HUD, results, pause, synthesised
+sound, and exact replays. Stage 2 (a later project) adds AI drivers.
 
 ## Install
 
@@ -29,35 +28,65 @@ macOS / Linux: `python3 -m venv .venv && source .venv/bin/activate && pip instal
 Always from the `sprint` folder:
 
 ```
-py -m game                      # drive the red car on Speedway
-py -m game --driver scripted    # watch the computer drive instead
-py headless.py --cars 4         # race with no window, prints lap times and steps/s
-py -m pytest                    # run the tests
-py render_frames.py --out shots # save PNG frames without opening a window
+py -m game                          # the game
+py -m game --track technical        # jump straight to race setup on a track
+py -m game --no-sound --fullscreen
+py headless.py --track technical --cars 4      # race with no window: lap times, steps/s
+py headless.py --record replays/a.replay.gz    # save a race's controls
+py headless.py --replay replays/a.replay.gz    # play back and verify it is identical
+py -m pytest                        # run the tests
+py render_frames.py --out shots     # save a PNG of every screen without opening a window
 ```
 
 (On macOS / Linux use `python` instead of `py`.)
 
-## Controls
+## Playing
+
+Main menu: **Race**, **Controls**, **Replays**, **Quit**. Menus use the arrow
+keys, Enter and Esc.
+
+**Race setup:** pick the track (Speedway or Technical), the number of laps,
+and who drives each of the four cars: `None`, any of the four keyboard sets,
+any connected gamepad, or `Scripted` (the computer). Any driver type can go
+in any slot. The default is you on the arrow keys against three scripted cars.
+
+Default keys (edit `config/controls.json` to change them; key names are
+pygame key names):
+
+| Player | Left | Right | Throttle | Brake / reverse |
+|---|---|---|---|---|
+| Arrows | Left | Right | Up | Down |
+| WASD | A | D | W | S |
+| IJKL | J | L | I | K |
+| Numpad | 4 | 6 | 8 | 5 |
+
+Gamepad: left stick steers, right trigger or A accelerates, left trigger or B
+brakes. Plug it in before starting the game.
+
+During a race:
 
 | Key | Action |
 |---|---|
-| Up | throttle |
-| Down | brake; when nearly stopped, reverse |
-| Left / Right | steer |
-| R | back to the grid |
+| P or Esc | pause (resume, restart, quit to menu) |
 | F1 | debug overlay (speed, slip, surface, next checkpoint) |
-| F5 | reload `sim/tuning.py` and restart (tune without quitting) |
+| F5 | reload `sim/tuning.py` and restart the race |
 | F11 | fullscreen |
-| Esc | quit |
+| F (replays only) | hold to fast-forward |
 
-Bindings for players 1-4 are in `config/controls.json` (arrows, WASD, IJKL,
-numpad). Only player 1 is used in the prototype.
+Holding brake when stopped reverses. A lap only counts if you pass every
+checkpoint in order, so cutting across the grass or going backwards does not
+count. Once the winner finishes the others have 30 seconds to finish.
+
+The results screen lets you race again, watch the replay, or save it to
+`replays/`; saved replays appear under **Replays** in the main menu.
+
+Many keyboards cannot report more than a few keys held at once, so four
+players on one keyboard may see dropped inputs. That is hardware, not the game.
 
 ## Tuning the feel
 
 Every tunable number is in `sim/tuning.py`, each with a note on what it does.
-Edit, save, press F5 in the game. The ones that change the feel most:
+Edit, save, press F5 during a race. The ones that change the feel most:
 
 | Value | Now | Try | Effect |
 |---|---|---|---|
@@ -80,12 +109,16 @@ sim/      simulation only, never imports pygame (tests enforce it)
   track.py    spline track, boundaries, checkpoints, grid, AI queries
   car.py      arcade physics (velocity separate from heading, limited grip)
   world.py    fixed 120 Hz step, collisions, lap counting, standings
+  race.py     countdown, finish, results
+  replay.py   record per-tick controls, play them back exactly
   driver.py   Controls, Driver interface, driver registry
   scripted.py look-ahead racing-line driver
 game/     pygame front end
-  input.py    key bindings, keyboard Driver with steering smoothing
+  app.py      window, main loop, screen switching
+  screens.py  menus, race screen (fixed-timestep loop, interpolated drawing)
   render.py   camera, procedural track / car / HUD drawing
-  app.py      fixed-timestep loop with interpolated rendering
+  input.py    key bindings, keyboard and gamepad Drivers
+  audio.py    synthesised sound, silent fallback
 tracks/   one JSON file per track
 config/   controls.json
 tests/    pytest suite

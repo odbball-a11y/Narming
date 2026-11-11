@@ -10,9 +10,9 @@ poker project (`holdem/`, `web/`, root `tests/`); leave it alone.
 ## Commands
 
 ```
-python -m game [--driver human|scripted] [--track speedway]
-python headless.py [--track T] [--cars N] [--laps N] [--bench STEPS]
-python render_frames.py --out DIR --seconds 0 5 10 [--debug]   # PNGs, no window
+python -m game [--track T] [--no-sound] [--fullscreen]
+python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [--bench STEPS]
+python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest
 ```
 
@@ -22,16 +22,18 @@ installed and none may be added in Stage 1.
 
 ## Status
 
-Milestone 1 (done): one car, Speedway, keyboard, physics, camera, headless
-runner, tests. Waiting for the user's feedback on driving feel.
+Stage 1 is complete: Speedway and Technical tracks, four cars, scripted
+driver, race management, menus, HUD, pause, results, sound, gamepads, replays,
+77 tests. The driving feel has NOT yet been judged by a human; expect tuning
+requests against `sim/tuning.py`. Never run on real Windows, real audio or a
+real gamepad (developed headless with SDL dummy drivers).
 
-Milestone 2 (to do, in order): Technical track (`tracks/technical.json`:
-hairpin, chicane, narrow section, ~25 s lap); scripted driver verified on
-both; four-car races; `sim/race.py` race management (countdown, finish,
-results); menus (track, per-slot driver via the registry, key bindings shown),
-HUD position display, pause, results screen; synthesised sound that survives
-a missing audio device; replay recording and exact playback of per-tick
-controls; gamepad if cheap; full test pass.
+Reference numbers (scripted driver, 3 laps, flying lap): Speedway 13.98 s,
+Technical 22.20 s. If physics tuning changes these move; the tests accept
+11-19 s and 19-31 s.
+
+Verify changes the way Stage 1 was verified: pytest, `headless.py` on both
+tracks, and `render_frames.py` then look at the PNGs.
 
 ## Architecture rules
 
@@ -47,10 +49,16 @@ controls; gamepad if cheap; full test pass.
 4. The sim runs with no window (`headless.py`).
 5. `register_driver(key, label, factory)` / `create_driver(key, slot)` /
    `driver_types()` is the registry; `factory(slot=int)` returns a Driver.
-   "scripted" is registered by importing `sim.scripted`, "human" by importing
-   `game.input`.
-6. Replays (milestone 2) are the seed, track, slots and the per-tick Controls.
-   They are only valid for the tuning values they were recorded with.
+   "scripted" is registered by importing `sim.scripted`;
+   `game.input.register_human_drivers()` adds "human1".."human4" (one per
+   keyboard binding set) and "pad1".. (one per connected gamepad). The setup
+   menu lists `driver_types()` plus "None", so a driver registered in Stage 2
+   shows up in the menu with no UI work.
+6. `Race` logs the Controls applied on every racing tick; `sim/replay.py`
+   saves them (gzipped JSON) with seed, track, slots and laps, and
+   `Recording.make_race()` plays them back through `ReplayDriver`s. The stored
+   final `state_hash` proves playback is identical. Recordings carry
+   fingerprints of the physics tuning and the track file and report a mismatch.
 
 All tunable numbers live in `sim/tuning.py`, including input smoothing and
 scripted-driver values. Read values as `tuning.NAME` at use time (not
@@ -107,21 +115,45 @@ impact)`, `("lap", i, time)`, `("finish", i, time)`.
 Laps: gates must be crossed forwards, in order. The first crossing of gate 0
 starts lap 1 (timed from tick 0); later crossings of gate 0 complete laps.
 
+## Race and game flow
+
+`sim/race.py` `Race(track, [(slot, driver_key_or_Driver), ...], laps, seed)`:
+phases `countdown` (3 s, world does not step, so lap 1 is timed from green),
+`racing`, `finished`. `race.step()` advances one tick in any phase and returns
+World events plus `("count", n)`, `("go",)`, `("race_over",)`. Finished cars
+are braked by the Race, not their driver. After the first finisher the rest
+get `FINISH_GRACE` seconds, then are classified by distance. `race.run()` is
+the headless loop; `race.results()` gives the classification.
+
+`game/app.py` `App` owns the window, audio, a cache of track paintings and the
+current screen. `game/screens.py`: `MainMenu`, `SetupScreen` (edits
+`app.setup`), `ControlsScreen`, `ReplayScreen`, `RaceScreen` (accumulator loop,
+pause and results overlays, replay mode). `game/audio.py` `Audio` degrades to
+no-ops if the mixer cannot open. Slot index fixes colour, grid place, HUD panel
+and parameter set.
+
 ## Stage 2 plan
 
-1. `sim/env.py`: a Gymnasium `Env` wrapping `World` for one learning car
-   (other slots filled from the registry). Observation from the track queries
-   above: speed, forward/lateral velocity, lateral offset / half width,
-   heading error, curvature at several distances ahead, ray distances, maybe
-   nearest-car relative position. Action = the three Controls values.
-   Reward = progress along `s` per tick, penalties for grass and wall events.
-   Seed via `World.reset(seed)`.
-2. Better rule-based driver: fill `racing_line_offsets` (or compute a
-   minimum-curvature line) and reuse `ScriptedDriver`.
+1. `sim/env.py`: a Gymnasium `Env` wrapping `World` (or `Race` without the
+   countdown) for one learning car, other slots filled from the registry.
+   Observation from the track queries above: speed, forward / lateral
+   velocity, lateral offset / half width, heading error, curvature at several
+   distances ahead, ray distances, maybe nearest-car relative position.
+   Action = the three Controls values. Reward = progress along `s` per tick
+   (`World.race_progress`), penalties for grass and wall events. Seed via
+   `World.reset(seed)`. Keep it pygame-free so training runs headless.
+2. Better rule-based driver: fill `racing_line_offsets` in the track files
+   (or compute a minimum-curvature line) and reuse `ScriptedDriver`, which
+   already follows `track.racing_line_point`. It has no overtaking logic:
+   scripted cars queue behind each other and bump.
 3. PPO with Stable-Baselines3; save checkpoints during training.
-4. A `PolicyDriver(Driver)` that loads a checkpoint and is registered per
-   saved model, so the existing menu can put any saved driver in any slot;
-   a "watch training progress" mode that races checkpoints against each other.
-5. Speed: one car steps at ~90k ticks/s, four at ~27k (pure Python). The ray
-   cast is vectorised NumPy over all boundary segments; if it dominates the
-   env step, restrict it to segments near the car's index.
+4. A `PolicyDriver(Driver)` that loads a checkpoint; register one registry
+   entry per saved model so the existing setup menu can put any saved driver
+   in any slot. A "watch training progress" mode can race successive
+   checkpoints against each other using the same `RaceScreen`.
+5. Speed: one car steps at about 90k ticks/s, four at about 25k (pure
+   Python, scripted drivers included). `Track.raycasts` is vectorised NumPy
+   over all boundary segments (about 2,000 to 4,000); if it dominates the env
+   step, restrict it to segments near the car's index, and consider acting
+   every 4 to 6 ticks (20 to 30 Hz decisions) rather than every tick.
+6. Human-vs-learned replays work already, since a replay only stores controls.

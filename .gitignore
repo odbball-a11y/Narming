@@ -5,3 +5,4 @@ table.json
 .venv/
 .pytest_cache/
 shots/
+replays/
