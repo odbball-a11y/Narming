@@ -34,11 +34,29 @@ Damage, drafting, the AI Lab and training have NOT been tried by the user yet.
 PPO is deliberately kept for later as a rival method (see the end).
 
 Reference numbers: scripted flying lap Speedway 13.98 s, Technical 22.20 s.
-A 110-generation trial (population 80, seed 0) reached champion solo laps of
-about 12.8 s and 22.1 s; in the exam race against three scripted cars it won
-on Speedway with 2 collisions, but on Technical still had about 11 collisions
-and often failed to finish. Solo generations took about 2 s, race generations
-about 8 s, on 4 cores.
+
+Training trials so far (population 80, 24x16 + memory 4, 4 cores):
+1. Racing school scored with damage 0.8, caused 0.08, ~1.5-lap races: the
+   champion learned to win training races by barging (place 2.8 -> 1.6,
+   damage and caused collisions flat or rising). -> heavier weights.
+2. Damage 2.0, caused 0.25, ~2-lap races: against scripted rivals only it
+   hung back (last, no damage, no passes); racing in traffic and with damage
+   it hit barriers repeatedly, because driving school only ever started
+   from box 1 with a perfect car. -> `solo_setup` rotation.
+3. Same plus rotation: driving school rode the barriers on Technical (50%
+   damage solo) because its damage weight was 0.25. -> `SOLO_DAMAGE_WEIGHT`.
+4. Run "long3" (`--race-laps 3`), everything above: driving school produced
+   clean fast drivers by gen 98 (12.3 s Speedway, 0 damage). In 52 racing
+   generations the champion's training races improved (place 3.25 -> 2.3,
+   damage 0.15-0.25, ~0.75 passes per race), but in the exam (start last,
+   three scripted cars, 3 laps) it still always finished 4th, with 4-7
+   barrier hits, despite being ~1.7 s/lap faster alone. Drafting is almost
+   unused (1-2% of race time). Racing generations take ~25 s.
+   Open problem: it has not learned to pass cleanly. Next ideas, best
+   first: overtaking drills (short races starting just behind one or two
+   slower cars on a straight, scored on passing cleanly); many more racing
+   generations; more races per driver or a bigger population; PPO for
+   the racing phase.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
