@@ -88,6 +88,18 @@ crossover is viable) followed by a short, gentle camp; wet/dry specialists
 speed, acceleration, weight); championship over several tracks with random
 weather; names, career stats, family trees, retirement.
 
+Founder camps, 40 generations each from "speedway" gen 120 (~55 s/gen with
+two camps sharing 4 cores). In their own camps the personalities were
+distinct (gens 31-40: Dave damage 9%, caused 1.6, 1.4 passes; Keith damage
+2%, caused 0.2, 0.7 passes). Head to head (`compare.py dave keith speedway`,
+16 races, the parent champion included by accident): Dave 8 wins, avg place
+1.75, caused 0.75, damage 24%, draft 8%; Keith 0 wins, place 3.0, caused 2.0,
+damage 27%, draft 31%; parent 8 wins, caused 2.75, damage 14%. Keith only
+trained against scripted cars and his own cautious champions, so against
+aggressive cars he tails closely and runs into them when they cut in and
+brake (rear contact counts as caused). Proposed next: camps whose rival pool
+includes the other personalities' champions.
+
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
 
