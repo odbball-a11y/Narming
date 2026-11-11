@@ -30,10 +30,23 @@ def weights(run: str, gen: int, rank: int = 0):
     return pop[min(rank, len(pop) - 1)], arch
 
 
+def display_name(run: str) -> str | None:
+    """The racer name given to a run (e.g. "Dangerous Dave"), if any."""
+    try:
+        return evolve.load_config(evolve.RUNS_DIR / run).get("name")
+    except (OSError, ValueError):
+        return None
+
+
+def default_label(run: str, gen: int) -> str:
+    name = display_name(run)
+    return f"{name} g{gen}" if name else f"Evo gen {gen}"
+
+
 def champion(run: str, gen: int, label: str | None = None, rank: int = 0) -> NeuralDriver:
     """A driver of a generation (the best by default), as a Driver."""
     w, arch = weights(run, gen, rank)
-    return NeuralDriver(w, arch, label or f"Evo gen {gen}")
+    return NeuralDriver(w, arch, label or default_label(run, gen))
 
 
 def latest_run() -> str | None:
@@ -45,15 +58,21 @@ def latest_run() -> str | None:
 
 
 def register_champions(run: str | None = None, limit: int = 8) -> list[str]:
-    """Refresh the registry with champions of `run` (default: the latest).
-    Returns the registered keys, oldest generation first."""
+    """Refresh the registry with champions of `run` (default: the latest),
+    plus the latest champion of every named racer.  Returns the keys."""
     unregister_drivers(PREFIX)
     run = run or latest_run()
-    if run is None:
-        return []
     keys = []
-    for gen in spread(evolve.list_generations(evolve.RUNS_DIR / run), limit):
-        key = f"{PREFIX}{run}:{gen}"
-        register_driver(key, f"Evo gen {gen}", lambda slot=0, r=run, g=gen: champion(r, g))
-        keys.append(key)
+    if run is not None:
+        for gen in spread(evolve.list_generations(evolve.RUNS_DIR / run), limit):
+            key = f"{PREFIX}{run}:{gen}"
+            register_driver(key, default_label(run, gen), lambda slot=0, r=run, g=gen: champion(r, g))
+            keys.append(key)
+    for other in evolve.list_runs():
+        name = display_name(other)
+        gens = evolve.list_generations(evolve.RUNS_DIR / other)
+        key = f"{PREFIX}{other}:{gens[-1]}" if gens else None
+        if name and key and key not in keys:
+            register_driver(key, name, lambda slot=0, r=other, g=gens[-1]: champion(r, g, name))
+            keys.append(key)
     return keys

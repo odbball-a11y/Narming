@@ -144,6 +144,32 @@ are fixed when a run is created, so to compare settings give the new run its
 own `--run` name. Driving-school generations take a few seconds, racing-school
 ones about 25 seconds on 4 cores.
 
+### Racing personalities: training camps
+
+A training camp takes the drivers of an existing run and trains them on in
+racing school with a different idea of what a good race is:
+
+```
+py train.py --run dave --from speedway --style aggressive --name "Dangerous Dave"
+py train.py --run keith --from speedway --style cautious --name "Careful Keith"
+```
+
+- **aggressive**: places count for more, every pass earns a bonus and every
+  time it is passed costs, slipstreaming is rewarded, damage is cheap.
+- **cautious**: damage and collisions it causes are very expensive.
+
+The camp copies its settings (track, race length, network) from the `--from`
+run and starts racing straight away. Named racers appear by name in race
+setup and in the AI Lab (R switches runs). To see how differently they race:
+
+```
+py compare.py dave keith                 # 8 races, rolling start, order rotating
+py compare.py dave keith --races 16 --laps 5
+```
+
+It prints wins, average place, passes, collisions caused and suffered,
+barrier hits, damage, time in the draft and best lap for each driver.
+
 ### Watching
 
 While training runs, open a **second** terminal, start the game
@@ -222,7 +248,7 @@ game/     pygame front end
 tracks/   one JSON file per track
 config/   controls.json
 tests/    pytest suite
-headless.py, train.py, render_frames.py   command-line tools
+headless.py, train.py, compare.py, render_frames.py   command-line tools
 ```
 
 See `CLAUDE.md` for the architecture, conventions and the Stage 2 plan.

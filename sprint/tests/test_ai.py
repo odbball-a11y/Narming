@@ -258,6 +258,40 @@ def test_stopping_and_continuing_gives_the_same_run(run_dir, tmp_path, monkeypat
         assert np.array_equal(a["pop"], b["pop"]) and np.array_equal(a["fitness"], b["fitness"])
 
 
+def test_personality_scoring():
+    base = {"place": [2, 2], "laps": [2.0, 2.0], "damage": [0.3, 0.0], "fault": [2, 0],
+            "walls": [0, 0], "overtakes": [4, 0], "passed": [0, 0], "draft": [0.3, 0.0]}
+    dave = evolve.race_score(base, 0.0, evolve.style_weights("aggressive"))
+    keith = evolve.race_score(base, 0.0, evolve.style_weights("cautious"))
+    assert dave[0] > dave[1]           # Dave's upbringing: the bold race scores better
+    assert keith[0] < keith[1]         # Keith's: the clean race scores better
+    assert evolve.style_weights(None) == evolve.RACE_WEIGHTS
+
+
+def test_training_camp_starts_from_another_run(run_dir, tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "RUNS_DIR", run_dir.parent)
+    evolve.train(run="dave-test", start_from="tiny", style="aggressive", name="Dangerous Dave",
+                 generations=1, population=8, elites=2)
+    camp = run_dir.parent / "dave-test"
+    config = evolve.load_config(camp)
+    assert config["parent"] == {"run": "tiny", "gen": 6} and config["arch"] == ARCH
+    assert config["tracks"] == ["speedway"] and config["races_per_track"] == 2
+    assert config["race_weights"]["overtake"] > 0 and config["race_bonuses"] is False
+    assert evolve.load_history(camp)[0]["mode"] == "race"          # straight into racing school
+    parent_best = evolve.load_generation(run_dir, 6)["pop"][0]
+    first = evolve.load_generation(camp, 1)["pop"]
+    assert any(np.array_equal(parent_best.astype(np.float32), row.astype(np.float32)) for row in first)
+    assert roster.display_name("dave-test") == "Dangerous Dave"
+    assert roster.champion("dave-test", 1).label == "Dangerous Dave g1"
+    keys = roster.register_champions(run="tiny")
+    assert "evo:dave-test:1" in keys
+    assert dict(driver_types())["evo:dave-test:1"] == "Dangerous Dave"
+    import shutil
+    shutil.rmtree(camp)
+    with pytest.raises(ValueError):
+        evolve.train(run="orphan", start_from="nobody", generations=1)
+
+
 def test_old_format_runs_are_moved_aside_not_deleted(tmp_path, monkeypatch):
     monkeypatch.setattr(evolve, "RUNS_DIR", tmp_path)
     old = tmp_path / "default"

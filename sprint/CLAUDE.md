@@ -14,6 +14,8 @@ python -m game [--track T] [--no-sound] [--fullscreen]
 python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [--bench STEPS]
 python train.py [--run NAME] [--generations N] [--hidden 24 16] [--memory 4] [--races 2]
                 [--no-race-bonuses] [--race-laps L] [--racing-from GEN] [--population N] [--workers N]
+python train.py --run dave --from speedway --style aggressive --name "Dangerous Dave"   # training camp
+python compare.py RUN[:GEN] RUN[:GEN] ... [--track T] [--races N] [--laps N]
 python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest
 ```
@@ -73,6 +75,18 @@ every finishing place matter: place points went from 1/0.6/0.3/0 to 3/2/1/0.
    31% -> 12%, solo lap 16.3 -> 12.8 s. Single exam races still swing
    (a win one generation, last the next). ~20 s per racing generation.
    Not yet tried: Technical with these settings, more than four cars.
+
+Next direction (agreed with the user): an AI-only racing stable in the spirit
+of Derby Owners Club. Two founders trained from the "speedway" run:
+"Dangerous Dave" (`--style aggressive`) and "Careful Keith" (`--style
+cautious`); every later racer is to descend from these two by breeding.
+Planned: temperament as an inherited 0..1 gene (child = parents' mean plus
+noise) that sets where the foal's camp scoring sits between cautious and
+aggressive; foal brain = mix of the parents' (they share an ancestor, so
+crossover is viable) followed by a short, gentle camp; wet/dry specialists
+(camp conditions); per-racer car traits on a fixed budget (handling, top
+speed, acceleration, weight); championship over several tracks with random
+weather; names, career stats, family trees, retirement.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
@@ -227,9 +241,17 @@ for "learn to drive first, then learn to race").
     `gen_NNNN.npz` (whole population, best first, float32). Seeded and
     resumable across the phase change (tested). Older-format runs are renamed
     `<run>-v1`, never deleted, and are ignored by `list_runs`.
+- Personalities: `STYLES` in `evolve.py` override `RACE_WEIGHTS`
+  (permanent `overtake`, `passed`, `draft` terms, separate from the fading
+  `bonus_*` ones). `train(start_from="RUN[:GEN]", style=, name=)` is a
+  training camp: the new run breeds on from that run's generation, inherits
+  its arch/tracks/races/race length, starts in racing school, and records
+  `parent`, `style` and `name` in its config.
 - `roster.py`: `champion(run, gen, label, rank)` builds a `NeuralDriver` for
   any ranked driver of a generation; `register_champions` puts them in the
-  registry as `evo:<run>:<gen>`.
+  registry as `evo:<run>:<gen>`, plus the latest champion of every named run
+  under its name. `compare.py` races runs' champions with rotating rolling
+  starts and prints racecraft statistics.
 - `game/screens.py` `LabScreen` (4 charts, generation picker, ghost pack,
   top-4 reverse-grid race, the champion's test races, champions race, you v
   champions) and `PackScreen`.

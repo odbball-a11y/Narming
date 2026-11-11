@@ -314,10 +314,30 @@ RACE_WEIGHTS = {
     "damage": 2.0,                   # per unit of damage (1 = wrecked)
     "fault": 0.25,                   # per collision it caused
     "walls": 0.03,                   # per barrier hit
+    "overtake": 0.0,                 # personality, permanent: per pass made
+    "passed": 0.0,                   # personality, permanent: per time overtaken
+    "draft": 0.0,                    # personality, permanent: per share of time in a tow
     "bonus_overtake": 0.06,          # optional, fading: per pass made
     "bonus_passed": 0.06,            # optional, fading: per time overtaken
     "bonus_draft": 0.3,              # optional, fading: per share of time in a tow
 }
+
+
+# Racing personalities, bred by scoring training-camp races differently.
+# Each is a change to RACE_WEIGHTS.  Evolution keeps whatever scores well, so
+# the camp's scoring is the driver's upbringing.
+STYLES = {
+    "balanced": {},
+    # Dangerous Dave: places and passes are everything, damage is cheap.
+    "aggressive": {"place": [4.0, 2.5, 1.0, 0.0], "damage": 0.6, "fault": 0.05, "walls": 0.02,
+                   "overtake": 0.35, "passed": 0.25, "draft": 0.6},
+    # Careful Keith: bring the car home in one piece, avoid contact at all costs.
+    "cautious": {"place": [2.0, 1.3, 0.6, 0.0], "damage": 5.0, "fault": 1.0, "walls": 0.15},
+}
+
+
+def style_weights(style: str | None) -> dict:
+    return {**RACE_WEIGHTS, **STYLES.get(style or "balanced", {})}
 
 
 def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.ndarray:
@@ -329,7 +349,9 @@ def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.nd
     w = weights or RACE_WEIGHTS
     r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
     score = (np.asarray(w["place"])[r["place"].astype(int) - 1] + w["laps"] * r["laps"]
-             - w["damage"] * r["damage"] - w["fault"] * r["fault"] - w["walls"] * r["walls"])
+             - w["damage"] * r["damage"] - w["fault"] * r["fault"] - w["walls"] * r["walls"]
+             + w.get("overtake", 0.0) * r["overtakes"] - w.get("passed", 0.0) * r["passed"]
+             + w.get("draft", 0.0) * r["draft"])
     if bonus:
         score += bonus * (w["bonus_overtake"] * r["overtakes"] - w["bonus_passed"] * r["passed"]
                           + w["bonus_draft"] * r["draft"])
@@ -567,15 +589,21 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
 
 def train(run: str = "default", generations: int = 50, population: int = 80, elites: int = 6,
           seed: int = 0, tracks: list[str] | None = None, phase2_from: int | None = None,
-          arch: dict | None = None, races_per_track: int = 2, race_bonuses: bool = True,
-          race_laps: float | None = None,
-          workers: int = 0, on_generation=None, log=print) -> Path:
+          arch: dict | None = None, races_per_track: int | None = None, race_bonuses: bool | None = None,
+          race_laps: float | None = None, start_from: str | None = None, style: str | None = None,
+          name: str | None = None, workers: int = 0, on_generation=None, log=print) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
     Settings are fixed when a run is created; continuing a run uses the saved
     ones.  `phase2_from=None` starts racing school automatically once the
     champion laps every track cleanly.
+
+    `start_from="RUN"` or `"RUN:GEN"` starts a new run from another run's
+    drivers (its latest generation by default) and goes straight to racing
+    school: a training camp.  Settings not given are taken from that run.
+    `style` picks a racing personality (see STYLES); `name` is shown in the
+    game.
     """
     run_dir = RUNS_DIR / run
     config_path = run_dir / "config.json"
@@ -586,14 +614,34 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
     if config_path.exists():
         config = load_config(run_dir)
     else:
+        parent = None
+        if start_from:
+            src_run, _, src_gen = start_from.partition(":")
+            src_dir = RUNS_DIR / src_run
+            src_gens = list_generations(src_dir)
+            if not src_gens:
+                raise ValueError(f"no trained run called '{src_run}' to start from")
+            parent = {"run": src_run, "gen": int(src_gen) if src_gen else src_gens[-1]}
+            src = load_config(src_dir)
+            arch = src["arch"]
+            tracks = tracks or src["tracks"]
+            races_per_track = races_per_track or src["races_per_track"]
+            if race_laps is None:
+                race_seconds = {t: src["race_seconds"][t] for t in tracks if t in src["race_seconds"]}
+            phase2_from = phase2_from or 1
+        tracks = tracks or Track.available()
+        if race_laps:
+            race_seconds = {t: round(race_laps * LAP_SECONDS.get(t, DEFAULT_SECONDS / 2), 1) for t in tracks}
+        elif not parent:
+            race_seconds = dict(RACE_SECONDS)
+        if race_bonuses is None:
+            race_bonuses = style in (None, "balanced")   # personalities have their own terms
         config = {"format": FORMAT, "population": population, "elites": elites, "seed": seed,
-                  "tracks": tracks or Track.available(), "phase2_from": phase2_from,
+                  "tracks": tracks, "phase2_from": phase2_from,
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
-                  "races_per_track": races_per_track, "race_bonuses": race_bonuses,
-                  "race_weights": dict(RACE_WEIGHTS),
-                  "race_seconds": ({t: round(race_laps * LAP_SECONDS.get(t, DEFAULT_SECONDS / 2), 1)
-                                    for t in (tracks or Track.available())}
-                                   if race_laps else dict(RACE_SECONDS)),
+                  "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
+                  "race_weights": style_weights(style), "race_seconds": race_seconds,
+                  "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
     arch, size, tracks, seed = config["arch"], config["population"], config["tracks"], config["seed"]
@@ -604,6 +652,10 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
     if done:
         last = load_generation(run_dir, done[-1])
         pop = breed(last["pop"], np.random.default_rng([seed, done[-1]]), size, config["elites"])
+    elif config.get("parent"):
+        # Training camp: the parent's whole generation, best first, bred on.
+        src = load_generation(RUNS_DIR / config["parent"]["run"], config["parent"]["gen"])
+        pop = breed(src["pop"], np.random.default_rng([seed, 0]), size, config["elites"])
     else:
         pop = random_weights(np.random.default_rng([seed, 0]), size, arch)
     assert pop.shape[1] == n_weights(arch)

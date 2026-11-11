@@ -765,7 +765,9 @@ class LabScreen(Screen):
         x = 114
         entry = self.entry()
         arch = self.config.get("arch")
-        ui.text(screen, "small", f"RUN '{self.app.ai_run}'", C_HUD_DIM, x, 4.0)
+        name = self.config.get("name")
+        title = f"{name.upper()}  ({self.config.get('style', 'balanced')})" if name else f"RUN '{self.app.ai_run}'"
+        ui.text(screen, "small", title, C_HUD_ACCENT if name else C_HUD_DIM, x, 4.0)
         if arch:
             from ai.brain import describe
             ui.text(screen, "small", describe(arch), C_HUD_DIM, x, 6.6)

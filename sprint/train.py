@@ -7,6 +7,12 @@
     python train.py --run long --race-laps 3                # longer training races
     python train.py --workers 4                             # use 4 CPU cores
 
+Training camps start from an existing run's drivers and give them a racing
+personality:
+
+    python train.py --run dave --from speedway --style aggressive --name "Dangerous Dave"
+    python train.py --run keith --from speedway --style cautious --name "Careful Keith"
+
 Phase 1, driving school: the whole generation drives the track as ghosts.
 Phase 2, racing school: real races with collisions, damage and drafting, from
 every grid position, against scripted cars and the AI's own champions.
@@ -38,11 +44,18 @@ def main() -> int:
     ap.add_argument("--population", type=int, default=80, help="drivers per generation (new runs)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--tracks", nargs="+", default=None, choices=Track.available())
-    ap.add_argument("--hidden", type=int, nargs="+", default=DEFAULT_ARCH["hidden"],
+    ap.add_argument("--hidden", type=int, nargs="+", default=None,
                     help="hidden layer sizes (new runs), e.g. --hidden 32 32")
-    ap.add_argument("--memory", type=int, default=DEFAULT_ARCH["memory"],
+    ap.add_argument("--memory", type=int, default=None,
                     help="memory values the network carries between decisions (new runs; 0 = none)")
-    ap.add_argument("--races", type=int, default=2, help="racing-school races per driver per track (new runs)")
+    ap.add_argument("--races", type=int, default=None,
+                    help="racing-school races per driver per track (new runs; default 2, or the --from run's)")
+    ap.add_argument("--from", dest="start_from", metavar="RUN[:GEN]",
+                    help="training camp: start a new run from another run's drivers (its latest "
+                         "generation unless GEN is given), straight into racing school")
+    ap.add_argument("--style", choices=["balanced", "aggressive", "cautious"], default=None,
+                    help="racing personality for a new run (how its races are scored)")
+    ap.add_argument("--name", help="racer name shown in the game for a new run")
     ap.add_argument("--race-laps", type=float, default=None,
                     help="length of racing-school races in laps (new runs; default about 2). Longer races "
                          "make crashes cost more but each generation takes longer")
@@ -71,15 +84,21 @@ def main() -> int:
               + " | ".join(cells) + f"  ({now - clock[0]:.0f}s)", flush=True)
         clock[0] = now
 
-    arch = {"hidden": args.hidden, "memory": args.memory}
+    arch = None
+    if args.hidden is not None or args.memory is not None:
+        arch = {"hidden": args.hidden or DEFAULT_ARCH["hidden"],
+                "memory": DEFAULT_ARCH["memory"] if args.memory is None else args.memory}
     try:
         evolve.train(run=args.run, generations=args.generations, population=args.population,
                      seed=args.seed, tracks=args.tracks, phase2_from=args.racing_from, arch=arch,
-                     races_per_track=args.races, race_bonuses=not args.no_race_bonuses,
-                     race_laps=args.race_laps,
+                     races_per_track=args.races, race_bonuses=False if args.no_race_bonuses else None,
+                     race_laps=args.race_laps, start_from=args.start_from, style=args.style,
+                     name=args.name,
                      workers=args.workers, on_generation=report,
                      log=lambda m: print(m, flush=True))
         config = evolve.load_config(run_dir)
+        if config.get("name"):
+            print(f"racer {config['name']} ({config.get('style')}), from {config.get('parent')}")
         print(f"network {describe(config['arch'])}; race bonuses "
               f"{'on' if config['race_bonuses'] else 'off'}; racing school from generation "
               f"{config.get('phase2_start') or '(not yet)'}")
