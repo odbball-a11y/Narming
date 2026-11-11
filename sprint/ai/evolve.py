@@ -48,6 +48,9 @@ RACE_SECONDS = {"speedway": 30.0, "technical": 46.0}
 LAP_SECONDS = {"speedway": 14.0, "technical": 23.0}
 DEFAULT_SECONDS = 40.0
 
+# Starting damage used in driving tests, rotating by generation.
+SOLO_DAMAGE = (0.0, 0.25, 0.5)
+
 # A ghost that makes no forward progress for this long is retired early.
 STALL_SECONDS = 2.5
 
@@ -123,10 +126,13 @@ class PackRun:
     of a generation, so what you watch is exactly what was scored.
     """
 
-    def __init__(self, weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None):
+    def __init__(self, weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None,
+                 slot: int = 0, damage: float = 0.0):
         self.track = get_track(track_name)
         self.count = len(weights)
-        self.world = World(self.track, slots=[0] * self.count, ghost=True, laps=10 ** 9)
+        self.world = World(self.track, slots=[slot] * self.count, ghost=True, laps=10 ** 9)
+        for car in self.world.cars:
+            car.damage = damage
         self.brains = Population(weights, arch)
         self.progress = _Progress(self.world, range(self.count))
         self.ticks = int((seconds or SOLO_SECONDS.get(track_name, DEFAULT_SECONDS)) * tuning.TICK_RATE)
@@ -158,9 +164,11 @@ class PackRun:
             self.done = True
 
 
-def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None) -> dict:
-    """Run every driver in `weights` on the track at once, as ghosts."""
-    run = PackRun(weights, arch, track_name, seconds)
+def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None,
+              slot: int = 0, damage: float = 0.0) -> dict:
+    """Run every driver in `weights` on the track at once, as ghosts, from
+    grid `slot` with `damage` already on the car."""
+    run = PackRun(weights, arch, track_name, seconds, slot, damage)
     while not run.done:
         run.step()
     cars = run.world.cars
@@ -326,20 +334,31 @@ def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.nd
 def _job(args):
     kind, weights, arch, task = args
     if kind == "solo":
-        return test_solo(weights, arch, task)
+        name, setup = task
+        return test_solo(weights, arch, name, slot=setup["slot"], damage=setup["damage"])
     return test_race(weights, arch, task)
+
+
+def solo_setup(gen: int) -> dict:
+    """Driving-test conditions for a generation (the same for all its
+    drivers): the grid box and the damage the car starts with rotate, so
+    drivers learn to cope with any start and with a damaged car.  Without
+    this they only ever practised from box 1 with a perfect car, and drove
+    badly the first time either changed."""
+    return {"slot": (gen - 1) % 4, "damage": SOLO_DAMAGE[(gen - 1) // 4 % len(SOLO_DAMAGE)]}
 
 
 def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=None,
                      bonus: float = 0.0, pool=None, chunks: int = 1,
-                     weights: dict | None = None) -> tuple[np.ndarray, dict]:
+                     weights: dict | None = None, setup: dict | None = None) -> tuple[np.ndarray, dict]:
     """Fitness for every driver (higher is better) and per-driver averages.
 
     No scenarios: driving school (solo only).  With scenarios: racing school,
     SOLO_SHARE of the solo score plus the rest from the races.
     """
     pieces = np.array_split(np.arange(len(pop)), max(1, min(chunks, len(pop))))
-    jobs = [("solo", pop[p], arch, name) for name in tracks for p in pieces]
+    setup = setup or {"slot": 0, "damage": 0.0}
+    jobs = [("solo", pop[p], arch, (name, setup)) for name in tracks for p in pieces]
     for scenario in scenarios or []:
         jobs += [("race", pop[p], arch, scenario) for p in pieces]
     results = list(pool.map(_job, jobs)) if pool else [_job(j) for j in jobs]
@@ -608,7 +627,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                     bonus = max(0.0, 1.0 - (gen - start) / BONUS_FADE)
             fitness, averages = score_population(pop, arch, tracks, resolved, bonus, pool,
                                                  chunks=max(1, workers),
-                                                 weights=config.get("race_weights"))
+                                                 weights=config.get("race_weights"),
+                                                 setup=solo_setup(gen))
             order = np.argsort(-fitness, kind="stable")
             fitness = fitness[order]
             np.savez_compressed(gen_path(run_dir, gen), pop=pop[order].astype(np.float32), fitness=fitness)
@@ -621,6 +641,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 "mean": round(float(fitness.mean()), 4),
                 "median": round(float(np.median(fitness)), 4),
                 "bonus": round(bonus, 3),
+                "solo_setup": solo_setup(gen),
                 "exam": exam(pop[0], arch, tracks),
             }
             if racing:

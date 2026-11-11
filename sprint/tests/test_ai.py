@@ -131,6 +131,16 @@ def test_solo_test_is_deterministic_and_independent_of_chunking():
     assert alone == evolve.test_solo(pop, ARCH, "speedway")["laps"][4]   # ghosts do not interact
 
 
+def test_driving_tests_rotate_grid_box_and_starting_damage():
+    setups = [evolve.solo_setup(g) for g in range(1, 13)]
+    assert [s["slot"] for s in setups[:4]] == [0, 1, 2, 3]
+    assert {s["damage"] for s in setups} == set(evolve.SOLO_DAMAGE)
+    pop = random_weights(np.random.default_rng(6), 3, ARCH)
+    run = evolve.PackRun(pop, ARCH, "speedway", seconds=1.0, slot=2, damage=0.5)
+    assert all(car.damage == 0.5 for car in run.world.cars)
+    assert (run.world.cars[0].x, run.world.cars[0].y) == run.track.grid[2][:2]
+
+
 def test_breeding_keeps_the_elites_and_is_seeded():
     pop = random_weights(np.random.default_rng(4), 12, ARCH)
     a = evolve.breed(pop, np.random.default_rng(9), 12, elites=3)

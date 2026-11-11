@@ -826,7 +826,9 @@ class PackScreen(Screen):
         gen = min(self.gens, key=lambda g: abs(g - gen))
         self.gen = gen
         data = evolve.load_generation(self.run_dir, gen)
-        self.pack = evolve.PackRun(data["pop"], self.arch, self.track_name)
+        setup = evolve.solo_setup(gen)          # the conditions it was tested in
+        self.pack = evolve.PackRun(data["pop"], self.arch, self.track_name, slot=setup["slot"],
+                                   damage=setup["damage"])
         self.renderer = self.app.renderer_for(self.pack.track)
         self.accumulator = 0.0
         self.wait = 0.0
@@ -907,6 +909,9 @@ class PackScreen(Screen):
         laps = [car.best_lap for car in world.cars if car.best_lap is not None]
         ui.text(screen, "small", "BEST LAP SO FAR", C_HUD_DIM, 100, 1.0)
         ui.text(screen, "big", format_time(min(laps) if laps else None), C_HUD_TEXT, 100, 3.6)
+        setup = evolve.solo_setup(self.gen)
+        ui.text(screen, "small", f"grid box {setup['slot'] + 1}, starting damage {setup['damage'] * 100:.0f}%",
+                C_HUD_DIM, 64, 8.2)
         ui.text(screen, "small", "TIME", C_HUD_DIM, 136, 1.0)
         ui.text(screen, "big", f"{world.time:4.1f}s", C_HUD_TEXT, 136, 3.6)
         mode = "AUTO: next generation follows" if self.auto else "AUTO OFF"
