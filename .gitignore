@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 table.json
 *.tmp
+.venv/
+.pytest_cache/
+shots/

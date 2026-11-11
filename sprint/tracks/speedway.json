@@ -1,0 +1,27 @@
+{
+  "name": "Speedway",
+  "laps": 3,
+  "verge": 3.0,
+  "checkpoints": 12,
+  "comment": "Each point is [x, y, track width]. World is 160 x 90, y down; keep y >= 12 for the HUD strip. Order of points = direction of travel. The first point is the start/finish line.",
+  "points": [
+    [70, 77, 12],
+    [100, 77, 12],
+    [126, 76, 12],
+    [144, 66, 12.5],
+    [148, 48, 12.5],
+    [138, 32, 12],
+    [118, 24, 12],
+    [98, 27, 11.5],
+    [84, 40, 11],
+    [68, 46, 11],
+    [54, 38, 11],
+    [42, 25, 11.5],
+    [26, 24, 12],
+    [14, 36, 12.5],
+    [13, 56, 12.5],
+    [22, 72, 12],
+    [42, 77, 12]
+  ],
+  "racing_line_offsets": null
+}

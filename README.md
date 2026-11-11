@@ -106,3 +106,7 @@ print(t.view("Ben")["legal"])   # {'fold': True, 'check': False, 'call': 4, 'rai
 ```bash
 python -m unittest discover -s tests
 ```
+
+## Also in this repository
+
+`sprint/` holds a separate project, AI Sprint Racing (a Pygame top-down racer). See `sprint/README.md`.

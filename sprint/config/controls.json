@@ -1,0 +1,9 @@
+{
+  "comment": "Keyboard bindings for up to four human players. Key names are pygame key names: letters and digits as themselves, plus 'left', 'right', 'up', 'down', 'space', 'left shift', 'right ctrl', 'return', '[0]'..'[9]' for the numeric keypad, etc. 'brake' also reverses when the car is nearly stopped.",
+  "players": [
+    {"name": "Arrows", "left": "left", "right": "right", "throttle": "up", "brake": "down"},
+    {"name": "WASD", "left": "a", "right": "d", "throttle": "w", "brake": "s"},
+    {"name": "IJKL", "left": "j", "right": "l", "throttle": "i", "brake": "k"},
+    {"name": "Numpad", "left": "[4]", "right": "[6]", "throttle": "[8]", "brake": "[5]"}
+  ]
+}
