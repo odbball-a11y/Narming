@@ -43,7 +43,7 @@ py render_frames.py --out shots     # save a PNG of every screen without opening
 
 ## Playing
 
-Main menu: **Race**, **AI Lab**, **Controls**, **Replays**, **Quit**. Menus use the arrow
+Main menu: **Race**, **Stable**, **AI Lab**, **Controls**, **Replays**, **Quit**. Menus use the arrow
 keys, Enter and Esc.
 
 **Race setup:** pick the track (Speedway or Technical), the number of laps,
@@ -97,6 +97,48 @@ lengths, and you get a tow: up to 15% more top speed and 40% more acceleration. 
 stream from the lead car to yours and DRAFT shows in your HUD panel.
 
 Both are tunable in `sim/tuning.py` (the Damage and Drafting sections).
+
+## Your stable
+
+Main menu, **Stable**. Build a stable of named AI racers and race them against
+the house rivals, Dangerous Dave and Careful Keith.
+
+- **Create a racer**: type a name, set its **aggression** and **caution**
+  (0 to 1), tick its **training partners**, choose how many **generations**
+  to train, then **Start training**. Training runs in the background (about
+  half a minute per generation) while you use the rest of the game. New
+  racers start from a racing-school graduate that can already lap Speedway.
+  - Aggression: training rewards places, passes and slipstreaming, and
+    damage is cheap (Dangerous Dave is 1.0).
+  - Caution: training makes damage and collisions it causes very costly
+    (Careful Keith is 1.0).
+  - Training partners: at first only scripted cars. Every racer you train
+    becomes a possible partner for the next, and an upskill can train
+    against the racer itself. House rivals are never training partners:
+    they are what your racers are built to beat.
+- **The racer's card** shows its personality, what it trained against, its
+  measured racecraft (best lap alone, and a test race from last against three
+  scripted cars: place, passes, collisions caused, damage, time in a tow),
+  charts over every generation, and its career (races, wins, podiums, best
+  race laps).
+- **Race the house rivals**: your racer against the house rivals with a
+  rolling start; the starting order rotates each race. Finished races count
+  towards its career.
+- **Upskill**: more training for an existing racer, with a new personality
+  or new partners, carrying on from its current brain.
+- Training stops if you quit the game; **Resume training** on the card
+  carries on from where it stopped. Only one racer trains at a time.
+
+Your racers are saved in the `stable` folder.
+
+Coming next: breeding (litters, the best foal picked for you, a breeding
+certificate), careers with retirement to stud, and championships.
+
+### Making house rivals (Workshop)
+
+`py -m game --workshop` opens the same screens as a workshop. Racers made
+there can also train against the existing house rivals, and **Publish as house
+rival** copies one into `house/rivals`, which ships with the game.
 
 ## AI drivers
 
@@ -227,6 +269,7 @@ Edit, save, press F5 during a race. The ones that change the feel most:
 
 ```
 ai/       learned drivers (NumPy only, no pygame)
+  stable.py   racers: create, train, upskill, careers, house rivals, publish
   brain.py    what a driver sees, the neural network, NeuralDriver
   evolve.py   tests, breeding, the training loop, saved runs
   roster.py   puts trained champions in the driver registry
@@ -242,10 +285,12 @@ sim/      simulation only, never imports pygame (tests enforce it)
 game/     pygame front end
   app.py      window, main loop, screen switching
   screens.py  menus, race screen (fixed-timestep loop, interpolated drawing)
+  stable_screens.py  stable, create-a-racer and racer-card screens
   render.py   camera, procedural track / car / HUD drawing
   input.py    key bindings, keyboard and gamepad Drivers
   audio.py    synthesised sound, silent fallback
 tracks/   one JSON file per track
+house/    shipped AI: the graduate starting brain and the house rivals
 config/   controls.json
 tests/    pytest suite
 headless.py, train.py, compare.py, render_frames.py   command-line tools

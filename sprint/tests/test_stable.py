@@ -1,0 +1,225 @@
+"""The racing stable: racers, personalities, training partners, upskilling,
+careers, house rivals and the workshop, plus their screens."""
+import shutil
+
+import numpy as np
+import pygame
+import pytest
+
+from ai import evolve, stable
+from sim.driver import driver_types
+from sim.race import FINISHED, Race
+
+
+@pytest.fixture
+def dirs(tmp_path, monkeypatch):
+    """A private stable, workshop and house-rivals folder; the shipped
+    graduate and rivals are copied in."""
+    rivals = tmp_path / "rivals"
+    shutil.copytree(stable.RIVALS_DIR, rivals)
+    monkeypatch.setattr(stable, "RIVALS_DIR", rivals)
+    monkeypatch.setattr(stable, "STABLE_DIR", tmp_path / "stable")
+    monkeypatch.setattr(stable, "WORKSHOP_DIR", tmp_path / "workshop")
+    return tmp_path
+
+
+def quick_train(racer_dir, generations=None):
+    """Train with a tiny population so tests stay fast."""
+    if generations:
+        racer = stable.load(racer_dir)
+        racer["versions"][-1]["generations"] = generations
+        stable.save(racer_dir, racer)
+    stable.train(racer_dir, population=4)
+
+
+def test_shipped_graduate_and_house_rivals():
+    grad = stable.graduate()
+    assert grad["tracks"] == ["speedway"]
+    with np.load(stable.GRADUATE.with_suffix(".npz")) as data:
+        assert data["pop"].shape[1] == evolve.n_weights(grad["arch"])
+    names = {r["name"] for r in stable.house_rivals()}
+    assert {"Dangerous Dave", "Careful Keith"} <= names
+    dave = stable.house_driver("dangerous-dave")
+    assert dave.label == "Dangerous Dave"
+
+
+def test_sliders_span_balanced_to_dave_and_keith():
+    assert stable.sliders_to_weights(0, 0)["damage"] == 2.0
+    dave = stable.sliders_to_weights(1, 0)
+    keith = stable.sliders_to_weights(0, 1)
+    for key in ("damage", "fault", "overtake", "draft", "place"):
+        assert dave[key] == evolve.style_weights("aggressive")[key]
+        assert keith[key] == evolve.style_weights("cautious")[key]
+    middle = stable.sliders_to_weights(0.5, 0.5)
+    assert 0 < middle["overtake"] < dave["overtake"]
+    assert middle["damage"] > 0
+
+
+def test_create_train_upskill_and_partners(dirs):
+    root = stable.STABLE_DIR
+    first = stable.create(root, "Speedy Sue", 0.8, 0.2, [{"name": "Scripted car", "kind": "scripted"}], 2)
+    assert first.name == "speedy-sue" and stable.brain_file(first) is None
+    assert stable.needs_training(first)
+    # Before anything is trained, the only partners are scripted cars and itself.
+    assert [p["kind"] for p in stable.partner_options(root)] == ["scripted", "self"]
+    quick_train(first)
+    assert stable.progress(first) == {"version": 1, "done": 2, "target": 2}
+    config = evolve.load_config(first / "v1")
+    assert config["race_weights"] == stable.sliders_to_weights(0.8, 0.2)
+    assert config["parent"]["file"].endswith("graduate.npz") and config["phase2_start"] == 1
+    # A trained racer becomes a training partner for the next one ...
+    options = stable.partner_options(root)
+    assert any(p["name"] == "Speedy Sue" for p in options)
+    assert not any(p["key"].startswith("house:") for p in options)     # house rivals are race-only
+    assert any(p["key"].startswith("house:") for p in stable.partner_options(root, include_house=True))
+    second = stable.create(root, "Speedy Sue", 0.1, 0.9, [o for o in options if o["kind"] == "file"], 1)
+    assert second.name == "speedy-sue-2"
+    quick_train(second)
+    scenarios = evolve.load_history(second / "v1")[0]["scenarios"]
+    assert all(r == "p:0" for s in scenarios for r in s["rivals"])
+    # Upskilling carries on from the current brain with a new personality.
+    stable.upskill(first, 0.2, 0.9, [{"name": "Itself", "kind": "self"}], 1)
+    assert stable.load(first)["caution"] == 0.9 and stable.progress(first)["version"] == 2
+    quick_train(first)
+    assert evolve.load_config(first / "v2")["parent"]["file"].endswith("v1/gen_0002.npz")
+    assert [h["version"] for h in stable.history(first)] == [1, 1, 2]
+    assert stable.brain_file(first).parent.name == "v2"
+    with pytest.raises(ValueError):
+        stable.create(root, "   ", 0, 0, [], 1)
+
+
+def test_career_racing_and_registry(dirs):
+    racer_dir = stable.create(stable.STABLE_DIR, "Racer X", 0.5, 0.5,
+                              [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(racer_dir)
+    keys = stable.register(stable.STABLE_DIR)
+    assert "racer:racer-x" in keys and "house:dangerous-dave" in keys
+    assert dict(driver_types())["racer:racer-x"] == "Racer X"
+    driver = stable.champion(racer_dir)
+    race = Race("speedway", [(0, driver), (1, stable.house_driver("careful-keith"))], laps=1, rolling=True)
+    race.run(max_seconds=120)
+    assert race.phase == FINISHED
+    row = next(r for r in race.results() if r["car"] == 0)
+    stable.record_result(racer_dir, row["place"], row["best_lap"], "speedway")
+    stable.record_result(racer_dir, 1, 12.0, "speedway")
+    career = stable.load(racer_dir)["career"]
+    assert career["races"] == 2 and career["wins"] >= 1 and career["best_laps"]["speedway"] <= 12.0
+
+
+def test_workshop_publishes_house_rivals(dirs):
+    racer_dir = stable.create(stable.WORKSHOP_DIR, "The Professor", 0.4, 0.6,
+                              [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(racer_dir)
+    stable.publish(racer_dir)
+    rival = next(r for r in stable.house_rivals() if r["id"] == "the-professor")
+    assert rival["name"] == "The Professor" and rival["caution"] == 0.6 and rival["exam"]
+    assert stable.house_driver("the-professor").label == "The Professor"
+
+
+# ----------------------------------------------------------------- screens
+
+@pytest.fixture
+def app(dirs, monkeypatch):
+    from game.app import App
+    from game.audio import Audio
+    pygame.display.init()
+    pygame.font.init()
+    a = App(pygame.display.set_mode((640, 360)), Audio())
+    started = []
+
+    def fake_start(racer_dir):                     # train in-process, tiny, instead of a subprocess
+        started.append(racer_dir)
+        quick_train(racer_dir, generations=1)
+
+    monkeypatch.setattr(a, "start_training", fake_start)
+    a.started = started
+    return a
+
+
+def press(app, *keys):
+    for key in keys:
+        app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key))
+        app.draw()
+
+
+def type_text(app, text):
+    for ch in text:
+        app.handle_event(pygame.event.Event(pygame.TEXTINPUT, text=ch))
+    app.draw()
+
+
+def test_create_a_racer_through_the_screens_then_race_it(app):
+    from game.screens import MainMenu, RaceScreen
+    from game.stable_screens import CreateScreen, RacerScreen, StableScreen
+    app.show(MainMenu(app))
+    press(app, pygame.K_DOWN, pygame.K_RETURN)
+    assert isinstance(app.current, StableScreen)
+    press(app, pygame.K_RETURN)                                  # + CREATE A RACER
+    create = app.current
+    assert isinstance(create, CreateScreen)
+    assert [p["kind"] for p in create.partners] == ["scripted"]  # only scripted cars to start with
+    press(app, *[pygame.K_DOWN] * create.rows().index("start"), pygame.K_RETURN)   # START, but no name
+    assert "name" in create.message
+    create.row = 0
+    type_text(app, "Zippy Zoe!")
+    press(app, pygame.K_BACKSPACE)
+    assert create.name == "Zippy Zoe"
+    press(app, pygame.K_DOWN, pygame.K_RIGHT, pygame.K_RIGHT)    # aggression 0.3 -> 0.5
+    press(app, pygame.K_DOWN, pygame.K_LEFT)                     # caution 0.3 -> 0.2
+    assert (create.aggression, create.caution) == (0.5, 0.2)
+    create.row = create.rows().index("start")
+    press(app, pygame.K_RETURN)
+    card = app.current
+    assert isinstance(card, RacerScreen) and app.started
+    racer = stable.load(card.racer_dir)
+    assert racer["name"] == "Zippy Zoe" and racer["aggression"] == 0.5
+    card.reload()
+    app.draw()
+    assert card.rows()[0] == "race"
+    press(app, pygame.K_RETURN)                                  # RACE THE HOUSE RIVALS
+    view = app.current
+    assert isinstance(view, RaceScreen) and view.race.rolling
+    assert [d.label for d in view.race.drivers][:3] == ["Zippy Zoe", "Careful Keith", "Dangerous Dave"]
+    while not view.over:
+        view.tick()
+    assert stable.load(card.racer_dir)["career"]["races"] == 1   # career recorded
+    press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)   # BACK TO ... the racer card
+    assert isinstance(app.current, RacerScreen)
+    press(app, pygame.K_DOWN, pygame.K_RETURN)                   # UPSKILL
+    assert isinstance(app.current, CreateScreen) and app.current.racer_dir == card.racer_dir
+    assert any(p["kind"] == "self" for p in app.current.partners)
+    press(app, pygame.K_ESCAPE, pygame.K_ESCAPE)
+    assert isinstance(app.current, StableScreen) and len(app.current.racers) == 1
+
+
+def test_workshop_screen_can_train_against_and_publish_house_rivals(app):
+    from game.stable_screens import CreateScreen, RacerScreen, StableScreen
+    app.workshop = True
+    app.show(StableScreen(app))
+    press(app, pygame.K_RETURN)
+    create = app.current
+    assert any(p["key"] == "house:dangerous-dave" for p in create.partners)
+    type_text(app, "Brick Wall")
+    create.row = create.rows().index("start")
+    press(app, pygame.K_RETURN)
+    card = app.current
+    assert isinstance(card, RacerScreen)
+    assert str(stable.WORKSHOP_DIR) in str(card.racer_dir)
+    card.row = card.rows().index("publish")
+    press(app, pygame.K_RETURN)
+    assert "house rival" in card.message
+    assert any(r["name"] == "Brick Wall" for r in stable.house_rivals())
+
+
+def test_training_runs_in_a_separate_process_and_can_be_stopped(dirs):
+    from game.app import App
+    from game.audio import Audio
+    pygame.display.init()
+    a = App(pygame.display.set_mode((320, 180)), Audio())
+    racer_dir = stable.create(stable.STABLE_DIR, "Bg", 0.3, 0.3, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    a.start_training(racer_dir)
+    assert a.training_dir() == str(racer_dir)
+    with pytest.raises(RuntimeError):
+        a.start_training(racer_dir)
+    a.stop_training()
+    assert a.training_dir() is None and (racer_dir / "train.log").exists()

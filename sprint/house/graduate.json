@@ -1,0 +1,17 @@
+{
+ "arch": {
+  "hidden": [
+   24,
+   16
+  ],
+  "memory": 4
+ },
+ "tracks": [
+  "speedway"
+ ],
+ "race_seconds": {
+  "speedway": 42.0
+ },
+ "races_per_track": 4,
+ "source": "run 'speedway' generation 120: driving school, then 102 generations of racing school on Speedway, 3-lap rolling-start races"
+}

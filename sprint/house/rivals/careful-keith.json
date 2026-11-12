@@ -1,0 +1,34 @@
+{
+ "name": "Careful Keith",
+ "aggression": 0.0,
+ "caution": 1.0,
+ "arch": {
+  "hidden": [
+   24,
+   16
+  ],
+  "memory": 4
+ },
+ "created": "2026-11-12",
+ "generations": 40,
+ "from": "graduate",
+ "exam": {
+  "speedway": {
+   "solo_laps": 2.462,
+   "solo_best_lap": 12.209092530057221,
+   "solo_damage": 0.0,
+   "race_place": 4,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 43.78482491353088,
+   "race_best_lap": 14.173456780213556,
+   "race_hits": 1.0,
+   "race_fault": 0.0,
+   "race_walls": 1,
+   "race_overtakes": 2,
+   "race_passed": 2,
+   "race_draft": 0.233,
+   "race_damage": 0.107
+  }
+ }
+}

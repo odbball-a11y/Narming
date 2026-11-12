@@ -69,7 +69,7 @@ def draw_list(ui, screen, items, selected: int, x: float, y: float, step: float 
 # ------------------------------------------------------------------ menus
 
 class MainMenu(Screen):
-    ITEMS = ["RACE", "AI LAB", "CONTROLS", "REPLAYS", "QUIT"]
+    ITEMS = ["RACE", "STABLE", "AI LAB", "CONTROLS", "REPLAYS", "QUIT"]
 
     def __init__(self, app):
         super().__init__(app)
@@ -89,6 +89,9 @@ class MainMenu(Screen):
             choice = self.ITEMS[self.selected]
             if choice == "RACE":
                 self.app.show(SetupScreen(self.app))
+            elif choice == "STABLE":
+                from .stable_screens import StableScreen
+                self.app.show(StableScreen(self.app))
             elif choice == "AI LAB":
                 self.app.show(LabScreen(self.app))
             elif choice == "CONTROLS":
@@ -104,7 +107,8 @@ class MainMenu(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         draw_title(ui, screen)
-        draw_list(ui, screen, self.ITEMS, self.selected, 66, 34, 7.5)
+        items = ["WORKSHOP" if i == "STABLE" and self.app.workshop else i for i in self.ITEMS]
+        draw_list(ui, screen, items, self.selected, 66, 31, 7.0)
         ui.text(screen, "small", "ARROWS move    ENTER select    ESC back    F11 fullscreen",
                 C_HUD_DIM, WORLD_W / 2, 84, "center")
 
@@ -118,6 +122,8 @@ class SetupScreen(Screen):
         super().__init__(app)
         self.tracks = Track.available()
         roster.register_champions(app.ai_run)      # trained drivers join the list
+        from ai import stable
+        stable.register(app.stable_root)          # house rivals and your racers too
         known = {k for k, _ in driver_types()}
         app.setup["drivers"] = [k if k in known else None for k in app.setup["drivers"]]
         self.row = 0
@@ -466,6 +472,8 @@ class RaceScreen(Screen):
 
     def tick(self) -> None:
         events = self.race.step()
+        if not self.is_replay and any(e[0] == "race_over" for e in events):
+            self.app.record_race(self.race)
         if self.race.phase != race_module.COUNTDOWN:
             self.renderer.on_tick(self.race.world)
         self.app.audio.handle_events(events)

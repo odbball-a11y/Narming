@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pygame
 
@@ -17,8 +20,11 @@ WINDOW_SIZE = (1280, 720)
 
 
 class App:
-    def __init__(self, screen: pygame.Surface, audio: Audio | None = None):
+    def __init__(self, screen: pygame.Surface, audio: Audio | None = None, workshop: bool = False):
         self.screen = screen
+        self.workshop = workshop          # making house rivals instead of playing
+        self.trainer = None               # {"proc": Popen, "dir": racer folder, "log": file}
+        self.race_counter = 0
         self.audio = audio or Audio(enabled=False)
         self.running = True
         self.ui = UI(screen.get_size())
@@ -43,6 +49,60 @@ class App:
 
     def quit(self) -> None:
         self.running = False
+        self.stop_training()
+
+    # -------------------------------------------------------------- stable
+
+    @property
+    def stable_root(self) -> Path:
+        from ai import stable
+        return stable.WORKSHOP_DIR if self.workshop else stable.STABLE_DIR
+
+    def training_dir(self) -> str | None:
+        """Folder of the racer being trained, or None.  Notices when the
+        training process has finished."""
+        if self.trainer is None:
+            return None
+        if self.trainer["proc"].poll() is not None:
+            self.trainer["log"].close()
+            self.trainer = None
+            return None
+        return self.trainer["dir"]
+
+    def start_training(self, racer_dir) -> None:
+        """Train a racer in a separate process, so the game stays smooth."""
+        from ai import evolve
+        if self.training_dir():
+            raise RuntimeError("already training")
+        workers = max(1, min(3, (os.cpu_count() or 2) - 1))
+        log = open(Path(racer_dir) / "train.log", "a", encoding="utf-8")
+        proc = subprocess.Popen([sys.executable, "-m", "ai.stable", "train", str(racer_dir),
+                                 "--workers", str(workers)],
+                                cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT)
+        self.trainer = {"proc": proc, "dir": str(racer_dir), "log": log}
+
+    def stop_training(self) -> None:
+        """Stop training; it can be resumed later from where it stopped."""
+        if self.trainer is None:
+            return
+        proc = self.trainer["proc"]
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        self.trainer["log"].close()
+        self.trainer = None
+
+    def record_race(self, race) -> None:
+        """Add a finished race to the careers of any stable racers in it."""
+        from ai import stable
+        for row in race.results():
+            driver = race.drivers[row["car"]]
+            racer_dir = getattr(driver, "racer_dir", None)
+            if racer_dir and row["finished"]:
+                stable.record_result(racer_dir, row["place"], row["best_lap"], race.track.key)
 
     def renderer_for(self, track: Track) -> RaceRenderer:
         """Track paintings are cached: drawing one takes a moment."""
@@ -92,6 +152,8 @@ def main(argv=None) -> int:
     ap.add_argument("--race", action="store_true",
                     help="skip the main menu and go straight to race setup")
     ap.add_argument("--track", choices=Track.available(), help="preselect a track")
+    ap.add_argument("--workshop", action="store_true",
+                    help="make house rivals (the opponents that ship with the game)")
     args = ap.parse_args(argv)
 
     os.environ.setdefault("SDL_VIDEO_CENTERED", "1")
@@ -101,7 +163,7 @@ def main(argv=None) -> int:
     pygame.display.set_caption("AI Sprint Racing")
     flags = pygame.RESIZABLE | (pygame.FULLSCREEN if args.fullscreen else 0)
     screen = pygame.display.set_mode((0, 0) if args.fullscreen else WINDOW_SIZE, flags)
-    app = App(screen, Audio(enabled=not args.no_sound))
+    app = App(screen, Audio(enabled=not args.no_sound), workshop=args.workshop)
     if args.track:
         app.setup["track"] = args.track
         app.setup["laps"] = Track.load(args.track).default_laps
@@ -116,5 +178,6 @@ def main(argv=None) -> int:
         app.update(frame)
         app.draw()
         pygame.display.flip()
+    app.stop_training()
     pygame.quit()
     return 0

@@ -37,7 +37,29 @@ from sim.world import World
 from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver, Population,
                     n_weights, observe, random_weights, to_controls)
 
-RUNS_DIR = Path(__file__).resolve().parent.parent / "training"
+PROJECT = Path(__file__).resolve().parent.parent
+RUNS_DIR = PROJECT / "training"
+
+
+def project_path(path) -> str:
+    """Store a path relative to the project folder when it is inside it, so
+    saved runs survive the project being moved."""
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(PROJECT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+def resolve_path(stored: str) -> Path:
+    p = Path(stored)
+    return p if p.is_absolute() else PROJECT / p
+
+
+def load_pop_file(stored: str) -> np.ndarray:
+    """Drivers (best first) from a generation or brain file."""
+    with np.load(resolve_path(stored)) as data:
+        return data["pop"].astype(np.float64)
 FORMAT = 2
 
 # Seconds per test: about two laps for a good driver.  Training races must be
@@ -566,9 +588,23 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
     hall = [g for g in history_gens if g == base or (g >= start and (g - start) % HALL_EVERY == 0 and g < gen)]
     slots = list(rng.permutation(4))
     scenarios = []
+    partners = config.get("partners")
+    own = recent + [g for g in hall if g not in recent]
     for k in range(count):
         rivals = []
         for _ in range(3):
+            if partners:
+                # Rivals chosen by the player: each seat is one of the
+                # training partners; "self" = the racer's own recent best.
+                p = int(rng.integers(0, len(partners)))
+                kind = partners[p]["kind"]
+                if kind == "self":
+                    rivals.append(int(rng.choice(own)) if own else "scripted")
+                elif kind == "file":
+                    rivals.append(f"p:{p}")
+                else:
+                    rivals.append("scripted")
+                continue
             kind = "scripted"
             if rel >= SCRIPTED_ONLY_GENS:
                 pick = rng.random()
@@ -591,7 +627,9 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           seed: int = 0, tracks: list[str] | None = None, phase2_from: int | None = None,
           arch: dict | None = None, races_per_track: int | None = None, race_bonuses: bool | None = None,
           race_laps: float | None = None, start_from: str | None = None, style: str | None = None,
-          name: str | None = None, workers: int = 0, on_generation=None, log=print) -> Path:
+          name: str | None = None, workers: int = 0, on_generation=None, log=print,
+          root=None, start_file: str | None = None, race_weights: dict | None = None,
+          race_seconds: dict | None = None, partners: list | None = None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -604,8 +642,14 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
     school: a training camp.  Settings not given are taken from that run.
     `style` picks a racing personality (see STYLES); `name` is shown in the
     game.
+
+    For the stable (ai/stable.py): `root` is the folder holding the run,
+    `start_file` a saved population to breed on from, `race_weights` the
+    scoring (from the personality sliders), `race_seconds` the race length
+    per track, and `partners` the training partners: dicts with "kind" =
+    "scripted", "self" (its own recent best) or "file" (a saved driver).
     """
-    run_dir = RUNS_DIR / run
+    run_dir = Path(root or RUNS_DIR) / run
     config_path = run_dir / "config.json"
     if config_path.exists() and load_config(run_dir).get("format") != FORMAT:
         moved = _archive_old_run(run_dir)
@@ -626,13 +670,16 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             arch = src["arch"]
             tracks = tracks or src["tracks"]
             races_per_track = races_per_track or src["races_per_track"]
-            if race_laps is None:
+            if race_laps is None and race_seconds is None:
                 race_seconds = {t: src["race_seconds"][t] for t in tracks if t in src["race_seconds"]}
+            phase2_from = phase2_from or 1
+        if start_file:
+            parent = {"file": project_path(start_file)}
             phase2_from = phase2_from or 1
         tracks = tracks or Track.available()
         if race_laps:
             race_seconds = {t: round(race_laps * LAP_SECONDS.get(t, DEFAULT_SECONDS / 2), 1) for t in tracks}
-        elif not parent:
+        elif race_seconds is None and not (parent and "run" in parent):
             race_seconds = dict(RACE_SECONDS)
         if race_bonuses is None:
             race_bonuses = style in (None, "balanced")   # personalities have their own terms
@@ -640,7 +687,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "tracks": tracks, "phase2_from": phase2_from,
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
                   "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
-                  "race_weights": style_weights(style), "race_seconds": race_seconds,
+                  "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
+                  "partners": partners,
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
@@ -654,17 +702,25 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
         pop = breed(last["pop"], np.random.default_rng([seed, done[-1]]), size, config["elites"])
     elif config.get("parent"):
         # Training camp: the parent's whole generation, best first, bred on.
-        src = load_generation(RUNS_DIR / config["parent"]["run"], config["parent"]["gen"])
-        pop = breed(src["pop"], np.random.default_rng([seed, 0]), size, config["elites"])
+        if "file" in config["parent"]:
+            src_pop = load_pop_file(config["parent"]["file"])
+        else:
+            src_pop = load_generation(RUNS_DIR / config["parent"]["run"], config["parent"]["gen"])["pop"]
+        pop = breed(src_pop, np.random.default_rng([seed, 0]), size, config["elites"])
     else:
         pop = random_weights(np.random.default_rng([seed, 0]), size, arch)
     assert pop.shape[1] == n_weights(arch)
     champions: dict[int, np.ndarray] = {}
 
-    def champion_of(gen: int) -> np.ndarray:
-        if gen not in champions:
-            champions[gen] = load_generation(run_dir, gen)["pop"][0]
-        return champions[gen]
+    def champion_of(rival) -> np.ndarray:
+        if rival not in champions:
+            if isinstance(rival, str):            # "p:<i>": a chosen training partner
+                champions[rival] = load_pop_file(config["partners"][int(rival[2:])]["file"])[0]
+                if len(champions[rival]) != n_weights(arch):
+                    raise ValueError("training partner has a different network shape")
+            else:
+                champions[rival] = load_generation(run_dir, rival)["pop"][0]
+        return champions[rival]
 
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:

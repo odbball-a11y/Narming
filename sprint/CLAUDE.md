@@ -10,7 +10,8 @@ poker project (`holdem/`, `web/`, root `tests/`); leave it alone.
 ## Commands
 
 ```
-python -m game [--track T] [--no-sound] [--fullscreen]
+python -m game [--track T] [--no-sound] [--fullscreen] [--workshop]
+python -m ai.stable train stable/<id> [--workers N]   # what the game runs in the background
 python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [--bench STEPS]
 python train.py [--run NAME] [--generations N] [--hidden 24 16] [--memory 4] [--races 2]
                 [--no-race-bonuses] [--race-laps L] [--racing-from GEN] [--population N] [--workers N]
@@ -99,6 +100,53 @@ trained against scripted cars and his own cautious champions, so against
 aggressive cars he tails closely and runs into them when they cut in and
 brake (rear contact counts as caused). Proposed next: camps whose rival pool
 includes the other personalities' champions.
+
+## The stable (built: step 1 of 5)
+
+Agreed design, from the user: an AI-only racing stable in the spirit of Derby
+Owners Club. The player creates named racers (name, aggression and caution
+sliders, training partners, generations), trains them in the game, upskills
+them, races them against shipped **house rivals** (race-only, never training
+partners), and later breeds them. Dangerous Dave and Careful Keith are the
+user's own creations and the first house rivals; the user will make stronger
+ones in the workshop.
+
+- `ai/stable.py`: `house/graduate.npz/.json` (shipped start population:
+  "speedway" run gen 120, all 80 drivers, plus arch, track, race length and
+  races per generation), `house/rivals/<id>.npz/.json` (champion + card).
+  Racer folders `stable/<id>/` or `workshop/<id>/` (git-ignored) hold
+  `racer.json` (name, created, aggression, caution, parents, versions,
+  career) and one `evolve` run per version (`v1/`, `v2/`...). v1 breeds on
+  from the graduate, each upskill from the previous version's last
+  generation. `sliders_to_weights(a, c)` interpolates the race scoring from
+  balanced towards `STYLES["aggressive"]` (a=1) and `STYLES["cautious"]`
+  (c=1). `partner_options` = scripted, "self" (the run's own recent
+  champions, via `make_scenarios`), other trained racers in the same root,
+  and in the workshop the house rivals; partners are stored as
+  `{"kind": "file", "file": <gen npz>}` and resolved to `p:<i>` rivals.
+  `record_result` updates careers; `publish` writes a house rival;
+  `register` adds `house:` and `racer:` keys to the driver registry.
+- `evolve.train` gained `root`, `start_file`, `race_weights`,
+  `race_seconds` and `partners`; paths are stored relative to the project.
+- `game/stable_screens.py`: `StableScreen`, `CreateScreen` (text entry via
+  TEXTINPUT), `RacerScreen` (card, charts over all versions, race the house
+  rivals, upskill, stop/resume training, publish in the workshop).
+  `App.start_training` runs `python -m ai.stable train` as a subprocess
+  (3 workers at most; log in the racer folder), `stop_training` terminates
+  it (also on quit; training resumes later), `record_race` adds finished
+  races to careers (not replays).
+
+Still to build, in order: (3) breeding: litter of ~20 foals by swapping
+whole hidden neurons between the parents (they share the graduate as an
+ancestor), temperament = parents' mean plus noise; round 1 trials all foals
+(solo laps + one race, ~30 s) and shortlists 5; round 2 gives each a
+3-generation mini-camp and picks by the player's criterion (fastest lap, or
+fewest generations to a target time); the winner gets a breeding
+certificate (pedigree, litter rank, measured stats, temperament, labelled
+expectations from the parents' records). (4) careers: 20 races, then stud
+for up to 5 breedings, then death and a hall of fame. (5) championship
+across tracks, weather (wet/dry specialists from camp conditions), car
+traits on a fixed budget, 6-8 cars.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.

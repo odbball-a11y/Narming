@@ -44,9 +44,13 @@ def run_seconds(app, seconds, frame=1 / 60):
 def test_main_menu_navigation(app):
     assert isinstance(app.current, MainMenu)
     press(app, pygame.K_DOWN, pygame.K_RETURN)
-    assert isinstance(app.current, LabScreen)
+    from game.stable_screens import StableScreen
+    assert isinstance(app.current, StableScreen)
     press(app, pygame.K_ESCAPE)
     press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)
+    assert isinstance(app.current, LabScreen)
+    press(app, pygame.K_ESCAPE)
+    press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)
     assert isinstance(app.current, ControlsScreen)
     press(app, pygame.K_ESCAPE)
     press(app, pygame.K_UP, pygame.K_UP, pygame.K_RETURN)          # wraps to REPLAYS
