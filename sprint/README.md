@@ -95,7 +95,7 @@ players on one keyboard may see dropped inputs. That is hardware, not the game.
 | Technical | hairpin, chicane, narrow climb | narrow in places | about 22 s |
 | Grand Prix | long straight, three hairpins, chicane, long sweep | narrow | about 24 s |
 
-The AI racers in the stable only know Speedway so far.
+The shipped starting brain (the graduate) races all five tracks, so every racer you create or breed does too.
 
 ## Damage and drafting
 
@@ -118,8 +118,9 @@ the house rivals, Dangerous Dave and Careful Keith.
 - **Create a racer**: type a name, set its **aggression** and **caution**
   (0 to 1), tick its **training partners**, choose how many **generations**
   to train, then **Start training**. Training runs in the background (about
-  half a minute per generation) while you use the rest of the game. New
-  racers start from a racing-school graduate that can already lap Speedway.
+  a minute per generation) while you use the rest of the game. New racers
+  start from a graduate that can already race all five tracks, and train on
+  all five.
   - Aggression: training rewards places, passes and slipstreaming, and
     damage is cheap (Dangerous Dave is 1.0).
   - Caution: training makes damage and collisions it causes very costly
@@ -134,7 +135,8 @@ the house rivals, Dangerous Dave and Careful Keith.
   charts over every generation, and its career (races, wins, podiums, best
   race laps).
 - **Race the house rivals**: your racer against the house rivals with a
-  rolling start; the starting order rotates each race. Finished races count
+  rolling start, on the track shown under it (Left/Right to change); the
+  starting order rotates each race. Finished races count
   towards its career.
 - **Upskill**: more training for an existing racer, with a new personality
   or new partners, carrying on from its current brain.
@@ -158,7 +160,7 @@ Your racers are saved in the `stable` folder.
 **Breed two racers** (on the stable screen, once two racers are at stud):
 pick a sire and a dam, name the foal, and choose how the best foal is picked:
 
-- **Fastest lap** after its mini-camp, or
+- **Fastest pace** over the five tracks after its mini-camp, or
 - **Quickest learner**: fewest training generations to match its parents'
   pace.
 

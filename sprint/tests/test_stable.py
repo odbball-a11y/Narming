@@ -34,7 +34,7 @@ def quick_train(racer_dir, generations=None):
 
 def test_shipped_graduate_and_house_rivals():
     grad = stable.graduate()
-    assert grad["tracks"] == ["speedway"]
+    assert set(grad["tracks"]) == {"oval", "speedway", "esses", "technical", "grandprix"}
     with np.load(stable.GRADUATE.with_suffix(".npz")) as data:
         assert data["pop"].shape[1] == evolve.n_weights(grad["arch"])
     names = {r["name"] for r in stable.house_rivals()}
@@ -272,7 +272,8 @@ def test_mate_breed_and_certificate(dirs):
     assert cert["litter"] == 4 and len(cert["candidates"]) == 2
     assert sum(c["chosen"] for c in cert["candidates"]) == 1
     assert cert["sire"]["name"] == "Bold Betty" and cert["dam"]["name"] == "Steady Sam"
-    assert cert["criterion"] == "learner" and cert["target_lap"] > 0
+    assert cert["criterion"] == "learner" and cert["target_pace"] > 0
+    assert all("pace" in c for c in cert["candidates"])
     assert cert["expectations"] and all(isinstance(n, str) for n in cert["expectations"])
     assert stable.load(foal)["certificate"] == cert
     # The foal races, and can itself be upskilled and bred.

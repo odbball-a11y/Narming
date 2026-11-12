@@ -457,8 +457,9 @@ class RacerScreen(Screen):
         self.app.race_counter += 1
         order = [(i + self.app.race_counter) % 4 for i in range(4)]     # starting order rotates
         entries = list(zip(order, drivers))
-        track = self.racer["versions"][-1]["track"]
-        race = Race(track, entries, laps=self.app.setup["laps"], seed=self.app.race_counter, rolling=True)
+        track = self.app.setup["track"]
+        laps = Track.load(track).default_laps
+        race = Race(track, entries, laps=laps, seed=self.app.race_counter, rolling=True)
         racer_dir = self.racer_dir
         self.app.show(RaceScreen(self.app, race, back=lambda app: RacerScreen(app, racer_dir)))
 
@@ -474,6 +475,11 @@ class RacerScreen(Screen):
             self.row = (self.row - 1) % len(rows)
         elif event.key in DOWN:
             self.row = (self.row + 1) % len(rows)
+        elif event.key in LEFT + RIGHT and rows[self.row] == "race":
+            tracks = Track.available()
+            step = 1 if event.key in RIGHT else -1
+            self.app.setup["track"] = tracks[(tracks.index(self.app.setup["track"]) + step) % len(tracks)]
+            self.app.audio.play("blip")
         elif event.key in ACCEPT:
             self.app.audio.play("select")
             choice = rows[self.row]
@@ -536,25 +542,27 @@ class RacerScreen(Screen):
         # Measured racecraft (latest exam: time trial + race from last v three scripted cars)
         exam = self.history[-1]["exam"] if self.history else None
         y = 22.0
-        ui.text(screen, "small", "MEASURED  (latest test: alone, then 3 laps from last v three scripted cars)",
+        ui.text(screen, "small", "MEASURED  (latest test on every track: alone, then 3 laps from last v three scripted cars)",
                 C_HUD_ACCENT, 6, y)
         if exam:
-            e = next(iter(exam.values()))
-            place = f"P{e['race_place']}" if e["race_finished"] else "DNF"
-            items = [("best lap alone", format_time(e["solo_best_lap"])), ("test race", place),
-                     ("passes", str(e["race_overtakes"])), ("hits caused", f"{e['race_fault']:g}"),
+            e = stable.exam_average(exam)
+            items = [("pace", stable.pace_text(stable.pace(exam))), ("avg place", f"{e['race_place']:.1f}"),
+                     ("passes", f"{e['race_overtakes']:.1f}"), ("hits caused", f"{e['race_fault']:.1f}"),
                      ("damage", f"{e['race_damage'] * 100:.0f}%"), ("in a tow", f"{e['race_draft'] * 100:.0f}%")]
             x = 6
-            for label, value in items:
+            for k, (label, value) in enumerate(items):
                 ui.text(screen, "small", label, C_HUD_DIM, x, y + 3)
-                ui.text(screen, "mid", value, C_HUD_TEXT, x, y + 5.6)
-                x += 24
+                ui.text(screen, "small" if k == 0 else "mid", value, C_HUD_TEXT, x, y + 5.6)
+                x += 34 if k == 0 else 20
+            laps = "   ".join(f"{stable.TRACK_NAMES.get(t, t)} {format_time(r['solo_best_lap'])}"
+                             for t, r in exam.items())
+            ui.text(screen, "small", "best laps alone: " + laps, C_HUD_DIM, 6, y + 9.4)
         else:
             ui.text(screen, "small", "not trained yet", C_HUD_DIM, 6, y + 3)
 
         # Career
         c = racer["career"]
-        y = 33.5
+        y = 36
         ui.text(screen, "small", "CAREER", C_HUD_ACCENT, 6, y)
         best = ", ".join(f"{t} {format_time(b)}" for t, b in c["best_laps"].items()) or "-"
         ui.text(screen, "mid", f"{c['races']} races   {c['wins']} wins   {c['podiums']} podiums", C_HUD_TEXT, 6, y + 3)
@@ -568,14 +576,17 @@ class RacerScreen(Screen):
         # Charts over every generation trained
         if self.history:
             xs = list(range(1, len(self.history) + 1))
-            laps = [next(iter(h["exam"].values()))["solo_best_lap"] for h in self.history]
-            passes = [next(iter(h["exam"].values()))["race_overtakes"] for h in self.history]
-            hits = [next(iter(h["exam"].values()))["race_fault"] for h in self.history]
+            paces = [None if stable.pace(h["exam"]) is None else (1 - stable.pace(h["exam"])) * 100
+                     for h in self.history]
+            avgs = [stable.exam_average(h["exam"]) for h in self.history]
+            passes = [a["race_overtakes"] for a in avgs]
+            hits = [a["race_fault"] for a in avgs]
             starts = [k + 1 for k, h in enumerate(self.history) if k and h["version"] != self.history[k - 1]["version"]]
             marker = (starts[-1], "upskill") if starts else None
-            ui.chart(screen, 4, 46, 52, 40, "BEST LAP ALONE (s)", xs, [("lap", C_CYAN, laps)], "{:.1f}", marker)
-            ui.chart(screen, 58, 46, 52, 40, "TEST RACE", xs,
-                     [("passes", C_CYAN, passes), ("hits caused", C_PINK, hits)], "{:.0f}", marker, floor=0.0)
+            ui.chart(screen, 4, 48, 52, 38, "PACE (% quicker than scripted)", xs, [("pace", C_CYAN, paces)],
+                     "{:.0f}", marker)
+            ui.chart(screen, 58, 48, 52, 38, "TEST RACES (avg)", xs,
+                     [("passes", C_CYAN, passes), ("hits caused", C_PINK, hits)], "{:.1f}", marker, floor=0.0)
 
         labels = {"certificate": "BREEDING CERTIFICATE", "resume_breeding": "RESUME BREEDING",
                   "race": "RACE THE HOUSE RIVALS", "stop": "STOP", "resume": "RESUME TRAINING",
@@ -588,6 +599,11 @@ class RacerScreen(Screen):
             if selected:
                 ui.text(screen, "mid", ">", C_PINK, 112, y)
             ui.text(screen, "mid", labels[row], C_HUD_ACCENT if selected else C_HUD_TEXT, 115, y, shadow=True)
+            if row == "race":
+                y += 4.2
+                name = stable.TRACK_NAMES.get(self.app.setup["track"], self.app.setup["track"])
+                ui.text(screen, "small", f"at  <  {name.upper()}  >", C_HUD_DIM, 117, y)
+                y += 2.0
             y += 5.5
         if self.message:
             ui.text(screen, "small", self.message, C_PINK, 112, 86)
@@ -780,21 +796,27 @@ class CertificateScreen(Screen):
 
         # Litter
         y = 29.5
+        target = (f"target: {stable.pace_text(cert['target_pace'])}" if "target_pace" in cert
+                  else f"target {cert.get('target_lap', 0):.2f}s")
         ui.text(screen, "small", f"THE LITTER: {cert['litter']} foals, {cert['shortlist']} shortlisted.  "
-                f"Picked by: {cert['criterion_text']} (target {cert['target_lap']:.2f}s)", C_HUD_ACCENT, 7, y)
+                f"Picked by: {cert['criterion_text']} ({target})", C_HUD_ACCENT, 7, y)
         y += 3.6
-        for x, head in ((9, "FOAL"), (24, "ROUND 1"), (42, "BEST LAP"), (62, "GENS TO TARGET"),
-                        (90, "TEST RACE"), (110, "PASSES"), (126, "HITS"), (140, "DAMAGE")):
+        for x, head in ((9, "FOAL"), (24, "ROUND 1"), (40, "PACE V SCRIPTED"), (68, "GENS TO TARGET"),
+                        (92, "AVG PLACE"), (110, "PASSES"), (126, "HITS"), (140, "DAMAGE")):
             ui.text(screen, "small", head, C_HUD_DIM, x, y)
         for c in cert["candidates"]:
             y += 3.4
             colour = C_HUD_ACCENT if c["chosen"] else C_HUD_TEXT
             if c["chosen"]:
                 ui.text(screen, "small", ">", C_PINK, 6, y)
-            lap = f"{c['best_lap']:.2f}s" if c["best_lap"] else "-"
+            if "pace" in c:
+                lap = f"{(1 - c['pace']) * 100:+.0f}%" if c["pace"] else "-"
+            else:
+                lap = f"{c['best_lap']:.2f}s" if c.get("best_lap") else "-"
             gens = str(c["gens_to_target"]) if c["gens_to_target"] else "not reached"
-            for x, value in ((9, f"no. {c['foal']}"), (24, f"{c['trial_rank']} of {cert['litter']}"), (42, lap),
-                             (62, gens), (90, f"P{c['race_place']}"), (110, str(c["passes"])),
+            place = f"{c['race_place']:.1f}" if isinstance(c["race_place"], float) else f"P{c['race_place']}"
+            for x, value in ((9, f"no. {c['foal']}"), (24, f"{c['trial_rank']} of {cert['litter']}"), (40, lap),
+                             (68, gens), (92, place), (110, str(c["passes"])),
                              (126, f"{c['hits']:g}"), (140, f"{c['damage'] * 100:.0f}%")):
                 ui.text(screen, "small", value, colour, x, y)
 

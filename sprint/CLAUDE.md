@@ -192,9 +192,27 @@ stable racers only know Speedway.
   chose: all five traits, strict budget (no bonus stars), visible size, and
   no weather for now.
 
-Still to build: (5) championship across tracks, 6-8 cars. Before it, the
-graduate should be retrained on all five tracks with `--car random` (one
-long run), so new and bred racers can drive every track and any car.
+Five-track graduate (done): run "graduate5" (`train.py --run graduate5
+--from speedway:120 --driving-school --tracks oval speedway esses technical
+grandprix --races 1 --race-laps 3 --car random --generations 300`, ~5 s per
+driving gen, ~40 s per racing gen, about 3.5 h on 4 cores). Driving school
+ended at gen 57. Exam (from last v three scripted, avg of 5 tracks) place
+3.1 -> 2.3, damage 36% -> 18%; per track over the last 30 gens: Oval 1.6,
+Speedway 2.0, Esses 1.7, Technical 3.0 (38% damage), Grand Prix 3.2 (finished
+only half, 35% damage, ~5 barrier hits). Head to head v the old Speedway
+graduate + 2 scripted, 8 races each: wins Oval 6-2, Speedway 2-6, Esses 8-0,
+Technical 6-0, Grand Prix 4-0 (scripted 4). Gen 300's population is now
+`house/graduate.npz` (tracks: all five, races_per_track 1, 3-lap races).
+Grand Prix is the weak track; more training there would help.
+
+Stable racers now train on `graduate()["tracks"]` (all five); breeding trials
+and camps use all five and judge on `pace` (mean of best solo lap / scripted
+lap, `SCRIPTED_LAPS`; `pace_text`), `exam_average` for race numbers;
+certificates have `target_pace` and candidate `pace` (older ones `best_lap`).
+The card picks the race track (Left/Right on RACE). Dangerous Dave and
+Careful Keith were trained on Speedway only and are weak elsewhere.
+
+Still to build: (5) championship across tracks, 6-8 cars.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.

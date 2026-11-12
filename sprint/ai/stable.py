@@ -88,6 +88,41 @@ def _write(path: Path, data) -> None:
     tmp.replace(path)
 
 
+# A scripted car's flying lap on each track, to compare AI pace across tracks.
+SCRIPTED_LAPS = {"oval": 11.48, "speedway": 13.98, "esses": 17.37, "technical": 22.20, "grandprix": 23.99}
+TRACK_NAMES = {"oval": "Oval", "speedway": "Speedway", "esses": "Esses", "technical": "Technical",
+               "grandprix": "Grand Prix"}
+
+
+def pace(exam: dict | None) -> float | None:
+    """Average lap time alone as a fraction of a scripted car's, over the
+    tracks in an exam (0.92 = 8% quicker than a scripted car).  None if it
+    set no lap anywhere."""
+    if not exam:
+        return None
+    ratios = [e["solo_best_lap"] / SCRIPTED_LAPS[t] for t, e in exam.items()
+              if e.get("solo_best_lap") and t in SCRIPTED_LAPS]
+    return round(sum(ratios) / len(ratios), 4) if ratios else None
+
+
+def pace_text(p: float | None) -> str:
+    if p is None:
+        return "no lap yet"
+    diff = (1.0 - p) * 100
+    return f"{abs(diff):.0f}% {'quicker' if diff >= 0 else 'slower'} than scripted"
+
+
+def exam_average(exam: dict | None) -> dict:
+    """Test-race numbers averaged over the tracks."""
+    if not exam:
+        return {}
+    rows = list(exam.values())
+    keys = ("race_place", "race_overtakes", "race_fault", "race_damage", "race_draft")
+    out = {k: sum(r[k] for r in rows) / len(rows) for k in keys}
+    out["race_finished"] = sum(1 for r in rows if r["race_finished"]) / len(rows)
+    return out
+
+
 def graduate() -> dict:
     """Settings of the starting brain: arch, tracks, race length, races."""
     return _read(GRADUATE.with_suffix(".json"))
@@ -364,10 +399,9 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
         prev = racer_dir / racer["versions"][index - 1]["run"]
         start = evolve.gen_path(prev, evolve.list_generations(prev)[-1])
     grad = graduate()
-    track = v["track"]
     evolve.train(run=v["run"], root=racer_dir, generations=remaining, population=population,
-                 seed=index, tracks=[track], arch=grad["arch"], races_per_track=grad["races_per_track"],
-                 race_bonuses=False, start_file=str(start), race_seconds={track: grad["race_seconds"][track]},
+                 seed=index, tracks=grad["tracks"], arch=grad["arch"], races_per_track=grad["races_per_track"],
+                 race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                  race_weights=sliders_to_weights(v["aggression"], v["caution"]),
                  partners=v["partners"], name=racer["name"], workers=workers, car=traits_of(racer_dir),
                  on_generation=on_generation, log=lambda m: None)
@@ -486,7 +520,7 @@ SHORTLIST = 5           # foals that go on to a mini training camp
 CAMP_GENERATIONS = 3    # length of each mini-camp
 CAMP_POPULATION = 16
 TEMPERAMENT_SPREAD = 0.08   # how far a foal's personality strays from its parents' average
-CRITERIA = {"fastest": "Fastest lap after its mini-camp",
+CRITERIA = {"fastest": "Fastest pace over the five tracks after its mini-camp",
             "learner": "Quickest learner: fewest generations to match its parents' pace"}
 
 
@@ -574,22 +608,24 @@ def _parent_summary(root: Path, racer_id: str) -> dict:
         return {"id": racer_id, "name": racer_id}
     r = load(d)
     exam = latest_exam(d)
-    e = next(iter(exam.values())) if exam else {}
+    avg = exam_average(exam)
+    by_track = {t: round(x["solo_best_lap"] / SCRIPTED_LAPS[t], 4) for t, x in (exam or {}).items()
+                if x.get("solo_best_lap") and t in SCRIPTED_LAPS}
     return {"id": r["id"], "name": r["name"], "aggression": r["aggression"], "caution": r["caution"],
             "traits": r.get("traits") or cartraits.default(),
             "races": r["career"]["races"], "wins": r["career"]["wins"], "podiums": r["career"]["podiums"],
             "best_laps": r["career"]["best_laps"], "parents": r.get("parents", []),
-            "lap_alone": e.get("solo_best_lap"), "passes": e.get("race_overtakes"),
-            "hits": e.get("race_fault"), "damage": e.get("race_damage")}
+            "pace": pace(exam), "track_pace": by_track, "passes": avg.get("race_overtakes"),
+            "hits": avg.get("race_fault"), "damage": avg.get("race_damage")}
 
 
 def expectations(sire: dict, dam: dict, foal: dict) -> list[str]:
     """Plain-language predictions from the parents' records (labelled as
     expectations: the foal's own races will tell)."""
     notes = []
-    laps = [p["lap_alone"] for p in (sire, dam) if p.get("lap_alone")]
-    if laps:
-        notes.append(f"Pace: its parents lap Speedway alone in {' and '.join(f'{l:.2f}s' for l in laps)}; "
+    paces = [p["pace"] for p in (sire, dam) if p.get("pace")]
+    if paces:
+        notes.append(f"Pace: its parents are {' and '.join(pace_text(x) for x in paces)}; "
                      "expect similar speed.")
     a, c = foal["aggression"], foal["caution"]
     if a >= 0.6 and c < 0.5:
@@ -619,12 +655,15 @@ def expectations(sire: dict, dam: dict, foal: dict) -> list[str]:
     wins = sire.get("wins", 0) + dam.get("wins", 0)
     if wins:
         notes.append(f"Winning stock: its parents have {wins} wins between them.")
-    tracks = set(sire.get("best_laps", {})) & set(dam.get("best_laps", {}))
-    if tracks:
-        notes.append("Tracks: both parents have raced at " + ", ".join(sorted(tracks)).title()
-                     + "; expect it to suit them.")
-    else:
-        notes.append("Tracks: only Speedway raced so far; other tracks are unknown.")
+    family = {}
+    for p in (sire, dam):
+        for t, r in (p.get("track_pace") or {}).items():
+            family.setdefault(t, []).append(r)
+    if len(family) >= 2:
+        avg = {t: sum(v) / len(v) for t, v in family.items()}
+        best, worst = min(avg, key=avg.get), max(avg, key=avg.get)
+        notes.append(f"Tracks: the family is quickest, against a scripted car, at {TRACK_NAMES.get(best, best)}"
+                     f" and least quick at {TRACK_NAMES.get(worst, worst)}.")
     shared = set(sire.get("parents", [])) & set(dam.get("parents", []))
     if shared:
         notes.append("Close relatives: the parents share a parent. Expect little variety.")
@@ -644,8 +683,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     rng = np.random.default_rng(info["seed"])
     grad = graduate()
     arch = grad["arch"]
-    track = racer["versions"][0]["track"]
-    seconds = grad["race_seconds"][track]
+    tracks = grad["tracks"]
     sire_w, dam_w = brain(root / info["sire"]), brain(root / info["dam"])
     litter_dir = foal_dir / "litter"
     if litter_dir.exists():
@@ -660,10 +698,11 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     # all scored the same (balanced) way so the comparison is fair.
     _progress(foal_dir, stage="trial", done=0, of=litter)
     traits = racer.get("traits") or cartraits.default()
-    trial = [{"track": track, "slot": 3, "rivals": ["scripted"] * 3, "seconds": seconds, "car": traits}]
+    trial = [{"track": t, "slot": 3, "rivals": ["scripted"] * 3, "seconds": grad["race_seconds"][t],
+              "car": traits} for t in tracks]
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:
-        score, _ = evolve.score_population(foals, arch, [track], trial, 0.0, pool, chunks=max(1, workers),
+        score, _ = evolve.score_population(foals, arch, tracks, trial, 0.0, pool, chunks=max(1, workers),
                                            weights=sliders_to_weights(0.0, 0.0),
                                            setup={"slot": 0, "damage": 0.0, "car": traits})
     finally:
@@ -674,8 +713,8 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
 
     # Round 2: a short training camp each, with the foal's own personality.
     parents = [_parent_summary(root, info["sire"]), _parent_summary(root, info["dam"])]
-    laps = [p["lap_alone"] for p in parents if p.get("lap_alone")]
-    target = round(sum(laps) / len(laps), 3) if laps else 13.98
+    paces = [p["pace"] for p in parents if p.get("pace")]
+    target = round(sum(paces) / len(paces), 4) if paces else 1.0
     weights = sliders_to_weights(racer["aggression"], racer["caution"])
     candidates = []
     for k, i in enumerate(picked):
@@ -684,25 +723,26 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
         np.savez_compressed(start, pop=foals[i:i + 1].astype(np.float32))
         run = f"cand_{i:02d}"
         evolve.train(run=run, root=litter_dir, generations=camp_generations, population=camp_population,
-                     elites=2, seed=info["seed"] % 100000 + i, tracks=[track], arch=arch, races_per_track=2,
-                     race_bonuses=False, start_file=str(start), race_seconds={track: seconds},
+                     elites=2, seed=info["seed"] % 100000 + i, tracks=tracks, arch=arch, races_per_track=1,
+                     race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                      race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
                      workers=workers, log=lambda m: None, car=traits)
         hist = evolve.load_history(litter_dir / run)
-        lap_by_gen = [h["exam"][track]["solo_best_lap"] for h in hist]
-        valid = [lap for lap in lap_by_gen if lap]
-        to_target = next((h["gen"] for h in hist if (h["exam"][track]["solo_best_lap"] or 99) <= target), None)
-        last = hist[-1]["exam"][track]
+        paces_by_gen = [pace(h["exam"]) for h in hist]
+        valid = [p for p in paces_by_gen if p]
+        to_target = next((h["gen"] for h, p in zip(hist, paces_by_gen) if p and p <= target), None)
+        last = exam_average(hist[-1]["exam"])
         candidates.append({"foal": i + 1, "trial_rank": k + 1, "trial_score": round(float(score[i]), 3),
-                           "best_lap": min(valid) if valid else None, "gens_to_target": to_target,
-                           "race_place": last["race_place"], "passes": last["race_overtakes"],
-                           "hits": last["race_fault"], "damage": last["race_damage"], "run": run})
+                           "pace": min(valid) if valid else None, "gens_to_target": to_target,
+                           "race_place": round(last["race_place"], 2), "passes": round(last["race_overtakes"], 1),
+                           "hits": round(last["race_fault"], 1), "damage": round(last["race_damage"], 3),
+                           "run": run})
 
     def key(c):
-        lap = c["best_lap"] or 99.0
+        p = c["pace"] or 9.0
         if info["criterion"] == "learner":
-            return (c["gens_to_target"] or 99, lap)
-        return (lap, -c["trial_score"])
+            return (c["gens_to_target"] or 99, p)
+        return (p, -c["trial_score"])
 
     winner = min(candidates, key=key)
     for c in candidates:
@@ -723,7 +763,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     certificate = {
         "sire": parents[0], "dam": parents[1], "grandparents": grandparents,
         "litter": litter, "shortlist": len(picked), "criterion": info["criterion"],
-        "criterion_text": CRITERIA[info["criterion"]], "target_lap": target,
+        "criterion_text": CRITERIA[info["criterion"]], "target_pace": target,
         "candidates": candidates, "winner": winner,
         "temperament": {"aggression": racer["aggression"], "caution": racer["caution"]},
         "traits": traits, "traits_from": info.get("traits_from", {}),
@@ -755,7 +795,7 @@ def main(argv=None) -> int:
     if args.command == "breed":
         cert = breed(args.racer_dir, workers=args.workers)
         w = cert["winner"]
-        print(f"picked foal {w['foal']} of {cert['litter']}: best lap {w['best_lap']}, "
+        print(f"picked foal {w['foal']} of {cert['litter']}: pace {w['pace']}, "
               f"generations to target {w['gens_to_target']}", flush=True)
         return 0
     if args.command == "train":
