@@ -209,8 +209,18 @@ Stable racers now train on `graduate()["tracks"]` (all five); breeding trials
 and camps use all five and judge on `pace` (mean of best solo lap / scripted
 lap, `SCRIPTED_LAPS`; `pace_text`), `exam_average` for race numbers;
 certificates have `target_pace` and candidate `pace` (older ones `best_lap`).
-The card picks the race track (Left/Right on RACE). Dangerous Dave and
-Careful Keith were trained on Speedway only and are weak elsewhere.
+The card picks the race track (Left/Right on RACE).
+
+House rivals recreated (user approved) in the workshop from the five-track
+graduate, standard car: Dangerous Dave (aggression 1, caution 0) 40 gens v
+scripted + himself; Careful Keith (0, 1) 40 gens v scripted + himself + new
+Dave; then Dave +20 gens v scripted + himself + Keith; both published.
+Head to head, 4 rotating-start races per track with 2 scripted cars: Dave
+17/20 wins (avg place 1.0-1.25, 1.5-2.5 passes, rough on Technical and
+Grand Prix ~33% damage); Keith 3/20 (place 2.5-3.25, never passes, ~0
+collisions caused). Keith's caution-1.0 scoring makes holding position
+always beat passing; a caution ~0.7 with some aggression would likely give
+a careful racer that still overtakes.
 
 Still to build: (5) championship across tracks, 6-8 cars.
 

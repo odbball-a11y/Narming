@@ -2,6 +2,13 @@
  "name": "Dangerous Dave",
  "aggression": 1.0,
  "caution": 0.0,
+ "traits": {
+  "top_speed": 3,
+  "accel": 3,
+  "handling": 3,
+  "braking": 3,
+  "weight": "medium"
+ },
  "arch": {
   "hidden": [
    24,
@@ -11,32 +18,92 @@
   "inputs": 3
  },
  "created": "2026-11-12",
- "generations": 40,
- "from": "graduate",
+ "generations": 60,
  "exam": {
-  "speedway": {
-   "solo_laps": 2.052,
-   "solo_best_lap": 14.656299218661058,
+  "oval": {
+   "solo_laps": 2.394,
+   "solo_best_lap": 10.340029789356924,
    "solo_damage": 0.0,
+   "race_place": 1,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 32.497878008157706,
+   "race_best_lap": 10.358177031912483,
+   "race_hits": 2.0,
+   "race_fault": 2.0,
+   "race_walls": 0,
+   "race_overtakes": 3,
+   "race_passed": 0,
+   "race_draft": 0.143,
+   "race_damage": 0.016
+  },
+  "speedway": {
+   "solo_laps": 2.466,
+   "solo_best_lap": 12.176790582594592,
+   "solo_damage": 0.0,
+   "race_place": 1,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 38.960552921587066,
+   "race_best_lap": 12.12159845018161,
+   "race_hits": 5.0,
+   "race_fault": 4.0,
+   "race_walls": 0,
+   "race_overtakes": 3,
+   "race_passed": 0,
+   "race_draft": 0.189,
+   "race_damage": 0.028
+  },
+  "esses": {
+   "solo_laps": 2.615,
+   "solo_best_lap": 13.731109453798645,
+   "solo_damage": 0.0,
+   "race_place": 1,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 46.35679096937192,
+   "race_best_lap": 14.629477201979753,
+   "race_hits": 10.0,
+   "race_fault": 5.5,
+   "race_walls": 0,
+   "race_overtakes": 4,
+   "race_passed": 1,
+   "race_draft": 0.087,
+   "race_damage": 0.246
+  },
+  "technical": {
+   "solo_laps": 2.227,
+   "solo_best_lap": 20.734412880285642,
+   "solo_damage": 0.249,
+   "race_place": 1,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 68.44715270339782,
+   "race_best_lap": 22.020622049292513,
+   "race_hits": 10.0,
+   "race_fault": 4.5,
+   "race_walls": 3,
+   "race_overtakes": 3,
+   "race_passed": 0,
+   "race_draft": 0.454,
+   "race_damage": 0.353
+  },
+  "grandprix": {
+   "solo_laps": 2.251,
+   "solo_best_lap": 22.834823067554186,
+   "solo_damage": 0.299,
    "race_place": 4,
    "race_finished": true,
    "race_laps": 3,
-   "race_time": 46.40733173268028,
-   "race_best_lap": 15.127067689346195,
-   "race_hits": 3.0,
-   "race_fault": 0.0,
-   "race_walls": 3,
-   "race_overtakes": 1,
-   "race_passed": 1,
-   "race_draft": 0.078,
-   "race_damage": 0.027
+   "race_time": 75.39191677129747,
+   "race_best_lap": 24.55038314145864,
+   "race_hits": 22.0,
+   "race_fault": 12.0,
+   "race_walls": 6,
+   "race_overtakes": 5,
+   "race_passed": 5,
+   "race_draft": 0.25,
+   "race_damage": 0.559
   }
- },
- "traits": {
-  "top_speed": 3,
-  "accel": 3,
-  "handling": 3,
-  "braking": 3,
-  "weight": "medium"
  }
 }
