@@ -42,6 +42,8 @@ def main() -> int:
     if len(args.drivers) > 4:
         raise SystemExit("at most four drivers")
 
+    from ai import migrate
+    migrate.ensure()
     racers = [resolve(spec) for spec in args.drivers]
     names = [f"{name} g{gen}" for _, gen, name in racers]
     names += ["Scripted"] * (4 - len(racers))

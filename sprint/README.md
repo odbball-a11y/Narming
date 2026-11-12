@@ -208,10 +208,16 @@ generation is bred from mutated copies of the good ones.
   generations.
 
 The drivers see: their speed and slide, position and angle on the track,
-the bends ahead and how long the straight ahead is, their damage, the tow
-they get and the tow they give, the two cars ahead, the car behind, and cars
-alongside on either side. They also have a small memory they carry from one
-moment to the next.
+the bends ahead (out to about 30 car lengths) and how long the straight ahead
+is, the room to the barrier on each side, their damage, the tow they get and
+the tow they give, the two cars ahead, the car behind, cars alongside on
+either side, their place in the race and how much of the race is left. They
+also have a small memory they carry from one moment to the next.
+
+When new inputs are added, saved drivers are upgraded automatically the
+next time the game or the trainer starts: the new inputs are connected with
+zero strength, so the drivers race exactly as before, and further training
+teaches them to use the new information.
 
 ### Training
 

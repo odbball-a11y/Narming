@@ -28,7 +28,14 @@ LOOK_AHEAD = (4.0, 9.0, 16.0, 25.0, 36.0, 50.0)
 STRAIGHT_CURVATURE = 0.035
 STRAIGHT_SCAN = 70.0
 
-INPUT_NAMES = (
+# Further look-ahead points, added in input version 2 so drivers see long
+# straights and hairpins coming (about 20 and 30 car lengths).
+FAR_AHEAD = (80.0, 120.0)
+
+# The inputs, by version.  New inputs are only ever appended, so an older
+# brain can be upgraded by wiring the new inputs in with zero strength: it
+# then drives exactly as before until training puts the new inputs to use.
+_INPUTS_V1 = (
     ["forward speed", "sideways speed", "offset from centre", "heading error"]
     + [f"curvature {int(d)} ahead" for d in LOOK_AHEAD]
     + ["track half-width", "straight ahead", "damage", "my tow", "tow I give"]
@@ -37,10 +44,15 @@ INPUT_NAMES = (
        "behind gap", "behind side", "behind closing",
        "left car near", "left car along", "right car near", "right car along"]
 )
+_INPUTS_V2 = _INPUTS_V1 + [f"curvature {int(d)} ahead" for d in FAR_AHEAD] + [
+    "room to barrier left", "room to barrier right", "race place", "race left"]
+INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2}
+INPUT_VERSION = 2
+INPUT_NAMES = INPUT_VERSIONS[INPUT_VERSION]
 N_INPUTS = len(INPUT_NAMES)
 N_CONTROLS = 2          # steering; throttle (+) / brake (-)
 
-DEFAULT_ARCH = {"hidden": [24, 16], "memory": 4}
+DEFAULT_ARCH = {"hidden": [24, 16], "memory": 4, "inputs": INPUT_VERSION}
 
 # The network decides every DECISION_TICKS sim ticks (30 times a second) and
 # holds its controls in between.  Training and racing must use the same value.
@@ -124,14 +136,71 @@ def observe(world, i: int) -> list[float]:
         obs += [1.0, 0.0, 0.0]
     obs += list(left) if left else [0.0, 0.0]
     obs += list(right) if right else [0.0, 0.0]
+
+    # ---- input version 2 ----
+    for d in FAR_AHEAD:
+        obs.append(curv[(idx + int(d / ds)) % n] * 8.0)
+    # Room between the car's side and the barrier, on each side.
+    limit = track._lim[idx] - car.params.radius
+    obs.append(min(2.0, (limit + car.lateral) / 6.0))
+    obs.append(min(2.0, (limit - car.lateral) / 6.0))
+    # Race place (0 = leading, 1 = last) and how much of the race is left.
+    place = 0.0
+    if not world.ghost and len(world.cars) > 1:
+        mine = world.race_progress(car)
+        rivals = [o for j, o in enumerate(world.cars) if j != i and not o.retired]
+        if rivals:
+            place = sum(1 for o in rivals if world.race_progress(o) > mine) / len(rivals)
+    obs.append(place)
+    if world.laps < 1000:
+        done = world.race_progress(car) / (world.laps * track.length)
+        obs.append(min(1.0, max(0.0, 1.0 - done)))
+    elif getattr(world, "end_tick", None):
+        obs.append(max(0.0, 1.0 - world.tick / world.end_tick))
+    else:
+        obs.append(1.0)
     return obs
 
 
 # ---------------------------------------------------------------- network
 
+def input_version(arch: dict) -> int:
+    return int(arch.get("inputs", 1))     # brains from before versioning are version 1
+
+
 def layer_sizes(arch: dict) -> list[int]:
     m = int(arch.get("memory", 0))
-    return [N_INPUTS + m] + [int(h) for h in arch["hidden"]] + [N_CONTROLS + m]
+    n_in = len(INPUT_VERSIONS[input_version(arch)])
+    return [n_in + m] + [int(h) for h in arch["hidden"]] + [N_CONTROLS + m]
+
+
+def upgrade(weights: np.ndarray, arch: dict) -> tuple[np.ndarray, dict]:
+    """Rewire brain(s) made for an older input version to the current one.
+
+    New inputs get zero-strength connections, so the brain drives exactly as
+    before; training can then make use of them.  `weights` may be one brain
+    or a stack of them.  Returns (weights, current arch)."""
+    if input_version(arch) == INPUT_VERSION:
+        return weights, arch
+    new_arch = dict(arch, inputs=INPUT_VERSION)
+    weights = np.asarray(weights, dtype=np.float64)
+    old_names = INPUT_VERSIONS[input_version(arch)]
+    m = int(arch.get("memory", 0))
+    old_layers = unpack(weights, arch)
+    lead = weights.shape[:-1]
+    out = np.zeros(lead + (n_weights(new_arch),))
+    new_layers = unpack(out, new_arch)
+    (w_old, b_old), (w_new, b_new) = old_layers[0], new_layers[0]
+    position = {name: k for k, name in enumerate(INPUT_NAMES)}
+    for k, name in enumerate(old_names):
+        w_new[..., position[name]] = w_old[..., k]
+    if m:
+        w_new[..., N_INPUTS:] = w_old[..., len(old_names):]
+    b_new[...] = b_old
+    for (wo, bo), (wn, bn) in zip(old_layers[1:], new_layers[1:]):
+        wn[...] = wo
+        bn[...] = bo
+    return out, new_arch
 
 
 def n_weights(arch: dict) -> int:
@@ -177,7 +246,7 @@ class Population:
     Keeps each driver's memory between decisions."""
 
     def __init__(self, weights: np.ndarray, arch: dict):
-        weights = np.asarray(weights, dtype=np.float64)
+        weights, arch = upgrade(np.asarray(weights, dtype=np.float64), arch)
         self.arch = arch
         self.memory_size = int(arch.get("memory", 0))
         self.layers = unpack(weights, arch)
@@ -198,9 +267,10 @@ class Brain:
     simultaneous test races).  Each car keeps its own memory."""
 
     def __init__(self, weights: np.ndarray, arch: dict, batch: int = 1):
+        weights, arch = upgrade(np.asarray(weights, dtype=np.float64), arch)
         self.arch = arch
         self.memory_size = int(arch.get("memory", 0))
-        self.layers = unpack(np.asarray(weights, dtype=np.float64), arch)
+        self.layers = unpack(weights, arch)
         self.memory = np.zeros((batch, self.memory_size))
 
     def act(self, obs: np.ndarray) -> np.ndarray:
@@ -222,8 +292,7 @@ class NeuralDriver(Driver):
     """A trained network driving one car through the normal Driver interface."""
 
     def __init__(self, weights: np.ndarray, arch: dict, label: str = "Evolved"):
-        self.weights = np.asarray(weights, dtype=np.float64)
-        self.arch = arch
+        self.weights, self.arch = upgrade(np.asarray(weights, dtype=np.float64), arch)
         self.label = label
         self.reset(None, 0)
 

@@ -68,6 +68,8 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1), help="CPU cores to use")
     args = ap.parse_args()
 
+    from ai import migrate
+    migrate.ensure()
     run_dir = evolve.RUNS_DIR / args.run
     print(f"run '{args.run}' in {run_dir}")
     clock = [time.perf_counter()]
@@ -87,7 +89,8 @@ def main() -> int:
     arch = None
     if args.hidden is not None or args.memory is not None:
         arch = {"hidden": args.hidden or DEFAULT_ARCH["hidden"],
-                "memory": DEFAULT_ARCH["memory"] if args.memory is None else args.memory}
+                "memory": DEFAULT_ARCH["memory"] if args.memory is None else args.memory,
+                "inputs": DEFAULT_ARCH["inputs"]}
     try:
         evolve.train(run=args.run, generations=args.generations, population=args.population,
                      seed=args.seed, tracks=args.tracks, phase2_from=args.racing_from, arch=arch,

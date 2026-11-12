@@ -296,11 +296,22 @@ AI training. The renderer draws smoke, tow streaks and the HUD damage bar.
 neuroevolution in two phases (the user chose generations over PPO, and asked
 for "learn to drive first, then learn to race").
 
-- `brain.py`: `observe(world, i)` gives 28 inputs (`INPUT_NAMES`): speeds,
+- `brain.py`: `observe(world, i)` gives 34 inputs (`INPUT_NAMES`): speeds,
   offset, heading error, six curvatures ahead, half-width, straight length
   ahead, damage, tow received, tow given, two cars ahead / one behind (gap,
-  side, closing speed), nearest car alongside left / right. Network shape is
-  a per-run `arch` dict `{"hidden": [24, 16], "memory": 4}`; memory = extra
+  side, closing speed), nearest car alongside left / right; then (input
+  version 2) curvature 80 and 120 ahead, room to the barrier left and
+  right, race place (0 leading .. 1 last) and race left (by laps, or by
+  `World.end_tick` in timed training races). Inputs are versioned
+  (`INPUT_VERSIONS`, `arch["inputs"]`; missing = 1). New inputs are only
+  appended; `upgrade(weights, arch)` rewires an older brain with
+  zero-strength connections so it drives identically (tested), and
+  `Population`/`Brain`/`NeuralDriver` upgrade automatically.
+  `ai/migrate.py` `ensure()` upgrades saved files once (house graduate and
+  rivals, every run under training/, stable/, workshop/, bred foals); it is
+  called by the game, train.py, compare.py and `python -m ai.stable`.
+  Network shape is a per-run `arch` dict
+  `{"hidden": [24, 16], "memory": 4, "inputs": 2}`; memory = extra
   outputs fed back as inputs at the next decision (recurrence, no gradients
   needed). `Population` (different weights per row), `Brain` (one network,
   batch of cars), `NeuralDriver` (the `Driver`; decides every
@@ -350,7 +361,9 @@ for "learn to drive first, then learn to race").
 Results of the trial run are in Status above. Known weaknesses / next ideas:
 1. Racing-school scores are noisy with 4 races per driver; `--races 3` or a
    bigger population trade time for steadier progress.
-2. No ray-cast inputs (`Track.raycasts` exists).
+2. No ray-cast inputs (`Track.raycasts` exists); version 2 added only the
+   cheap left/right room to the barrier. The user chose not to give drivers
+   the track's identity (they should generalise, not memorise).
 3. Training is started from a terminal, not from the game menu.
 4. One network drives both tracks; not tried on unseen tracks.
 

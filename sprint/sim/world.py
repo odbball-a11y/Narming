@@ -27,6 +27,9 @@ class World:
         `ghost` the cars pass through each other and give no tow: used to
         test a whole population of AI drivers on the track at once."""
         self.ghost = ghost
+        # For timed races (training): the tick the race ends on, so drivers
+        # can be told how much of it is left.  None for races run by laps.
+        self.end_tick = None
         # Rolling start: single file at speed; `slots` then also gives each
         # car's place in the file (0 = leading).
         self.rolling = rolling

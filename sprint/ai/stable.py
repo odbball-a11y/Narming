@@ -718,6 +718,8 @@ def main(argv=None) -> int:
     b.add_argument("racer_dir")
     b.add_argument("--workers", type=int, default=max(1, min(3, (os.cpu_count() or 2) - 1)))
     args = ap.parse_args(argv)
+    from . import migrate
+    migrate.ensure()
     if args.command == "breed":
         cert = breed(args.racer_dir, workers=args.workers)
         w = cert["winner"]

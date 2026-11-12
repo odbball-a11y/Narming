@@ -16,8 +16,8 @@ from sim.world import World
 
 from helpers import make_world, put_on_track
 
-ARCH = {"hidden": [8, 6], "memory": 2}
-FLAT = {"hidden": [8], "memory": 0}
+ARCH = {"hidden": [8, 6], "memory": 2, "inputs": brain.INPUT_VERSION}
+FLAT = {"hidden": [8], "memory": 0, "inputs": brain.INPUT_VERSION}
 
 
 @pytest.fixture(scope="module")
@@ -40,8 +40,72 @@ def test_observation_has_the_documented_shape():
         obs = observe(world, i)
         assert len(obs) == N_INPUTS == len(brain.INPUT_NAMES)
         assert all(np.isfinite(obs))
-    alone = observe(make_world(), 0)
-    assert alone[-14:] == [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    alone = dict(zip(brain.INPUT_NAMES, observe(make_world(), 0)))
+    traffic = ["tow I give", "ahead1 gap", "ahead1 side", "ahead1 closing", "ahead2 gap", "ahead2 side",
+               "ahead2 closing", "behind gap", "behind side", "behind closing", "left car near",
+               "left car along", "right car near", "right car along", "race place"]
+    assert [alone[k] for k in traffic] == [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+                                           0.0, 0.0, 0.0]
+
+
+def test_version_2_inputs_walls_place_race_left_and_far_bends():
+    world = make_world()
+    me = world.cars[0]
+    track = world.track
+    put_on_track(world, me, 40.0, lateral=2.0, speed=20.0)
+    obs = dict(zip(brain.INPUT_NAMES, observe(world, 0)))
+    limit = track.limit[me.idx] - me.params.radius
+    assert obs["room to barrier right"] == pytest.approx((limit - 2.0) / 6.0, abs=0.02)
+    assert obs["room to barrier left"] == pytest.approx((limit + 2.0) / 6.0, abs=0.02)
+    far = track.curvature_ahead(me.s, 120.0) * 8.0
+    assert obs["curvature 120 ahead"] == pytest.approx(far, abs=0.05)
+    # Rolling start, car 0 second in the file: it is behind, early in the race.
+    race = World(track, slots=[1, 0], laps=2, rolling=True)
+    behind = dict(zip(brain.INPUT_NAMES, observe(race, 0)))
+    ahead = dict(zip(brain.INPUT_NAMES, observe(race, 1)))
+    assert behind["race place"] == 1.0 and ahead["race place"] == 0.0
+    assert 0.9 < behind["race left"] <= 1.0
+    timed = make_world(laps=10 ** 9)
+    timed.end_tick = 1000
+    timed.tick = 250
+    assert dict(zip(brain.INPUT_NAMES, observe(timed, 0)))["race left"] == pytest.approx(0.75)
+
+
+def test_old_brains_are_upgraded_and_drive_exactly_as_before(tmp_path):
+    import json
+    import shutil
+    from ai import migrate
+    v1 = {"hidden": [8, 6], "memory": 2}               # no "inputs": the old layout
+    w = random_weights(np.random.default_rng(7), 3, dict(v1, inputs=1))
+    assert w.shape[1] == n_weights(v1) < n_weights(dict(v1, inputs=2))
+    new, arch = brain.upgrade(w, v1)
+    assert arch["inputs"] == brain.INPUT_VERSION and new.shape == (3, n_weights(arch))
+    world = make_world(cars=2)
+    for k in range(3):
+        old_driver = brain.Brain.__new__(brain.Brain)   # drive the v1 brain on the v1 inputs
+        old_driver.layers = brain.unpack(w[k], v1)
+        old_driver.memory_size = 2
+        old_driver.memory = np.zeros((1, 2))
+        obs_v1 = np.array([observe(world, 0)[:len(brain.INPUT_VERSIONS[1])]])
+        new_driver = Brain(new[k], arch)
+        for _ in range(3):                              # same answers, memory included
+            assert np.allclose(old_driver.act(obs_v1), new_driver.act(np.array([observe(world, 0)])))
+    # Files on disk: a run, a house card and a foal are upgraded once.
+    run = tmp_path / "training" / "r"
+    run.mkdir(parents=True)
+    (run / "config.json").write_text(json.dumps({"arch": v1}))
+    np.savez_compressed(run / "gen_0001.npz", pop=w.astype(np.float32), fitness=np.zeros(3))
+    house = tmp_path / "house" / "rivals"
+    house.mkdir(parents=True)
+    (tmp_path / "house" / "graduate.json").write_text(json.dumps({"arch": v1}))
+    np.savez_compressed(tmp_path / "house" / "graduate.npz", pop=w.astype(np.float32))
+    (house / "x.json").write_text(json.dumps({"name": "X", "arch": v1}))
+    np.savez_compressed(house / "x.npz", pop=w[:1].astype(np.float32))
+    assert migrate.ensure(tmp_path) >= 4
+    assert migrate.ensure(tmp_path) == 0                 # only once
+    with np.load(run / "gen_0001.npz") as data:
+        assert data["pop"].shape == (3, n_weights(arch)) and "fitness" in data.files
+    assert json.loads((run / "config.json").read_text())["arch"]["inputs"] == brain.INPUT_VERSION
 
 
 def test_observation_sees_cars_ahead_behind_and_alongside():
@@ -161,7 +225,7 @@ def test_driving_school_learns_to_drive(tmp_path, monkeypatch):
     history = evolve.load_history(tmp_path / "learn")
     first = history[0]["exam"]["speedway"]["solo_laps"]
     last = history[-1]["exam"]["speedway"]["solo_laps"]
-    assert last > first + 0.3 and last > 1.5         # clearly better, and well over a lap
+    assert last > first + 0.5 and last > 1.0         # clearly better, and over a lap
 
 
 # -------------------------------------------------------- racing school

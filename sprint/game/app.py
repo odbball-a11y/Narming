@@ -166,6 +166,8 @@ def main(argv=None) -> int:
                     help="make house rivals (the opponents that ship with the game)")
     args = ap.parse_args(argv)
 
+    from ai import migrate
+    migrate.ensure()           # saved brains -> current input layout
     os.environ.setdefault("SDL_VIDEO_CENTERED", "1")
     # Initialise the pieces separately so a missing sound card cannot stop us.
     pygame.display.init()

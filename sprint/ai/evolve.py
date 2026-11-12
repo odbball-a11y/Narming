@@ -163,6 +163,7 @@ class PackRun:
         self.brains = Population(weights, arch)
         self.progress = _Progress(self.world, range(self.count))
         self.ticks = int((seconds or SOLO_SECONDS.get(track_name, DEFAULT_SECONDS)) * tuning.TICK_RATE)
+        self.world.end_tick = self.ticks
         self.controls = [Controls()] * self.count
         self.done = False
 
@@ -293,6 +294,8 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
     progress = [_Progress(w, [0]) for w in worlds]
     seconds = scenario.get("seconds") or RACE_SECONDS.get(track.key, DEFAULT_SECONDS)
     ticks = int(seconds * tuning.TICK_RATE)
+    for world in worlds:
+        world.end_tick = ticks
     mine = [Controls()] * count
     theirs = {k: [Controls()] * count for k in brains}
     for tick in range(ticks):
