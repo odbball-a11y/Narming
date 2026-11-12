@@ -102,6 +102,12 @@ class CarParams:
     # Mass only matters in car-to-car hits: heavier cars shove lighter ones.
     mass: float = 1.0
 
+    # The car's traits as the driver sees them (see sim/cartraits.py):
+    # top speed, acceleration, handling, braking, each -1..1 (1 to 5 stars),
+    # and weight -1 light, 0 medium, 1 heavy.  Physics does not read these;
+    # the values above already include the traits' effects.
+    traits: tuple = (0.0, 0.0, 0.0, 0.0, 0.0)
+
 
 # The four cars.  Each slot has its own parameter set; they start nearly equal
 # so the racing is fair.  Change a slot here to give it a personality.
@@ -120,6 +126,25 @@ CAR_WIDTH = 2.3
 
 def car_params(slot: int) -> CarParams:
     return CAR_PARAMS[slot % len(CAR_PARAMS)]
+
+
+# --------------------------------------------------------------------------
+# Car traits (AI racers' cars; see sim/cartraits.py)
+# --------------------------------------------------------------------------
+
+# Stars per car to spread over top speed, acceleration, handling and braking
+# (each 1-5).  Every car has the same budget: different, never simply better.
+TRAIT_BUDGET = 12
+
+# Effect of one star either side of 3, as a fraction.
+# Higher: specialists differ more and suit their tracks more strongly.
+TRAIT_STEP = 0.04
+
+# Weight costs no stars; it is a trade-off.  Heavy cars win shoves but
+# accelerate and brake a little worse; light cars the reverse.
+LIGHT_MASS = 0.8
+HEAVY_MASS = 1.3
+WEIGHT_PERFORMANCE = 0.04     # light: +4% accel and brakes; heavy: -4%
 
 
 # --------------------------------------------------------------------------
@@ -288,5 +313,6 @@ def physics_fingerprint() -> str:
              WALL_FRICTION, CAR_RESTITUTION, DAMAGE_MIN_IMPACT, WALL_DAMAGE, CAR_DAMAGE,
              DAMAGE_TOP_SPEED_LOSS, DAMAGE_ACCEL_LOSS, DRAFT_LENGTH, DRAFT_HALF_WIDTH,
              DRAFT_SPREAD, DRAFT_MIN_SPEED, DRAFT_TOP_SPEED_GAIN, DRAFT_ACCEL_GAIN,
-             ROLLING_START_SPEED, ROLLING_START_GAP, ROLLING_START_LEAD)
+             ROLLING_START_SPEED, ROLLING_START_GAP, ROLLING_START_LEAD,
+             TRAIT_BUDGET, TRAIT_STEP, LIGHT_MASS, HEAVY_MASS, WEIGHT_PERFORMANCE)
     return hashlib.sha256(repr(parts).encode()).hexdigest()[:16]

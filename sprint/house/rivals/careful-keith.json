@@ -8,7 +8,7 @@
    16
   ],
   "memory": 4,
-  "inputs": 2
+  "inputs": 3
  },
  "created": "2026-11-12",
  "generations": 40,
@@ -31,5 +31,12 @@
    "race_draft": 0.233,
    "race_damage": 0.107
   }
+ },
+ "traits": {
+  "top_speed": 3,
+  "accel": 3,
+  "handling": 3,
+  "braking": 3,
+  "weight": "medium"
  }
 }

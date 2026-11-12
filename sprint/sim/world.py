@@ -21,7 +21,7 @@ from .track import GRASS, Track
 class World:
     def __init__(self, track: Track, num_cars: int = 1, seed: int = 0,
                  slots: Sequence[int] | None = None, laps: int | None = None,
-                 ghost: bool = False, rolling: bool = False):
+                 ghost: bool = False, rolling: bool = False, params: Sequence | None = None):
         """`slots` says which grid slot / parameter set each car uses
         (default 0..num_cars-1).  `laps` is the race distance.  With
         `ghost` the cars pass through each other and give no tow: used to
@@ -36,6 +36,9 @@ class World:
         self.track = track
         self.seed = seed
         self.slots = list(slots) if slots is not None else list(range(num_cars))
+        # Optional CarParams per car (an AI racer's own car); None entries
+        # use the slot's standard parameters.
+        self.car_params = list(params) if params is not None else [None] * len(self.slots)
         self.laps = track.default_laps if laps is None else laps
         self.cars = [Car(tuning.car_params(slot)) for slot in self.slots]
         self.rng = random.Random(seed)
@@ -50,8 +53,8 @@ class World:
             self.seed = seed
         self.rng = random.Random(self.seed)
         self.tick = 0
-        for car, slot in zip(self.cars, self.slots):
-            car.params = tuning.car_params(slot)
+        for car, slot, own in zip(self.cars, self.slots, self.car_params):
+            car.params = own or tuning.car_params(slot)
             if self.rolling:
                 x, y, heading = self.track.rolling_start(slot)
                 self.place_car(car, x, y, heading)

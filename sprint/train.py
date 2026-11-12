@@ -65,6 +65,9 @@ def main() -> int:
     ap.add_argument("--racing-from", type=int, default=None, metavar="GEN",
                     help="start racing school at this generation (new runs; default: automatically "
                          "once the champion laps cleanly)")
+    ap.add_argument("--car", choices=["standard", "random"], default="standard",
+                    help="car to train in (new runs): the standard car, or a different random car "
+                         "each generation so drivers learn to drive any car")
     ap.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1), help="CPU cores to use")
     args = ap.parse_args()
 
@@ -96,7 +99,7 @@ def main() -> int:
                      seed=args.seed, tracks=args.tracks, phase2_from=args.racing_from, arch=arch,
                      races_per_track=args.races, race_bonuses=False if args.no_race_bonuses else None,
                      race_laps=args.race_laps, start_from=args.start_from, style=args.style,
-                     name=args.name,
+                     name=args.name, car=None if args.car == "standard" else "random",
                      workers=args.workers, on_generation=report,
                      log=lambda m: print(m, flush=True))
         config = evolve.load_config(run_dir)

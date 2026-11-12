@@ -489,7 +489,10 @@ class RaceRenderer:
         for i in sorted(range(len(poses)), key=lambda k: not world.cars[k].retired):
             x, y, heading = poses[i]
             sprite = self.sprites[world.slots[i] % len(self.sprites)]
-            image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom)
+            # Heavy cars are drawn bigger and light cars smaller.
+            mass = world.cars[i].params.mass
+            size = 1.12 if mass > 1.1 else 0.9 if mass < 0.9 else 1.0
+            image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom * size)
             if world.cars[i].retired:
                 image.set_alpha(90)
             screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))

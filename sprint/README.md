@@ -141,6 +141,16 @@ the house rivals, Dangerous Dave and Careful Keith.
 - Training stops if you quit the game; **Resume training** on the card
   carries on from where it stopped. Only one racer trains at a time.
 
+- **The car**: every racer has its own car, for life. Spend 12 stars over
+  **top speed**, **acceleration**, **handling** and **braking** (1 to 5 each)
+  and pick a **weight**: heavy cars win shoving matches but are a little
+  slower to speed up and stop; light cars the reverse, and they get pushed
+  around. Each star either side of 3 is worth about 4%. Heavy cars are drawn
+  bigger on track and light cars smaller. A racer trains in its own car, so
+  it learns to drive that car. Foals inherit each trait from one parent or
+  the other (the certificate shows which), sometimes a star up or down, always
+  within the 12-star budget.
+
 Your racers are saved in the `stable` folder.
 
 ### Breeding
@@ -211,7 +221,8 @@ The drivers see: their speed and slide, position and angle on the track,
 the bends ahead (out to about 30 car lengths) and how long the straight ahead
 is, the room to the barrier on each side, their damage, the tow they get and
 the tow they give, the two cars ahead, the car behind, cars alongside on
-either side, their place in the race and how much of the race is left. They
+either side, their place in the race, how much of the race is left, and the
+traits of the car they are driving. They
 also have a small memory they carry from one moment to the next.
 
 When new inputs are added, saved drivers are upgraded automatically the

@@ -46,8 +46,9 @@ _INPUTS_V1 = (
 )
 _INPUTS_V2 = _INPUTS_V1 + [f"curvature {int(d)} ahead" for d in FAR_AHEAD] + [
     "room to barrier left", "room to barrier right", "race place", "race left"]
-INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2}
-INPUT_VERSION = 2
+_INPUTS_V3 = _INPUTS_V2 + ["car top speed", "car acceleration", "car handling", "car braking", "car weight"]
+INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3}
+INPUT_VERSION = 3
 INPUT_NAMES = INPUT_VERSIONS[INPUT_VERSION]
 N_INPUTS = len(INPUT_NAMES)
 N_CONTROLS = 2          # steering; throttle (+) / brake (-)
@@ -159,6 +160,9 @@ def observe(world, i: int) -> list[float]:
         obs.append(max(0.0, 1.0 - world.tick / world.end_tick))
     else:
         obs.append(1.0)
+
+    # ---- input version 3: the car it is driving (-1..1 each) ----
+    obs.extend(car.params.traits)
     return obs
 
 

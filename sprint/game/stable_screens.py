@@ -11,6 +11,7 @@ from pathlib import Path
 import pygame
 
 from ai import stable
+from sim import cartraits, tuning as sim_tuning
 from sim.race import Race
 from sim.track import Track
 
@@ -192,10 +193,14 @@ class CreateScreen(Screen):
         self.aggression = racer["aggression"] if racer else 0.3
         self.caution = racer["caution"] if racer else 0.3
         self.generations = 20
+        self.traits = dict(racer.get("traits") or cartraits.default()) if racer else cartraits.default()
         exclude = racer["id"] if racer else None
         self.partners = stable.partner_options(app.stable_root, exclude, include_house=app.workshop)
         if not racer:
             self.partners = [p for p in self.partners if p["kind"] != "self"]   # nothing of its own yet
+        basic = [p for p in self.partners if p["kind"] != "file"]
+        others = [p for p in self.partners if p["kind"] == "file"]
+        self.partners = basic + others[-8:]           # the 8 most recent racers fit on screen
         self.chosen = {p["key"] for p in self.partners if p["kind"] in ("scripted", "self")}
         self.row = 1 if racer else 0
         self.message = ""
@@ -203,8 +208,12 @@ class CreateScreen(Screen):
             pygame.key.start_text_input()
 
     def rows(self) -> list:
-        return (["name", "aggression", "caution"] + [p["key"] for p in self.partners]
+        car = [] if self.racer_dir else list(cartraits.STARS) + ["weight"]    # a car is for life
+        return (["name", "aggression", "caution"] + car + [p["key"] for p in self.partners]
                 + ["generations", "start", "back"])
+
+    def stars_left(self) -> int:
+        return sim_tuning.TRAIT_BUDGET - cartraits.stars_used(self.traits)
 
     def back(self) -> None:
         pygame.key.stop_text_input()
@@ -238,6 +247,13 @@ class CreateScreen(Screen):
                 self.aggression = round(min(1.0, max(0.0, self.aggression + step)), 1)
             elif row == "caution":
                 self.caution = round(min(1.0, max(0.0, self.caution + step)), 1)
+            elif row in cartraits.STARS:
+                value = self.traits[row] + (1 if key in RIGHT else -1)
+                if cartraits.MIN_STARS <= value <= cartraits.MAX_STARS and (key in LEFT or self.stars_left() > 0):
+                    self.traits[row] = value
+            elif row == "weight":
+                i = cartraits.WEIGHTS.index(self.traits["weight"]) + (1 if key in RIGHT else -1)
+                self.traits["weight"] = cartraits.WEIGHTS[i % 3]
             elif row == "generations":
                 choices = stable.GENERATION_CHOICES
                 i = choices.index(self.generations) + (1 if key in RIGHT else -1)
@@ -268,6 +284,9 @@ class CreateScreen(Screen):
         if not self.chosen:
             self.message = "Pick at least one training partner."
             return
+        if not self.racer_dir and self.stars_left() != 0:
+            self.message = f"Spend all {sim_tuning.TRAIT_BUDGET} car stars ({self.stars_left()} left)."
+            return
         if self.app.training_dir():
             self.message = "Another racer is training. Wait for it, or stop it from its card."
             return
@@ -277,7 +296,7 @@ class CreateScreen(Screen):
             racer_dir = self.racer_dir
         else:
             racer_dir = stable.create(self.app.stable_root, self.name, self.aggression, self.caution,
-                                      partners, self.generations)
+                                      partners, self.generations, traits=self.traits)
         pygame.key.stop_text_input()
         self.app.audio.play("select")
         self.app.start_training(racer_dir)
@@ -290,7 +309,7 @@ class CreateScreen(Screen):
         title = f"UPSKILL {racer['name'].upper()}" if racer else "CREATE A RACER"
         ui.text(screen, "big", title, C_HUD_ACCENT, 6, 4, shadow=True)
         rows = self.rows()
-        y = 15.0
+        y = 12.5
         for i, row in enumerate(rows):
             selected = i == self.row
             colour = C_HUD_ACCENT if selected else C_HUD_TEXT
@@ -308,31 +327,51 @@ class CreateScreen(Screen):
                 bar(ui, screen, 40, y + 0.6, 40, value, C_PINK if row == "aggression" else C_CYAN)
                 ui.text(screen, "mid", f"{value:.1f}", colour, 84, y)
                 y += 5.5
-                if row == "caution":
+                if row == "caution" and not racer:
+                    y += 1.0
+                    left = self.stars_left()
+                    ui.text(screen, "small", f"THE CAR  (stars left to spend: {left})",
+                            C_HUD_DIM if left == 0 else C_PINK, 7, y)
+                    y += 3.5
+                if row == "caution" and racer:
                     y += 2.0
+                    ui.text(screen, "small", f"CAR (for life): {cartraits.describe(self.traits)}", C_HUD_DIM, 7, y)
+                    y += 3.5
+                if row == "caution" and racer:
                     ui.text(screen, "small", "TRAINING PARTNERS  (Enter or Left/Right to tick)", C_HUD_DIM, 7, y)
                     y += 3.5
+            elif row in cartraits.STARS:
+                ui.text(screen, "small", cartraits.LABELS[row], C_HUD_DIM, 9, y + 0.3)
+                stars = self.traits[row]
+                ui.text(screen, "mid", "*" * stars + "." * (cartraits.MAX_STARS - stars), colour, 40, y - 0.4)
+                y += 3.6
+            elif row == "weight":
+                ui.text(screen, "small", "WEIGHT", C_HUD_DIM, 9, y + 0.3)
+                ui.text(screen, "mid", f"<  {self.traits['weight'].upper()}  >", colour, 40, y - 0.4)
+                y += 5.0
+                ui.text(screen, "small", "TRAINING PARTNERS  (Enter or Left/Right to tick)", C_HUD_DIM, 7, y)
+                y += 3.5
             elif row == "generations":
-                y += 1.5
+                y += 1.0
                 ui.text(screen, "mid", "GENERATIONS", C_HUD_DIM, 7, y)
                 minutes = self.generations * 0.5
                 ui.text(screen, "mid", f"<  {self.generations}  >", colour, 40, y)
                 ui.text(screen, "small", f"about {minutes:.0f} min", C_HUD_DIM, 62, y + 0.8)
-                y += 7
+                y += 5.5
             elif row == "start":
                 ui.text(screen, "big", "START TRAINING", colour, 7, y, shadow=True)
-                y += 7
+                y += 6
             elif row == "back":
                 ui.text(screen, "mid", "BACK", colour, 7, y)
             else:
                 partner = next(p for p in self.partners if p["key"] == row)
                 tick = "[x]" if row in self.chosen else "[ ]"
-                ui.text(screen, "mid", f"{tick}  {partner['name']}", colour, 9, y)
-                y += 4.6
+                ui.text(screen, "small", f"{tick}  {partner['name']}", colour, 9, y + 0.3)
+                y += 3.0
         if self.message:
             ui.text(screen, "small", self.message, C_PINK, 7, 87.5, "bottomleft")
 
-        ui.panel(screen, 100, 13, 56, 50)
+        ui.panel(screen, 100, 13, 56, 66)
         lines = [
             ("AGGRESSION", C_PINK, "Training rewards places, passes and slipstreaming;"),
             ("", C_PINK, "damage is cheap.  Dangerous Dave is 1.0."),
@@ -348,8 +387,15 @@ class CreateScreen(Screen):
                 y += 2.8
             ui.text(screen, "small", text, C_HUD_TEXT, 103, y)
             y += 3.4
-        ui.text(screen, "small", "Racers start from a racing-school graduate", C_HUD_DIM, 103, y + 2)
-        ui.text(screen, "small", "that can already lap Speedway.", C_HUD_DIM, 103, y + 5)
+        for head, colour, text in (("THE CAR", C_HUD_ACCENT, f"{sim_tuning.TRAIT_BUDGET} stars over four traits, 1-5 each."),
+                                   ("", C_HUD_ACCENT, "Weight is free: heavy shoves harder but is"),
+                                   ("", C_HUD_ACCENT, "slower to speed up and stop; light the reverse."),
+                                   ("", C_HUD_ACCENT, "A racer keeps its car for life.")):
+            if head:
+                ui.text(screen, "small", head, colour, 103, y)
+                y += 2.8
+            ui.text(screen, "small", text, C_HUD_TEXT, 103, y)
+            y += 3.4
 
 
 class RacerScreen(Screen):
@@ -484,6 +530,8 @@ class RacerScreen(Screen):
         bar(ui, screen, 26, 17.7, 22, racer["caution"], C_CYAN)
         partners = ", ".join(p["name"] for p in v[-1]["partners"])
         ui.text(screen, "small", f"trained against: {partners}"[:80], C_HUD_DIM, 52, 14)
+        ui.text(screen, "small", "CAR: " + cartraits.describe(stable.traits_of(self.racer_dir)).upper(),
+                C_HUD_TEXT, 52, 17.5)
 
         # Measured racecraft (latest exam: time trial + race from last v three scripted cars)
         exam = self.history[-1]["exam"] if self.history else None
@@ -716,6 +764,13 @@ class CertificateScreen(Screen):
             grand = cert["grandparents"].get(p["name"]) or []
             ui.text(screen, "small", "by " + " out of ".join(grand) if grand else "a founder",
                     C_HUD_DIM, x, y + 9.8)
+        if cert.get("traits"):
+            src = cert.get("traits_from", {})
+            parts = [f"{cartraits.LABELS[k]} {cert['traits'][k]}"
+                     f"{' (' + src[k][0].upper() + ')' if k in src else ''}" for k in cartraits.STARS]
+            weight = cert["traits"]["weight"]
+            parts.append(weight + (f" ({src['weight'][0].upper()})" if "weight" in src else ""))
+            ui.text(screen, "small", "CAR  (S = from sire, D = from dam): " + "  ".join(parts), C_HUD_TEXT, 7, 25)
         t = cert["temperament"]
         ui.text(screen, "small", "TEMPERAMENT", C_HUD_ACCENT, 110, y)
         ui.text(screen, "small", "aggression", C_HUD_DIM, 110, y + 3.4)
@@ -724,7 +779,7 @@ class CertificateScreen(Screen):
         bar(ui, screen, 126, y + 6.8, 26, t["caution"], C_CYAN)
 
         # Litter
-        y = 28.5
+        y = 29.5
         ui.text(screen, "small", f"THE LITTER: {cert['litter']} foals, {cert['shortlist']} shortlisted.  "
                 f"Picked by: {cert['criterion_text']} (target {cert['target_lap']:.2f}s)", C_HUD_ACCENT, 7, y)
         y += 3.6

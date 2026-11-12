@@ -175,9 +175,26 @@ small arcs, give clean splines). The fifth, chosen by the user, is
 11.5 s, 5 laps by default). All five exist now. No AI has been trained on the new tracks: the graduate and all
 stable racers only know Speedway.
 
-Still to build: (5) championship
-across tracks, weather (wet/dry specialists from camp conditions), car
-traits on a fixed budget, 6-8 cars.
+- Car traits (`sim/cartraits.py`, numbers in `tuning`: `TRAIT_BUDGET` 12,
+  `TRAIT_STEP` 0.04, `LIGHT_MASS`/`HEAVY_MASS`, `WEIGHT_PERFORMANCE`):
+  `{"top_speed", "accel", "handling", "braking": 1-5, "weight":
+  light|medium|heavy}`; `params_for(traits)` -> `CarParams` (the default car
+  is exactly today's car; `CarParams.traits` holds the normalised values the
+  driver sees). `World(params=[...])` gives cars their own params; `Race`
+  takes them from `driver.car_params`. Drivers see them as input version 3
+  (5 inputs). Training: `config["car"]` = traits (a racer's own), None
+  (standard) or "random" (`car_for`: a new random car each generation, for
+  a graduate that can drive anything; `train.py --car random`); scenarios
+  carry `car` and `rival_cars`. Stable: `racer["traits"]` (create validates
+  the budget; upskill cannot change it), `cartraits.inherit` per trait from
+  either parent + occasional +-1 star, rebalanced; `traits_from` on the
+  certificate; heavy cars drawn 12% bigger, light 10% smaller. The user
+  chose: all five traits, strict budget (no bonus stars), visible size, and
+  no weather for now.
+
+Still to build: (5) championship across tracks, 6-8 cars. Before it, the
+graduate should be retrained on all five tracks with `--car random` (one
+long run), so new and bred racers can drive every track and any car.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.
@@ -296,7 +313,7 @@ AI training. The renderer draws smoke, tow streaks and the HUD damage bar.
 neuroevolution in two phases (the user chose generations over PPO, and asked
 for "learn to drive first, then learn to race").
 
-- `brain.py`: `observe(world, i)` gives 34 inputs (`INPUT_NAMES`): speeds,
+- `brain.py`: `observe(world, i)` gives 39 inputs (`INPUT_NAMES`): speeds,
   offset, heading error, six curvatures ahead, half-width, straight length
   ahead, damage, tow received, tow given, two cars ahead / one behind (gap,
   side, closing speed), nearest car alongside left / right; then (input
@@ -311,7 +328,8 @@ for "learn to drive first, then learn to race").
   rivals, every run under training/, stable/, workshop/, bred foals); it is
   called by the game, train.py, compare.py and `python -m ai.stable`.
   Network shape is a per-run `arch` dict
-  `{"hidden": [24, 16], "memory": 4, "inputs": 2}`; memory = extra
+  `{"hidden": [24, 16], "memory": 4, "inputs": 3}` (version 3 added the
+  car's five traits); memory = extra
   outputs fed back as inputs at the next decision (recurrence, no gradients
   needed). `Population` (different weights per row), `Brain` (one network,
   batch of cars), `NeuralDriver` (the `Driver`; decides every

@@ -40,7 +40,10 @@ class Race:
         self.drivers: list[Driver] = [
             create_driver(d, slot=slot) if isinstance(d, str) else d for slot, d in entries
         ]
-        self.world = World(self.track, slots=self.slots, seed=seed, laps=laps, rolling=rolling)
+        # A driver can bring its own car (an AI racer with car traits).
+        params = [getattr(d, "car_params", None) for d in self.drivers]
+        self.world = World(self.track, slots=self.slots, seed=seed, laps=laps, rolling=rolling,
+                           params=params)
         self.restart()
 
     def restart(self) -> None:

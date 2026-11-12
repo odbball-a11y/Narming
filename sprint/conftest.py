@@ -17,3 +17,7 @@ def _clean_driver_registry():
     yield
     from sim.driver import unregister_drivers
     unregister_drivers("evo:")
+
+
+# Fixtures shared by the stable and car-trait tests.
+from tests.test_stable import app, dirs  # noqa: E402,F401

@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 import sim.scripted  # noqa: F401
-from sim import tuning
+from sim import cartraits, tuning
 from sim.driver import Controls, create_driver
 from sim.track import Track
 from sim.world import World
@@ -154,10 +154,12 @@ class PackRun:
     """
 
     def __init__(self, weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None,
-                 slot: int = 0, damage: float = 0.0):
+                 slot: int = 0, damage: float = 0.0, car: dict | None = None):
         self.track = get_track(track_name)
         self.count = len(weights)
-        self.world = World(self.track, slots=[slot] * self.count, ghost=True, laps=10 ** 9, rolling=True)
+        params = cartraits.params_for(car) if car else None
+        self.world = World(self.track, slots=[slot] * self.count, ghost=True, laps=10 ** 9, rolling=True,
+                           params=[params] * self.count)
         for car in self.world.cars:
             car.damage = damage
         self.brains = Population(weights, arch)
@@ -193,10 +195,11 @@ class PackRun:
 
 
 def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None,
-              slot: int = 0, damage: float = 0.0) -> dict:
+              slot: int = 0, damage: float = 0.0, car: dict | None = None) -> dict:
     """Run every driver in `weights` on the track at once, as ghosts, from
-    grid `slot` with `damage` already on the car."""
-    run = PackRun(weights, arch, track_name, seconds, slot, damage)
+    grid `slot` with `damage` already on the car, in a car with traits
+    `car` (None = the standard car)."""
+    run = PackRun(weights, arch, track_name, seconds, slot, damage, car)
     while not run.done:
         run.step()
     cars = run.world.cars
@@ -279,8 +282,10 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
     learners = Population(weights, arch)
     others = [s for s in range(4) if s != slot]
     worlds, scripted, stats = [], [], []
+    cars = [scenario.get("car")] + list(scenario.get("rival_cars") or [None, None, None])
+    params = [cartraits.params_for(c) if c else None for c in cars]
     for _ in range(count):
-        world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True)
+        world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True, params=params)
         drivers = {}
         for k, rival in enumerate(scenario["rivals"]):
             if isinstance(rival, str):
@@ -389,7 +394,7 @@ def _job(args):
     kind, weights, arch, task = args
     if kind == "solo":
         name, setup = task
-        return test_solo(weights, arch, name, slot=setup["slot"], damage=setup["damage"])
+        return test_solo(weights, arch, name, slot=setup["slot"], damage=setup["damage"], car=setup.get("car"))
     return test_race(weights, arch, task)
 
 
@@ -473,15 +478,17 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
 
 # ------------------------------------------------------------------- exams
 
-def exam(weights: np.ndarray, arch: dict, tracks: list[str]) -> dict:
+def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = None) -> dict:
     """Standard report card for one driver, the same for every generation so
     generations can be compared: a solo time trial, and a three-lap race
     against three scripted cars starting from the back of the grid."""
     from sim.race import FINISHED, Race
     report = {}
     for name in tracks:
-        solo = test_solo(weights[None, :], arch, name)
-        race = Race(name, [(3, NeuralDriver(weights, arch, "Evolved")), (0, "scripted"),
+        solo = test_solo(weights[None, :], arch, name, car=car)
+        learner = NeuralDriver(weights, arch, "Evolved")
+        learner.car_params = cartraits.params_for(car) if car else None
+        race = Race(name, [(3, learner), (0, "scripted"),
                            (1, "scripted"), (2, "scripted")], laps=3, rolling=True)
         stats = RaceStats(race.world)
         limit = int(150.0 * tuning.TICK_RATE)
@@ -578,6 +585,17 @@ def phase2_start(config: dict, history: list[dict]) -> int | None:
     return next((h["gen"] for h in history if h["mode"] == "race"), None)
 
 
+def car_for(config: dict, gen: int) -> dict | None:
+    """The car a generation trains in: the racer's own (traits dict), the
+    standard car (None), or for "random" a different random car each
+    generation, the same for every driver in it, so a driver learns to
+    handle any car."""
+    car = config.get("car")
+    if car == "random":
+        return cartraits.random_traits(np.random.default_rng([config["seed"], gen, 11]))
+    return car
+
+
 def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) -> list[dict]:
     """The racing-school races for generation `gen` (the same for every
     driver in it).  Rivals are "scripted" or the generation number of a
@@ -618,7 +636,18 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
                     pick -= chance
             pool = {"recent": recent, "hall": hall}.get(kind)
             rivals.append(int(rng.choice(pool)) if pool else "scripted")
+        car = car_for(config, gen)
+        partners_ = config.get("partners") or []
+        rival_cars = []
+        for r in rivals:
+            if isinstance(r, int):
+                rival_cars.append(car)                         # its own earlier self, same car
+            elif isinstance(r, str) and r.startswith("p:"):
+                rival_cars.append(partners_[int(r[2:])].get("traits"))
+            else:
+                rival_cars.append(None)
         scenarios.append({"track": tracks[k % len(tracks)], "slot": int(slots[k % 4]), "rivals": rivals,
+                          "car": car, "rival_cars": rival_cars,
                           "seconds": config.get("race_seconds", RACE_SECONDS).get(
                               tracks[k % len(tracks)], DEFAULT_SECONDS)})
         if k % 4 == 3:
@@ -632,7 +661,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           race_laps: float | None = None, start_from: str | None = None, style: str | None = None,
           name: str | None = None, workers: int = 0, on_generation=None, log=print,
           root=None, start_file: str | None = None, race_weights: dict | None = None,
-          race_seconds: dict | None = None, partners: list | None = None) -> Path:
+          race_seconds: dict | None = None, partners: list | None = None, car=None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -691,7 +720,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
                   "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
                   "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
-                  "partners": partners,
+                  "partners": partners, "car": car,
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
@@ -746,7 +775,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             fitness, averages = score_population(pop, arch, tracks, resolved, bonus, pool,
                                                  chunks=max(1, workers),
                                                  weights=config.get("race_weights"),
-                                                 setup=solo_setup(gen))
+                                                 setup=dict(solo_setup(gen), car=car_for(config, gen)))
             order = np.argsort(-fitness, kind="stable")
             fitness = fitness[order]
             np.savez_compressed(gen_path(run_dir, gen), pop=pop[order].astype(np.float32), fitness=fitness)
@@ -760,7 +789,9 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 "median": round(float(np.median(fitness)), 4),
                 "bonus": round(bonus, 3),
                 "solo_setup": solo_setup(gen),
-                "exam": exam(pop[0], arch, tracks),
+                "car": car_for(config, gen),
+                "exam": exam(pop[0], arch, tracks,
+                             car=config.get("car") if isinstance(config.get("car"), dict) else None),
             }
             if racing:
                 best = order[0]

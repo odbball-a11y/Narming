@@ -32,6 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
+from sim import cartraits
 from sim.driver import register_driver, unregister_drivers
 
 from . import evolve
@@ -106,6 +107,11 @@ def load(racer_dir) -> dict:
 
 def save(racer_dir, racer: dict) -> None:
     _write(Path(racer_dir) / "racer.json", racer)
+
+
+def traits_of(racer_dir) -> dict:
+    """The racer's car (racers made before car traits drive the standard car)."""
+    return load(racer_dir).get("traits") or cartraits.default()
 
 
 def list_racers(root: Path, include_dead: bool = False) -> list[Path]:
@@ -284,11 +290,12 @@ def partner_options(root: Path, exclude: str | None = None, include_house: bool 
         f = brain_file(d)
         if f is not None:
             options.append({"key": f"racer:{d.name}", "name": load(d)["name"], "kind": "file",
-                            "file": evolve.project_path(f)})
+                            "file": evolve.project_path(f), "traits": traits_of(d)})
     if include_house:
         for rival in house_rivals():
             options.append({"key": f"house:{rival['id']}", "name": rival["name"], "kind": "file",
-                            "file": evolve.project_path(rival["file"])})
+                            "file": evolve.project_path(rival["file"]),
+                            "traits": rival.get("traits") or cartraits.default()})
     return options
 
 
@@ -298,16 +305,20 @@ def _new_version(racer: dict, aggression: float, caution: float, partners: list[
                  generations: int, track: str) -> dict:
     return {"run": f"v{len(racer['versions']) + 1}", "generations": int(generations),
             "aggression": round(float(aggression), 2), "caution": round(float(caution), 2),
-            "partners": [{k: p[k] for k in ("name", "kind", "file") if k in p} for p in partners],
+            "partners": [{k: p[k] for k in ("name", "kind", "file", "traits") if k in p} for p in partners],
             "track": track}
 
 
 def create(root: Path, name: str, aggression: float, caution: float, partners: list[dict],
-           generations: int, track: str = "speedway") -> Path:
-    """Register a new racer; train it with `train`."""
+           generations: int, track: str = "speedway", traits: dict | None = None) -> Path:
+    """Register a new racer with its car (`traits`, default the standard
+    car); train it with `train`.  The car is the racer's for life."""
     name = name.strip()
     if not name:
         raise ValueError("a racer needs a name")
+    traits = dict(traits or cartraits.default())
+    if not cartraits.is_valid(traits):
+        raise ValueError(f"car traits must use exactly {cartraits.tuning.TRAIT_BUDGET} stars, 1-5 each")
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     racer_dir = root / slug(name, root)
@@ -315,7 +326,7 @@ def create(root: Path, name: str, aggression: float, caution: float, partners: l
     racer = {"id": racer_dir.name, "name": name,
              "created": datetime.date.today().isoformat(),
              "aggression": round(float(aggression), 2), "caution": round(float(caution), 2),
-             "parents": [], "versions": [],
+             "traits": traits, "parents": [], "versions": [],
              "career": {"races": 0, "wins": 0, "podiums": 0, "best_laps": {}}}
     racer["versions"].append(_new_version(racer, aggression, caution, partners or [{"name": "Scripted car",
                                                                                    "kind": "scripted"}],
@@ -358,7 +369,7 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
                  seed=index, tracks=[track], arch=grad["arch"], races_per_track=grad["races_per_track"],
                  race_bonuses=False, start_file=str(start), race_seconds={track: grad["race_seconds"][track]},
                  race_weights=sliders_to_weights(v["aggression"], v["caution"]),
-                 partners=v["partners"], name=racer["name"], workers=workers,
+                 partners=v["partners"], name=racer["name"], workers=workers, car=traits_of(racer_dir),
                  on_generation=on_generation, log=lambda m: None)
 
 
@@ -375,6 +386,7 @@ def champion(racer_dir, label: str | None = None) -> NeuralDriver:
         weights = data["pop"][0].astype(np.float64)
     driver = NeuralDriver(weights, graduate()["arch"], label or racer["name"])
     driver.racer_dir = str(racer_dir)
+    driver.car_params = cartraits.params_for(traits_of(racer_dir))
     return driver
 
 
@@ -395,7 +407,9 @@ def house_driver(rival_id: str) -> NeuralDriver:
     meta = _read(RIVALS_DIR / f"{rival_id}.json")
     with np.load(RIVALS_DIR / f"{rival_id}.npz") as data:
         weights = data["pop"][0].astype(np.float64)
-    return NeuralDriver(weights, meta["arch"], meta["name"])
+    driver = NeuralDriver(weights, meta["arch"], meta["name"])
+    driver.car_params = cartraits.params_for(meta.get("traits") or cartraits.default())
+    return driver
 
 
 def record_result(racer_dir, place: int, best_lap: float | None, track: str) -> list[str]:
@@ -439,6 +453,7 @@ def publish(racer_dir) -> Path:
         best = data["pop"][:1].astype(np.float32)
     np.savez_compressed(RIVALS_DIR / f"{racer['id']}.npz", pop=best)
     card = {"name": racer["name"], "aggression": racer["aggression"], "caution": racer["caution"],
+            "traits": traits_of(racer_dir),
             "arch": graduate()["arch"], "created": racer["created"],
             "generations": sum(v["generations"] for v in racer["versions"]),
             "exam": latest_exam(racer_dir)}
@@ -535,11 +550,14 @@ def mate(root: Path, sire_dir, dam_dir, name: str, criterion: str = "fastest") -
         return round(float(min(1.0, max(0.0, value))), 2)
 
     aggression, caution = blend("aggression"), blend("caution")
+    traits, traits_from = cartraits.inherit(sire.get("traits") or cartraits.default(),
+                                            dam.get("traits") or cartraits.default(), rng)
     foal_dir = create(root, name, aggression, caution, [{"name": "Scripted car", "kind": "scripted"}],
-                      CAMP_GENERATIONS, sire["versions"][-1]["track"])
+                      CAMP_GENERATIONS, sire["versions"][-1]["track"], traits=traits)
     racer = load(foal_dir)
     racer["parents"] = [sire["id"], dam["id"]]
-    racer["breeding"] = {"sire": sire["id"], "dam": dam["id"], "criterion": criterion, "seed": seed}
+    racer["breeding"] = {"sire": sire["id"], "dam": dam["id"], "criterion": criterion, "seed": seed,
+                         "traits_from": traits_from}
     save(foal_dir, racer)
     _progress(foal_dir, stage="waiting")
     if careers_enabled(root):
@@ -558,6 +576,7 @@ def _parent_summary(root: Path, racer_id: str) -> dict:
     exam = latest_exam(d)
     e = next(iter(exam.values())) if exam else {}
     return {"id": r["id"], "name": r["name"], "aggression": r["aggression"], "caution": r["caution"],
+            "traits": r.get("traits") or cartraits.default(),
             "races": r["career"]["races"], "wins": r["career"]["wins"], "podiums": r["career"]["podiums"],
             "best_laps": r["career"]["best_laps"], "parents": r.get("parents", []),
             "lap_alone": e.get("solo_best_lap"), "passes": e.get("race_overtakes"),
@@ -587,6 +606,16 @@ def expectations(sire: dict, dam: dict, foal: dict) -> list[str]:
     hits = [p["hits"] for p in (sire, dam) if p.get("hits") is not None]
     if hits and max(hits) <= 0.5:
         notes.append("Consistency: neither parent causes many collisions; should race cleanly.")
+    car = foal.get("traits") or {}
+    best = max(cartraits.STARS, key=lambda k: car.get(k, 3)) if car else None
+    if best and car.get(best, 3) >= 4:
+        suits = {"top_speed": "Oval and Speedway", "accel": "Grand Prix and Technical",
+                 "handling": "Esses and the hairpins", "braking": "Grand Prix"}[best]
+        notes.append(f"Car: strongest at {cartraits.LABELS[best].lower()}; should suit {suits}.")
+    if car.get("weight") == "heavy":
+        notes.append("Car: heavy. Wins shoving matches, slower to accelerate and stop.")
+    elif car.get("weight") == "light":
+        notes.append("Car: light. Quick to accelerate and stop, but easily pushed around.")
     wins = sire.get("wins", 0) + dam.get("wins", 0)
     if wins:
         notes.append(f"Winning stock: its parents have {wins} wins between them.")
@@ -630,11 +659,13 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     # Round 1: every foal straight from breeding, alone and in one race,
     # all scored the same (balanced) way so the comparison is fair.
     _progress(foal_dir, stage="trial", done=0, of=litter)
-    trial = [{"track": track, "slot": 3, "rivals": ["scripted"] * 3, "seconds": seconds}]
+    traits = racer.get("traits") or cartraits.default()
+    trial = [{"track": track, "slot": 3, "rivals": ["scripted"] * 3, "seconds": seconds, "car": traits}]
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:
         score, _ = evolve.score_population(foals, arch, [track], trial, 0.0, pool, chunks=max(1, workers),
-                                           weights=sliders_to_weights(0.0, 0.0))
+                                           weights=sliders_to_weights(0.0, 0.0),
+                                           setup={"slot": 0, "damage": 0.0, "car": traits})
     finally:
         if pool:
             pool.shutdown()
@@ -656,7 +687,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
                      elites=2, seed=info["seed"] % 100000 + i, tracks=[track], arch=arch, races_per_track=2,
                      race_bonuses=False, start_file=str(start), race_seconds={track: seconds},
                      race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
-                     workers=workers, log=lambda m: None)
+                     workers=workers, log=lambda m: None, car=traits)
         hist = evolve.load_history(litter_dir / run)
         lap_by_gen = [h["exam"][track]["solo_best_lap"] for h in hist]
         valid = [lap for lap in lap_by_gen if lap]
@@ -695,6 +726,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
         "criterion_text": CRITERIA[info["criterion"]], "target_lap": target,
         "candidates": candidates, "winner": winner,
         "temperament": {"aggression": racer["aggression"], "caution": racer["caution"]},
+        "traits": traits, "traits_from": info.get("traits_from", {}),
         "expectations": expectations(parents[0], parents[1], racer),
     }
     racer = load(foal_dir)
