@@ -14,3 +14,13 @@
 - ` 0.34h` training Sally Slipstream ...
 - ` 0.45h` trained Sally Slipstream in 6.7 min; 7% quicker than scripted
 - ` 0.45h` training Tilly Thunderbolt ...
+- ` 0.56h` trained Tilly Thunderbolt in 6.6 min; 8% quicker than scripted
+- ` 0.56h` training Vera Velvet ...
+- ` 0.67h` trained Vera Velvet in 6.5 min; 10% quicker than scripted
+- ` 0.67h` season 1: **Gus Granite** (racer) wins the title. Gus Granite 35 | Careful Keith 33 | Nora Nimble 33 | Barnaby Brick 29
+- ` 0.76h` between races **Barnaby Brick** takes an all-rounder course (10 generations, 5.4 min) with Scripted car, Itself (its own best so far), Nora Nimble; now all-rounder
+- ` 0.76h` season 2: **Sally Slipstream** (racer) wins the title. Sally Slipstream 34 | Tilly Thunderbolt 30 | Vera Velvet 29 | Careful Keith 26
+- ` 0.85h` between races **Vera Velvet** takes an all-rounder course (10 generations, 5.3 min) with Scripted car, Itself (its own best so far), Gus Granite; now all-rounder
+- ` 0.85h` season 3: **Barnaby Brick** (racer) wins the title. Barnaby Brick 35 | Nora Nimble 32 | Gus Granite 30 | Careful Keith 30
+- ` 0.94h` between races **Sally Slipstream** takes an all-rounder course (10 generations, 5.5 min) with Scripted car, Itself (its own best so far), Gus Granite; now all-rounder
+- ` 0.94h` season 4: **Vera Velvet** (racer) wins the title. Vera Velvet 35 | Sally Slipstream 33 | Careful Keith 29 | Tilly Thunderbolt 25
