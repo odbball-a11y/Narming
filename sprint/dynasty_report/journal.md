@@ -24,3 +24,21 @@
 - ` 0.85h` season 3: **Barnaby Brick** (racer) wins the title. Barnaby Brick 35 | Nora Nimble 32 | Gus Granite 30 | Careful Keith 30
 - ` 0.94h` between races **Sally Slipstream** takes an all-rounder course (10 generations, 5.5 min) with Scripted car, Itself (its own best so far), Gus Granite; now all-rounder
 - ` 0.94h` season 4: **Vera Velvet** (racer) wins the title. Vera Velvet 35 | Sally Slipstream 33 | Careful Keith 29 | Tilly Thunderbolt 25
+- ` 1.08h` between races **Nora Nimble** takes a Speedway specialist course (20 generations, 8.5 min) with Scripted car, Itself (its own best so far), Tilly Thunderbolt; now Speedway specialist
+- ` 1.08h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 1.08h` season 5: **Barnaby Brick** (racer) wins the title. Barnaby Brick 32 | Gus Granite 30 | Nora Nimble 23 | Careful Keith 22
+- ` 1.18h` between races **Tilly Thunderbolt** takes an all-rounder course (10 generations, 5.6 min) with Scripted car, Itself (its own best so far), Nora Nimble; now all-rounder
+- ` 1.18h` season 6: **Vera Velvet** (racer) wins the title. Vera Velvet 39 | Careful Keith 31 | Sally Slipstream 27 | Tilly Thunderbolt 27
+- ` 1.27h` between races **Gus Granite** takes an all-rounder course (10 generations, 5.4 min) with Scripted car, Itself (its own best so far), Nora Nimble; now all-rounder
+- ` 1.27h` season 7: **Gus Granite** (racer) wins the title. Gus Granite 33 | Barnaby Brick 30 | Careful Keith 28 | Nora Nimble 24
+- ` 1.27h`   news: Barnaby Brick retires to stud after 20 races.
+- ` 1.27h`   news: Gus Granite retires to stud after 20 races.
+- ` 1.27h`   news: Nora Nimble retires to stud after 20 races.
+- ` 1.27h` breeding **Mischief Brick**: Barnaby Brick x Gus Granite (fastest)
+- ` 1.31h`   born Mischief Brick: gen 1, speed 2  accel 3  handling 3  brakes 4  heavy, aggression 0.59, caution 0.37 (2.8 min)
+- ` 1.39h` schooled Mischief Brick (8 generations, 4.8 min)
+- ` 1.49h` between races **Mischief Brick** takes an all-rounder course (10 generations, 5.7 min) with Scripted car, Itself (its own best so far), Sally Slipstream; now all-rounder
+- ` 1.49h` season 8: **Careful Keith** (house) wins the title. Careful Keith 31 | Sally Slipstream 30 | Mischief Brick 27 | Tilly Thunderbolt 26
+- ` 1.49h`   news: Sally Slipstream retires to stud after 20 races.
+- ` 1.49h`   news: Tilly Thunderbolt retires to stud after 20 races.
+- ` 1.49h` breeding **Zephyr Brick**: Barnaby Brick x Sally Slipstream (learner)
