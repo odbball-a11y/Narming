@@ -85,6 +85,28 @@ The results screen lets you race again, watch the replay, or save it to
 Many keyboards cannot report more than a few keys held at once, so four
 players on one keyboard may see dropped inputs. That is hardware, not the game.
 
+## Ratings
+
+Every car in a championship has a skill rating, scripted cars and the house
+rivals included. It uses **TrueSkill** (the system built for several players
+finishing in order; a bundled copy lives in `ai/vendor/`), and is shown as a
+number that starts at 1000, with a +/- for how unsure it still is. Everyone
+starts at 1000 and every championship race, watched or simulated, moves
+everyone in it, so racing sorts the numbers out and the house cars keep the
+scale honest:
+
+- Cars that do not finish share last place. Beating stronger cars gains more
+  than beating weaker ones, and the +/- shrinks as a car races.
+- There is an overall rating and one per track, so a specialist shows up as a
+  high rating on its track.
+- Training a racer again (upskill) makes its rating less certain, so the next
+  races move it faster.
+- **Ratings** on the stable screen is the leaderboard of every rated car. The
+  rating also shows on racer cards, the championship table (with the change
+  after each race), certificates and the Hall of Fame (peak rating).
+- Scripted cars in a championship are fixed cars (Scripted 1, 2, 3), each
+  with its own skill and car, so their ratings mean something.
+
 ## Tracks
 
 | Track | Character | Width | Scripted lap |

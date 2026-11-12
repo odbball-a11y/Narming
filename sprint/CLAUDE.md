@@ -275,6 +275,22 @@ a real cost elsewhere. One seed only.
 Careers count every race a racer starts, finished or not (a DNF is no win or
 podium): `record_result(..., finished=)`.
 
+- Ratings (`ai/rating.py`; user asked for an Elo-style rating for every car
+  including scripted, rated by every race with no placement test, then said
+  "use trueskill"): TrueSkill via a bundled copy of the `trueskill` 0.4.5
+  package in `ai/vendor/trueskill/` (BSD; `six` removed; the pip package no
+  longer builds on current Python/setuptools; not for commercial use per its
+  licence note). `ENV = TrueSkill(draw_probability=0.10)`; displayed rating =
+  1000 + 40 (mu - 25), +/- = 40 sigma. `update(root, entrants, results,
+  track)` rates a championship race (finishers ranked by place, non-finishers
+  tied for last) for the overall and the track rating; `loosen` raises sigma
+  when a racer is upskilled; `summary`, `rating_of`, `table`. Stored in
+  `stable/ratings.json` keyed `racer:<id>` / `house:<id>` / `scripted:<id>`.
+  `finish_race` puts `rating` / `track_rating` / `sigma` on each result.
+  Scripted entrants have fixed identities (their number sets a skill slot and
+  `car_params`). Screens: ratings in the championship tables, `RatingsScreen`
+  (scrolls), racer card, Hall of Fame (peak), certificate.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

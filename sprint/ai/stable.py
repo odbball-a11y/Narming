@@ -37,6 +37,7 @@ from sim.driver import register_driver, unregister_drivers
 
 from . import evolve
 from . import livery as liveries
+from . import rating
 from .brain import NeuralDriver, layer_sizes, unpack
 
 HOUSE_DIR = evolve.PROJECT / "house"
@@ -440,6 +441,7 @@ def upskill(racer_dir, aggression: float, caution: float, partners: list[dict], 
                                           generations, racer["versions"][-1]["track"], focus))
     racer["aggression"], racer["caution"] = round(float(aggression), 2), round(float(caution), 2)
     save(racer_dir, racer)
+    rating.loosen(Path(racer_dir).parent, f"racer:{racer['id']}")   # it may be a different racer now
 
 
 def train(racer_dir, workers: int = 0, on_generation=None, population: int = POPULATION) -> None:
@@ -710,7 +712,7 @@ def _parent_summary(root: Path, racer_id: str) -> dict:
     by_track = {t: round(x["solo_best_lap"] / SCRIPTED_LAPS[t], 4) for t, x in (exam or {}).items()
                 if x.get("solo_best_lap") and t in SCRIPTED_LAPS}
     return {"id": r["id"], "name": r["name"], "aggression": r["aggression"], "caution": r["caution"],
-            "traits": r.get("traits") or cartraits.default(),
+            "traits": r.get("traits") or cartraits.default(), "rating": rating.summary(root, f"racer:{r['id']}"),
             "races": r["career"]["races"], "wins": r["career"]["wins"], "podiums": r["career"]["podiums"],
             "best_laps": r["career"]["best_laps"], "parents": r.get("parents", []),
             "pace": pace(exam), "track_pace": by_track, "passes": avg.get("race_overtakes"),

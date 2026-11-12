@@ -12,6 +12,8 @@ after quitting.  Rules:
   grid        race 1 is drawn (seeded); after that the field starts in
               reverse championship order, so the leader starts last
   damage      resets between races
+  ratings     every car, scripted ones too, has a TrueSkill rating that
+              every race moves (see ai/rating.py)
   careers     each race counts towards a racer's career (20 races = four
               seasons); a racer reaching its limit mid-season finishes the
               season and then goes to stud
@@ -30,7 +32,9 @@ from sim.race import Race
 from sim.track import Track
 
 from . import livery as liveries
+from . import rating
 from . import stable
+from sim import tuning
 from sim.driver import create_driver
 
 POINTS = [10, 7, 5, 3, 2, 1, 0, 0]
@@ -163,7 +167,9 @@ def _driver(root, entrant: dict, slot: int):
         return stable.champion(Path(root) / entrant["id"])
     if entrant["kind"] == "house":
         return stable.house_driver(entrant["id"])
-    driver = create_driver("scripted", slot=slot)
+    identity = int(entrant["id"][-1]) % 4          # Scripted 1, 2, 3: each its own fixed skill and car
+    driver = create_driver("scripted", slot=identity)
+    driver.car_params = tuning.car_params(identity)
     driver.label = entrant["name"]
     driver.livery = entrant["livery"]
     return driver
@@ -196,6 +202,12 @@ def finish_race(root, ch: dict, race: Race) -> dict:
                         "time": r["time"], "best_lap": r["best_lap"], "fastest": quick,
                         "points": points + (FASTEST_LAP_POINT if quick else 0),
                         "grid": r["car"] + 1, "damage": round(race.world.cars[r["car"]].damage, 3)})
+    changes = rating.update(root, ch["entrants"], results, race.track.key)     # every car is rated
+    for res in results:
+        ch_ = changes[res["entrant"]]
+        res["rating"] = [round(ch_["before"], 1), round(ch_["after"], 1)]
+        res["track_rating"] = [round(ch_["track_before"], 1), round(ch_["track_after"], 1)]
+        res["sigma"] = round(ch_["sigma"], 1)
     record = {"track": race.track.key, "order": order, "results": results}
     ch["races"].append(record)
     ch["news"] = career_news
