@@ -172,3 +172,11 @@ def test_create_screen_spends_the_car_stars(app):
     # Upskilling cannot change the car.
     app.show(CreateScreen(app, app.started[-1]))
     assert "weight" not in app.current.rows()
+
+
+def test_exam_on_several_tracks_in_a_chosen_car():
+    from ai import brain, evolve
+    weights = brain.random_weights(np.random.default_rng(1), 1, brain.DEFAULT_ARCH)[0]
+    car = {"top_speed": 4, "accel": 4, "handling": 2, "braking": 2, "weight": "heavy"}
+    report = evolve.exam(weights, brain.DEFAULT_ARCH, ["oval", "speedway"], car=car)
+    assert set(report) == {"oval", "speedway"}

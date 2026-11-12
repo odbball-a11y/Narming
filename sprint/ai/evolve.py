@@ -497,7 +497,7 @@ def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = 
             if race.phase != "countdown" and not race.world.cars[0].finished:
                 stats.on_tick(events)
         row = next(r for r in race.results() if r["car"] == 0)
-        car = race.world.cars[0]
+        racecar = race.world.cars[0]
         report[name] = {
             "solo_laps": round(solo["laps"][0], 3),
             "solo_best_lap": solo["best_lap"][0],
@@ -513,7 +513,7 @@ def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = 
             "race_overtakes": stats.overtakes,
             "race_passed": stats.passed,
             "race_draft": round(stats.draft_share(), 3),
-            "race_damage": round(car.damage, 3),
+            "race_damage": round(racecar.damage, 3),
         }
     return report
 
@@ -661,7 +661,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           race_laps: float | None = None, start_from: str | None = None, style: str | None = None,
           name: str | None = None, workers: int = 0, on_generation=None, log=print,
           root=None, start_file: str | None = None, race_weights: dict | None = None,
-          race_seconds: dict | None = None, partners: list | None = None, car=None) -> Path:
+          race_seconds: dict | None = None, partners: list | None = None, car=None,
+          driving_school: bool = False) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -704,7 +705,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             races_per_track = races_per_track or src["races_per_track"]
             if race_laps is None and race_seconds is None:
                 race_seconds = {t: src["race_seconds"][t] for t in tracks if t in src["race_seconds"]}
-            phase2_from = phase2_from or 1
+            if not driving_school:
+                phase2_from = phase2_from or 1
         if start_file:
             parent = {"file": project_path(start_file)}
             phase2_from = phase2_from or 1

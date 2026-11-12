@@ -53,6 +53,9 @@ def main() -> int:
     ap.add_argument("--from", dest="start_from", metavar="RUN[:GEN]",
                     help="training camp: start a new run from another run's drivers (its latest "
                          "generation unless GEN is given), straight into racing school")
+    ap.add_argument("--driving-school", action="store_true",
+                    help="with --from: start in driving school (solo laps) and move on to racing school "
+                         "once the champion laps every track cleanly, instead of racing straight away")
     ap.add_argument("--style", choices=["balanced", "aggressive", "cautious"], default=None,
                     help="racing personality for a new run (how its races are scored)")
     ap.add_argument("--name", help="racer name shown in the game for a new run")
@@ -100,6 +103,7 @@ def main() -> int:
                      races_per_track=args.races, race_bonuses=False if args.no_race_bonuses else None,
                      race_laps=args.race_laps, start_from=args.start_from, style=args.style,
                      name=args.name, car=None if args.car == "standard" else "random",
+                     driving_school=args.driving_school,
                      workers=args.workers, on_generation=report,
                      log=lambda m: print(m, flush=True))
         config = evolve.load_config(run_dir)
