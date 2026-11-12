@@ -540,6 +540,7 @@ class RacerScreen(Screen):
             out.append("retire")
         if self.app.workshop and trained:
             out.append("publish")
+        out.append("training")
         out.append("back")
         return out
 
@@ -598,6 +599,8 @@ class RacerScreen(Screen):
                     self.app.show(ChampionshipHub(self.app))
                 else:
                     self.app.show(ChampionshipSetupScreen(self.app, preselect=self.racer_dir))
+            elif choice == "training":
+                self.app.show(TrainingScreen(self.app, self.racer_dir))
             elif choice == "stop":
                 self.app.stop_training()
             elif choice == "resume":
@@ -727,7 +730,7 @@ class RacerScreen(Screen):
 
         labels = {"certificate": "BREEDING CERTIFICATE", "resume_breeding": "RESUME BREEDING",
                   "race": "TEST RACE", "championship": "ENTER CHAMPIONSHIP", "stop": "STOP",
-                  "resume": "RESUME TRAINING",
+                  "resume": "RESUME TRAINING", "training": "TRAINING HISTORY",
                   "upskill": "UPSKILL", "retire": "RETIRE TO STUD", "publish": "PUBLISH AS HOUSE RIVAL",
                   "back": "BACK"}
         rows = self.rows()
@@ -745,6 +748,60 @@ class RacerScreen(Screen):
             y += 5.5
         if self.message:
             ui.text(screen, "small", self.message, C_PINK, 112, 86)
+
+
+class TrainingScreen(Screen):
+    """Everything a racer has been taught: each round of training (the first
+    course, then every upskill) with its settings and what the test showed
+    at the end of it."""
+
+    def __init__(self, app, racer_dir):
+        super().__init__(app)
+        self.racer_dir = racer_dir
+
+    def handle_event(self, event) -> None:
+        from .screens import BACK
+        if event.type == pygame.KEYDOWN and event.key in BACK + ACCEPT:
+            self.app.show(RacerScreen(self.app, self.racer_dir))
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        racer = stable.load(self.racer_dir)
+        ui.text(screen, "big", f"TRAINING: {racer['name'].upper()}", C_HUD_ACCENT, 6, 3, shadow=True)
+        used = stable.training_planned(self.racer_dir)
+        left = stable.training_left(self.racer_dir)
+        if left is not None:
+            ui.text(screen, "small", "lifetime training", C_HUD_DIM, 6, 13)
+            bar(ui, screen, 32, 13.2, 40, min(1.0, used / stable.TRAINING_BUDGET), C_CYAN)
+            ui.text(screen, "small", f"{used} of {stable.TRAINING_BUDGET} generations"
+                    + ("  (fully trained)" if left == 0 else f"  ({left} left)"), C_HUD_DIM, 76, 13)
+        history = stable.history(self.racer_dir)
+        y = 19.0
+        for k, v in enumerate(racer["versions"], start=1):
+            done = [h for h in history if h["version"] == k]
+            ui.panel(screen, 3, y, 154, 14)
+            title = "FIRST COURSE" if k == 1 else f"UPSKILL {k - 1}"
+            if "certificate" in racer and k == 1:
+                title = "BORN IN THE BREEDING CAMP"
+            ui.text(screen, "mid", title, C_HUD_ACCENT, 6, y + 1)
+            ui.text(screen, "small", f"{len(done)} of {v['generations']} generations", C_HUD_TEXT, 50, y + 1.8)
+            focus = v.get("focus")
+            ui.text(screen, "small", ("trained on " + stable.TRACK_NAMES[focus]) if focus else "trained on all tracks",
+                    C_CYAN, 92, y + 1.8)
+            ui.text(screen, "small", f"aggression {v['aggression']:.1f}   caution {v['caution']:.1f}", C_HUD_DIM,
+                    6, y + 5.6)
+            ui.text(screen, "small", ("against " + ", ".join(p["name"] for p in v["partners"]))[:80], C_HUD_DIM,
+                    6, y + 9)
+            if done:
+                e = stable.exam_average(done[-1]["exam"])
+                pace = stable.pace_text(stable.pace(done[-1]["exam"]))
+                ui.text(screen, "small", f"at the end: pace {pace}   place {e['race_place']:.1f}   passes "
+                        f"{e['race_overtakes']:.1f}   damage {e['race_damage'] * 100:.0f}%", C_HUD_TEXT, 60, y + 5.6)
+            y += 15.5
+            if y > 78:
+                break
+        ui.text(screen, "mid", "BACK", C_HUD_ACCENT, 8, 84, shadow=True)
 
 
 class BreedScreen(Screen):
@@ -1112,7 +1169,7 @@ class ChampionshipSetupScreen(Screen):
         """Who would be on the grid: the entered racers, then house rivals, then scripted cars."""
         out = [{"name": stable.load(d)["name"], "livery": stable.livery_of(d), "kind": "yours",
                 "titles": stable.load(d)["career"].get("titles", 0)} for d in self.chosen]
-        for rival in stable.house_rivals():
+        for rival in championship.house_field(self.app.stable_root):
             if len(out) < championship.FIELD:
                 out.append({"name": rival["name"], "livery": rival["livery"], "kind": "house rival",
                             "titles": rating.titles_of(self.app.stable_root, f"house:{rival['id']}")})
@@ -1126,7 +1183,7 @@ class ChampionshipSetupScreen(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         ui.text(screen, "big", "ENTER A CHAMPIONSHIP", C_HUD_ACCENT, 6, 4, shadow=True)
-        ui.text(screen, "small", "Five races, one per track. Pick one or two of your racers.", C_HUD_DIM, 6, 11)
+        ui.text(screen, "small", "Five races, one per track. Enter up to three of your racers; the best-rated house rival joins.", C_HUD_DIM, 6, 11)
         y = 17.0
         for i, row in enumerate(self.rows()):
             selected = i == self.row

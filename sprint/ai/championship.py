@@ -40,7 +40,7 @@ from sim.driver import create_driver
 
 POINTS = [10, 7, 5, 3, 2, 1, 0, 0]
 FASTEST_LAP_POINT = 1
-MAX_OWN = 2
+MAX_OWN = 3            # a race holds four cars; the highest-rated house rival always has one
 FIELD = 4
 RACE_LAPS = 5          # every championship race, on every track
 TRACK_ORDER = ["oval", "speedway", "esses", "technical", "grandprix"]
@@ -84,21 +84,29 @@ def eligible(root) -> list[Path]:
     return [d for d in stable.list_racers(root) if stable.can_race(d)]
 
 
+def house_field(root) -> list[dict]:
+    """The house rivals, highest rating first (unrated ones count as 1000)."""
+    def skill(rival):
+        return rating.rating_of(root, {"kind": "house", "id": rival["id"]})
+    return sorted(stable.house_rivals(), key=skill, reverse=True)
+
+
 def start(root, racer_dirs) -> dict:
-    """Begin a season with one or two of your racers."""
+    """Begin a season with up to three of your racers; the field is filled
+    with the highest-rated house rivals, then scripted cars."""
     root = Path(root)
     if active(root):
         raise ValueError("a championship is already under way")
     dirs = [Path(d) for d in racer_dirs]
     if not 1 <= len(dirs) <= MAX_OWN:
-        raise ValueError(f"enter one or two racers (not {len(dirs)})")
+        raise ValueError(f"enter one to {MAX_OWN} racers (not {len(dirs)})")
     entrants = []
     for d in dirs:
         if not stable.can_race(d):
             raise ValueError(f"{stable.load(d)['name']} cannot race (untrained, retired or breeding)")
         entrants.append({"kind": "racer", "id": d.name, "name": stable.load(d)["name"],
                          "livery": stable.livery_of(d)})
-    for rival in stable.house_rivals():
+    for rival in house_field(root):
         if len(entrants) < FIELD:
             entrants.append({"kind": "house", "id": rival["id"], "name": rival["name"],
                              "livery": rival["livery"]})

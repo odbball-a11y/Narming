@@ -443,7 +443,7 @@ def test_career_screens(app, monkeypatch):
     card.row = card.rows().index("retire")
     press(app, pygame.K_RETURN)
     assert stable.status(racer) == "stud" and "retires" in card.message
-    assert card.rows() == ["back"] and "AT STUD" in status_text(app, racer)[0]
+    assert card.rows() == ["training", "back"] and "AT STUD" in status_text(app, racer)[0]
     other = stable.create(root, "Mate", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
     quick_train(other)
     stable.retire(other)
@@ -470,6 +470,7 @@ def test_race_news_appears_on_the_results_screen(app, monkeypatch):
     app.show(card)
     card.race()
     view = app.current
+    view.on_over = stable.record_race                      # a plain race counts for nothing; this one is scored
     while not view.over:
         view.tick()
     assert "retires to stud" in view.message

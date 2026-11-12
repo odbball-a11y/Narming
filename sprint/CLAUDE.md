@@ -308,6 +308,16 @@ podium): `record_result(..., finished=)`.
   `HallScreen` (always in the stable menu) has track records, past
   champions (`championship.past_champions`) and the legends (dead racers).
 
+- Plain races count for nothing: only championship races (`RaceScreen`
+  with `on_over`) touch careers, the stable clock, ratings, titles or track
+  records; a race from the main menu or the workshop is practice.
+  `TrainingScreen` (card row TRAINING HISTORY) lists every round of training
+  with its sliders, partners, focus and the test result at its end.
+
+- Entering: up to `MAX_OWN` = 3 of your racers (a race holds four cars), and
+  the field always gets the highest-rated house rival (`house_field` sorts
+  rivals by rating), then the next, then scripted cars.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

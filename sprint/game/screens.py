@@ -354,8 +354,8 @@ class RaceScreen(Screen):
 
     def __init__(self, app, race: Race, recording: Recording | None = None, back=None,
                  on_over=None, on_continue=None):
-        """`on_over(race)` replaces the default career recording when the race
-        ends, and returns news to show; with `on_continue` the results screen
+        """`on_over(race)` is called when a championship race
+        ends, and returns news to show (plain races count for nothing); with `on_continue` the results screen
         has one button, CONTINUE (a championship race: no restart, no replay)."""
         super().__init__(app)
         self.race = race
@@ -487,7 +487,7 @@ class RaceScreen(Screen):
     def tick(self) -> None:
         events = self.race.step()
         if not self.is_replay and any(e[0] == "race_over" for e in events):
-            news = self.on_over(self.race) if self.on_over else self.app.record_race(self.race)
+            news = self.on_over(self.race) if self.on_over else []   # only championship races count
             if news:
                 self.message = " ".join(news)
         if self.race.phase != race_module.COUNTDOWN:

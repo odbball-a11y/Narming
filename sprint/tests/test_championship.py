@@ -211,7 +211,7 @@ def test_play_a_season_through_the_screens(app):
     from game.stable_screens import (ChampionshipHub, ChampionshipSetupScreen, StableScreen,
                                      StandingsScreen)
     root = stable.STABLE_DIR
-    racers = [instant_racer(root, name) for name in ("Ann", "Ben", "Cal")]
+    racers = [instant_racer(root, name) for name in ("Ann", "Ben", "Cal", "Dee")]
     app.show(StableScreen(app))
     app.current.row = app.current.rows().index("championship")
     press(app, pygame.K_RETURN)
@@ -219,9 +219,10 @@ def test_play_a_season_through_the_screens(app):
     assert isinstance(setup, ChampionshipSetupScreen)
     press(app, pygame.K_RETURN)                                        # tick Ann
     press(app, pygame.K_DOWN, pygame.K_RETURN)                         # and Ben
-    press(app, pygame.K_DOWN, pygame.K_RETURN)                         # a third is refused
-    assert len(setup.chosen) == 2 and "At most" in setup.message
-    assert [f["kind"] for f in setup.field()] == ["yours", "yours", "house rival", "house rival"]
+    press(app, pygame.K_DOWN, pygame.K_RETURN)                         # and Cal
+    press(app, pygame.K_DOWN, pygame.K_RETURN)                         # a fourth is refused
+    assert len(setup.chosen) == 3 and "At most" in setup.message
+    assert [f["kind"] for f in setup.field()] == ["yours", "yours", "yours", "house rival"]
     setup.row = setup.rows().index("start")
     press(app, pygame.K_RETURN)
     hub = app.current
@@ -248,9 +249,9 @@ def test_play_a_season_through_the_screens(app):
         press(app, pygame.K_RETURN)
     assert isinstance(app.current, StableScreen)                       # the season is over
     assert championship.active(root) is None
-    ann, ben, cal = racers
-    assert stable.load(ann)["career"]["races"] == 5 and stable.load(ben)["career"]["races"] == 5
-    assert stable.load(cal)["career"]["races"] == 0                    # not entered
+    ann, ben, cal, dee = racers
+    assert all(stable.load(r)["career"]["races"] == 5 for r in (ann, ben, cal))
+    assert stable.load(dee)["career"]["races"] == 0                    # not entered
     assert stable.clock(root) == 5
 
 
@@ -442,3 +443,62 @@ def test_a_race_shows_its_fastest_lap_and_the_hall_shows_records_and_champions(a
     assert hall.records["oval"] and len(hall.champions) == 1
     app.show(hall)
     app.draw()
+
+
+# ------------------------------------ plain races do not count; training history
+
+def test_a_plain_race_counts_for_nothing(app):
+    from game.screens import RaceScreen
+    from ai import rating
+    root = stable.STABLE_DIR
+    zoe = instant_racer(root, "Zoe")
+    stable.register(root)
+    from sim.driver import create_driver
+    from sim.track import Track
+    race = Race(Track.load("oval"), [(0, create_driver("racer:zoe", 0)), (1, "scripted")], laps=1,
+                seed=3, rolling=True)
+    view = RaceScreen(app, race)
+    app.show(view)
+    while not view.over:
+        view.tick()
+    career = stable.load(zoe)["career"]
+    assert career["races"] == 0 and stable.clock(root) == 0
+    assert rating.summary(root, "racer:zoe") is None
+    assert championship.active(root) is None
+
+
+def test_the_training_history_screen_lists_every_round(app):
+    from game.stable_screens import RacerScreen, TrainingScreen
+    root = stable.STABLE_DIR
+    zoe = instant_racer(root, "Zoe")
+    stable.upskill(zoe, 0.7, 0.2, [{"name": "Scripted car", "kind": "scripted"}], 2, focus="oval")
+    card = RacerScreen(app, zoe)
+    assert "training" in card.rows()
+    card.row = card.rows().index("training")
+    app.show(card)
+    press(app, pygame.K_RETURN)
+    screen = app.current
+    assert isinstance(screen, TrainingScreen)
+    app.draw()
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.current, RacerScreen)
+
+
+def test_all_your_cars_can_enter_and_the_best_rated_house_rival_stays(dirs):
+    from ai import rating
+    root = stable.STABLE_DIR
+    cars = [instant_racer(root, n) for n in ("Ann", "Ben", "Cal", "Dee")]
+    with pytest.raises(ValueError):
+        championship.start(root, cars)                                 # four of yours leave no room
+    rivals = stable.house_rivals()
+    assert len(rivals) >= 2
+    low, high = rivals[0], rivals[1]
+    entrant = lambda r: {"kind": "house", "id": r["id"], "name": r["name"], "livery": r["livery"]}
+    for _ in range(4):                                                 # make the second rival the stronger
+        rating.update(root, [entrant(high), entrant(low)],
+                      [{"entrant": 0, "place": 1, "finished": True}, {"entrant": 1, "place": 2, "finished": True}],
+                      "oval")
+    assert championship.house_field(root)[0]["id"] == high["id"]
+    ch = championship.start(root, cars[:3])
+    assert [e["kind"] for e in ch["entrants"]] == ["racer", "racer", "racer", "house"]
+    assert ch["entrants"][3]["id"] == high["id"]

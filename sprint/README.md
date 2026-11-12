@@ -167,8 +167,8 @@ the house rivals, Dangerous Dave and Careful Keith.
   charts over every generation, and its career (races, wins, podiums, best
   race laps).
 - **Championships**: from the stable (or a racer's card), **Enter a
-  championship** with one or two of your racers. The field is made up to four
-  cars with the house rivals and scripted cars, and the season is five races
+  championship** with up to three of your racers. The field is made up to four
+  cars with the highest-rated house rival (then scripted cars), and the season is five races
   of 5 laps each, one on each track (Oval, Speedway, Esses, Technical, Grand
   Prix). Every race counts. Before each race you choose to **watch** it or **simulate** it
   (no visuals, a couple of seconds), and the **championship table** is shown
