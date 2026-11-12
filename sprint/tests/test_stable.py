@@ -175,16 +175,30 @@ def test_create_a_racer_through_the_screens_then_race_it(app):
     assert racer["name"] == "Zippy Zoe" and racer["aggression"] == 0.5
     card.reload()
     app.draw()
-    assert card.rows()[0] == "race"
-    press(app, pygame.K_RETURN)                                  # RACE THE HOUSE RIVALS
+    assert card.rows()[0] == "championship"
+    press(app, pygame.K_RETURN)                                  # ENTER CHAMPIONSHIP
+    from game.stable_screens import ChampionshipHub, ChampionshipSetupScreen, StandingsScreen
+    setup = app.current
+    assert isinstance(setup, ChampionshipSetupScreen) and setup.chosen == [card.racer_dir]
+    setup.row = setup.rows().index("start")
+    press(app, pygame.K_RETURN)
+    assert isinstance(app.current, ChampionshipHub)
+    press(app, pygame.K_RETURN)                                  # WATCH THE RACE
     view = app.current
-    assert isinstance(view, RaceScreen) and view.race.rolling
-    assert [d.label for d in view.race.drivers][:3] == ["Zippy Zoe", "Careful Keith", "Dangerous Dave"]
+    assert isinstance(view, RaceScreen) and view.race.rolling and view.on_continue
+    assert {d.label for d in view.race.drivers} == {"Zippy Zoe", "Careful Keith", "Dangerous Dave", "Scripted 1"}
     while not view.over:
         view.tick()
     assert stable.load(card.racer_dir)["career"]["races"] == 1   # career recorded
-    press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)   # BACK TO ... the racer card
-    assert isinstance(app.current, RacerScreen)
+    press(app, pygame.K_RETURN)                                  # CONTINUE
+    assert isinstance(app.current, StandingsScreen)
+    press(app, pygame.K_RETURN)                                  # on to the hub
+    assert isinstance(app.current, ChampionshipHub)
+    press(app, pygame.K_DOWN, pygame.K_RETURN)                   # SIMULATE THE RACE
+    assert isinstance(app.current, StandingsScreen)
+    assert stable.load(card.racer_dir)["career"]["races"] == 2
+    app.show(RacerScreen(app, card.racer_dir))
+    app.draw()
     press(app, pygame.K_DOWN, pygame.K_RETURN)                   # UPSKILL
     assert isinstance(app.current, CreateScreen) and app.current.racer_dir == card.racer_dir
     assert any(p["kind"] == "self" for p in app.current.partners)
@@ -425,7 +439,7 @@ def test_career_screens(app, monkeypatch):
     app.show(card)
     app.draw()
     assert "RACING" in status_text(app, racer)[0]
-    assert "retire" in card.rows() and "race" in card.rows()
+    assert "retire" in card.rows() and "championship" in card.rows()
     card.row = card.rows().index("retire")
     press(app, pygame.K_RETURN)
     assert stable.status(racer) == "stud" and "retires" in card.message

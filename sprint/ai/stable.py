@@ -36,6 +36,7 @@ from sim import cartraits
 from sim.driver import register_driver, unregister_drivers
 
 from . import evolve
+from . import livery as liveries
 from .brain import NeuralDriver, layer_sizes, unpack
 
 HOUSE_DIR = evolve.PROJECT / "house"
@@ -142,6 +143,25 @@ def load(racer_dir) -> dict:
 
 def save(racer_dir, racer: dict) -> None:
     _write(Path(racer_dir) / "racer.json", racer)
+
+
+def _taken_liveries(root, exclude=None) -> list[dict]:
+    """Liveries already in use: living racers in `root` and the house rivals."""
+    taken = [load(d)["livery"] for d in list_racers(root) if d.name != exclude and load(d).get("livery")]
+    for rival in _house_cards():
+        if rival.get("livery"):
+            taken.append(rival["livery"])
+    return taken
+
+
+def livery_of(racer_dir) -> dict:
+    """The racer's livery, assigned (and saved) the first time it is needed
+    for racers made before liveries existed."""
+    racer = load(racer_dir)
+    if not racer.get("livery"):
+        racer["livery"] = liveries.assign(_taken_liveries(Path(racer_dir).parent, racer["id"]))
+        save(racer_dir, racer)
+    return racer["livery"]
 
 
 def traits_of(racer_dir) -> dict:
@@ -356,12 +376,15 @@ def create(root: Path, name: str, aggression: float, caution: float, partners: l
         raise ValueError(f"car traits must use exactly {cartraits.tuning.TRAIT_BUDGET} stars, 1-5 each")
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
+    for existing in list_racers(root):          # older racers get theirs first, in order
+        livery_of(existing)
     racer_dir = root / slug(name, root)
     racer_dir.mkdir()
     racer = {"id": racer_dir.name, "name": name,
              "created": datetime.date.today().isoformat(),
              "aggression": round(float(aggression), 2), "caution": round(float(caution), 2),
-             "traits": traits, "parents": [], "versions": [],
+             "traits": traits, "livery": liveries.assign(_taken_liveries(root)),
+             "parents": [], "versions": [],
              "career": {"races": 0, "wins": 0, "podiums": 0, "best_laps": {}}}
     racer["versions"].append(_new_version(racer, aggression, caution, partners or [{"name": "Scripted car",
                                                                                    "kind": "scripted"}],
@@ -421,11 +444,11 @@ def champion(racer_dir, label: str | None = None) -> NeuralDriver:
     driver = NeuralDriver(weights, graduate()["arch"], label or racer["name"])
     driver.racer_dir = str(racer_dir)
     driver.car_params = cartraits.params_for(traits_of(racer_dir))
+    driver.livery = livery_of(racer_dir)
     return driver
 
 
-def house_rivals() -> list[dict]:
-    """Shipped opponents: [{"id", "name", "file", ...card data}]."""
+def _house_cards() -> list[dict]:
     if not RIVALS_DIR.exists():
         return []
     out = []
@@ -437,25 +460,42 @@ def house_rivals() -> list[dict]:
     return out
 
 
+def house_rivals() -> list[dict]:
+    """Shipped opponents: [{"id", "name", "file", "livery", ...card data}].
+    A rival with no livery of its own gets one that nobody else has."""
+    cards = _house_cards()
+    given = [c["livery"] for c in cards if c.get("livery")]
+    for card in cards:
+        if not card.get("livery"):
+            card["livery"] = liveries.assign(given)
+            given.append(card["livery"])
+    return cards
+
+
 def house_driver(rival_id: str) -> NeuralDriver:
-    meta = _read(RIVALS_DIR / f"{rival_id}.json")
+    meta = next((r for r in house_rivals() if r["id"] == rival_id), None) or _read(RIVALS_DIR / f"{rival_id}.json")
     with np.load(RIVALS_DIR / f"{rival_id}.npz") as data:
         weights = data["pop"][0].astype(np.float64)
     driver = NeuralDriver(weights, meta["arch"], meta["name"])
     driver.car_params = cartraits.params_for(meta.get("traits") or cartraits.default())
+    driver.livery = meta.get("livery")
     return driver
 
 
-def record_result(racer_dir, place: int, best_lap: float | None, track: str) -> list[str]:
+def record_result(racer_dir, place: int, best_lap: float | None, track: str,
+                  defer_retire: bool = False, tick: bool = True) -> list[str]:
     """Add one finished race to a racer's career; the stable's clock moves
-    on.  Returns news: retirements and deaths."""
+    on (once per race: `tick`).  Returns news: retirements and deaths.
+    `defer_retire` leaves a racer that reaches its limit racing until the
+    end of its championship."""
     racer_dir = Path(racer_dir)
     root = racer_dir.parent
     news = []
     if careers_enabled(root):
         if status(racer_dir) != "racing":
             return news
-        _tick(root)
+        if tick:
+            _tick(root)
     racer = load(racer_dir)
     career = racer["career"]
     career["races"] += 1
@@ -467,11 +507,26 @@ def record_result(racer_dir, place: int, best_lap: float | None, track: str) -> 
             career["best_laps"][track] = round(best_lap, 3)
     save(racer_dir, racer)
     if careers_enabled(root):
-        if career["races"] >= CAREER_RACES:
+        if career["races"] >= CAREER_RACES and not defer_retire:
             retire(racer_dir, f"after {CAREER_RACES} races")
             news.append(f"{racer['name']} retires to stud after {CAREER_RACES} races.")
         for name in check_deaths(root):
             news.append(f"{name} has died. Remembered in the hall of fame.")
+    return news
+
+
+def record_race(race, defer_retire: bool = False) -> list[str]:
+    """Add a finished race to the careers of any stable racers in it; the
+    stable's clock ticks once for the race.  Returns news: retirements and
+    deaths.  (`defer_retire`: championships retire racers at the season's end.)"""
+    news = []
+    first = True
+    for row in race.results():
+        racer_dir = getattr(race.drivers[row["car"]], "racer_dir", None)
+        if racer_dir and row["finished"]:
+            news += record_result(racer_dir, row["place"], row["best_lap"], race.track.key,
+                                  defer_retire=defer_retire, tick=first)
+            first = False
     return news
 
 
@@ -487,7 +542,7 @@ def publish(racer_dir) -> Path:
         best = data["pop"][:1].astype(np.float32)
     np.savez_compressed(RIVALS_DIR / f"{racer['id']}.npz", pop=best)
     card = {"name": racer["name"], "aggression": racer["aggression"], "caution": racer["caution"],
-            "traits": traits_of(racer_dir),
+            "traits": traits_of(racer_dir), "livery": livery_of(racer_dir),
             "arch": graduate()["arch"], "created": racer["created"],
             "generations": sum(v["generations"] for v in racer["versions"]),
             "exam": latest_exam(racer_dir)}
@@ -589,6 +644,8 @@ def mate(root: Path, sire_dir, dam_dir, name: str, criterion: str = "fastest") -
     foal_dir = create(root, name, aggression, caution, [{"name": "Scripted car", "kind": "scripted"}],
                       CAMP_GENERATIONS, sire["versions"][-1]["track"], traits=traits)
     racer = load(foal_dir)
+    racer["livery"] = liveries.inherit(livery_of(sire_dir), livery_of(dam_dir),
+                                       _taken_liveries(root, racer["id"]))
     racer["parents"] = [sire["id"], dam["id"]]
     racer["breeding"] = {"sire": sire["id"], "dam": dam["id"], "criterion": criterion, "seed": seed,
                          "traits_from": traits_from}
@@ -766,7 +823,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
         "criterion_text": CRITERIA[info["criterion"]], "target_pace": target,
         "candidates": candidates, "winner": winner,
         "temperament": {"aggression": racer["aggression"], "caution": racer["caution"]},
-        "traits": traits, "traits_from": info.get("traits_from", {}),
+        "traits": traits, "traits_from": info.get("traits_from", {}), "livery": racer.get("livery"),
         "expectations": expectations(parents[0], parents[1], racer),
     }
     racer = load(foal_dir)

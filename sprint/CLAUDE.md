@@ -101,7 +101,7 @@ aggressive cars he tails closely and runs into them when they cut in and
 brake (rear contact counts as caused). Proposed next: camps whose rival pool
 includes the other personalities' champions.
 
-## The stable (built: steps 1-4 of 5)
+## The stable (built: steps 1-5, championship done; 6-8 cars still to do)
 
 Agreed design, from the user: an AI-only racing stable in the spirit of Derby
 Owners Club. The player creates named racers (name, aggression and caution
@@ -222,7 +222,38 @@ collisions caused). Keith's caution-1.0 scoring makes holding position
 always beat passing; a caution ~0.7 with some aggression would likely give
 a careful racer that still overtakes.
 
-Still to build: (5) championship across tracks, 6-8 cars.
+- Liveries (`ai/livery.py`, data only): `{"colour", "trim" (stripe | twin |
+  nose | wing | band), "trim_colour", "number"}` in `racer["livery"]` (house
+  cards too). Assigned by the game at creation (`assign`: the first palette
+  colour nobody has, never red/green, which are Dave and Keith's, with
+  varying trims and numbers from 10); `livery_of` fills it in lazily for
+  older racers; `inherit` gives a foal its own free colour, its sire's colour
+  as trim colour and its dam's trim style. `resolve(drivers, slots)` gives
+  every car of a race a look: a driver's `.livery`, or its slot colour
+  unless a liveried car has it. `render.make_car_sprite(colour, ppu, trim,
+  trim_colour)` and `RaceRenderer.sprite_for`; HUD, results and the
+  championship screens use them. Replays store liveries and each car's own
+  `car_params` (a replay of a trait car now reproduces; it did not before).
+- Championship (`ai/championship.py`): saved as `stable/championship.json`
+  (finished seasons in `stable/seasons/`). `start(root, [racer dirs])` (1-2
+  of yours, then house rivals, then scripted cars with fixed liveries, 4
+  cars, tracks `TRACK_ORDER`); `standings` (points, wins, places; `moved`),
+  `grid` (race 1 seeded draw, then reverse standings, leader last),
+  `build_race`, `finish_race` (points `POINTS` 10-7-5-3-2-1 + 1 fastest lap
+  among finishers; DNF 0; calls `stable.record_race(defer_retire=True)` so
+  careers count once per race and a racer at its limit finishes the season;
+  the last race runs `complete`: titles, retirements, deaths, archive).
+  Screens: `ChampionshipSetupScreen`, `ChampionshipHub` (watch or simulate
+  the next race, abandon with a second press), `StandingsScreen` (result and
+  table after every race, champion banner at the end). `RaceScreen(on_over,
+  on_continue)` is the watched championship race (no restart; quitting a race
+  discards it). The racer card's RACE became ENTER CHAMPIONSHIP (workshop
+  keeps a test race). User choices: watch-or-sim per race, reverse grid,
+  game-assigned colours then inheritance; my defaults: 10-7-5-3 + fastest
+  lap, damage resets, one or two of your racers.
+
+Still to build: 6-8 cars per race (new HUD, more grid slots, slower
+training), wet/dry weather (not wanted for now), PPO as a rival method.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.

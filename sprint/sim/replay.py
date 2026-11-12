@@ -13,6 +13,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from . import tuning
@@ -32,8 +33,11 @@ def track_fingerprint(track: Track) -> str:
 class Recording:
     def __init__(self, track: str, slots, laps: int, seed: int, controls,
                  drivers=None, final_hash=None, results=None,
-                 tuning_id=None, track_id=None, tick_rate=tuning.TICK_RATE, rolling=False):
+                 tuning_id=None, track_id=None, tick_rate=tuning.TICK_RATE, rolling=False,
+                 liveries=None, car_params=None):
         self.rolling = bool(rolling)
+        self.liveries = list(liveries) if liveries else []      # how each car looked (game use only)
+        self.car_params = list(car_params) if car_params else []  # each car's own physics (or None)
         self.track = track
         self.slots = list(slots)
         self.laps = laps
@@ -53,7 +57,9 @@ class Recording:
             controls=race.controls_log, drivers=[d.label for d in race.drivers],
             final_hash=race.final_hash, results=race.results(),
             tuning_id=tuning.physics_fingerprint(), track_id=track_fingerprint(race.track),
-            rolling=race.rolling,
+            rolling=race.rolling, liveries=[getattr(d, "livery", None) for d in race.drivers],
+            car_params=[asdict(getattr(d, "car_params")) if getattr(d, "car_params", None) else None
+                        for d in race.drivers],
         )
 
     # ----------------------------------------------------------------- I/O
@@ -64,7 +70,7 @@ class Recording:
         data = {
             "format": FORMAT, "track": self.track, "slots": self.slots, "laps": self.laps,
             "seed": self.seed, "tick_rate": self.tick_rate, "drivers": self.drivers,
-            "rolling": self.rolling,
+            "rolling": self.rolling, "liveries": self.liveries, "car_params": self.car_params,
             "tuning_id": self.tuning_id, "track_id": self.track_id,
             "final_hash": self.final_hash, "results": self.results,
             "controls": self.controls,
@@ -88,6 +94,7 @@ class Recording:
             final_hash=data.get("final_hash"), results=data.get("results"),
             tuning_id=data.get("tuning_id"), track_id=data.get("track_id"),
             tick_rate=data.get("tick_rate", tuning.TICK_RATE), rolling=data.get("rolling", False),
+            liveries=data.get("liveries"), car_params=data.get("car_params"),
         )
 
     # ------------------------------------------------------------ playback
@@ -97,7 +104,14 @@ class Recording:
         entries = []
         for i, slot in enumerate(self.slots):
             label = self.drivers[i] if i < len(self.drivers) else "Replay"
-            entries.append((slot, ReplayDriver(self, i, label)))
+            driver = ReplayDriver(self, i, label)
+            if i < len(self.liveries):
+                driver.livery = self.liveries[i]
+            if i < len(self.car_params) and self.car_params[i]:
+                own = dict(self.car_params[i])
+                own["traits"] = tuple(own.get("traits", ()))
+                driver.car_params = tuning.CarParams(**own)
+            entries.append((slot, driver))
         return Race(self.track, entries, laps=self.laps, seed=self.seed, rolling=self.rolling)
 
     def compatibility_problems(self, track: Track | None = None) -> list[str]:

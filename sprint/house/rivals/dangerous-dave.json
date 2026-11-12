@@ -105,5 +105,11 @@
    "race_draft": 0.25,
    "race_damage": 0.559
   }
+ },
+ "livery": {
+  "colour": "red",
+  "trim": "stripe",
+  "trim_colour": "white",
+  "number": 13
  }
 }

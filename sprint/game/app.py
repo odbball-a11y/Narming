@@ -102,17 +102,11 @@ class App:
         self.trainer["log"].close()
         self.trainer = None
 
-    def record_race(self, race) -> list[str]:
+    def record_race(self, race, defer_retire: bool = False) -> list[str]:
         """Add a finished race to the careers of any stable racers in it.
         Returns news (retirements, deaths) to show the player."""
         from ai import stable
-        news = []
-        for row in race.results():
-            driver = race.drivers[row["car"]]
-            racer_dir = getattr(driver, "racer_dir", None)
-            if racer_dir and row["finished"]:
-                news += stable.record_result(racer_dir, row["place"], row["best_lap"], race.track.key)
-        return news
+        return stable.record_race(race, defer_retire)
 
     def renderer_for(self, track: Track) -> RaceRenderer:
         """Track paintings are cached: drawing one takes a moment."""

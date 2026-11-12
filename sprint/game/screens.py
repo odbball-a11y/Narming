@@ -13,6 +13,7 @@ from pathlib import Path
 import pygame
 
 from ai import evolve, roster
+from ai import livery as liv
 from sim import race as race_module
 from sim import tuning
 from sim.driver import driver_types
@@ -351,10 +352,18 @@ class RaceScreen(Screen):
 
     PAUSE_ITEMS = ["RESUME", "RESTART", "QUIT TO MENU"]
 
-    def __init__(self, app, race: Race, recording: Recording | None = None, back=None):
+    def __init__(self, app, race: Race, recording: Recording | None = None, back=None,
+                 on_over=None, on_continue=None):
+        """`on_over(race)` replaces the default career recording when the race
+        ends, and returns news to show; with `on_continue` the results screen
+        has one button, CONTINUE (a championship race: no restart, no replay)."""
         super().__init__(app)
         self.race = race
         self.recording = recording
+        self.on_over = on_over
+        self.on_continue = on_continue
+        self.pause_items = (["RESUME", "QUIT RACE"] if on_continue else self.PAUSE_ITEMS)
+        self.liveries = liv.resolve(race.drivers, race.slots)
         self.back = back or MainMenu          # screen class to return to
         self.renderer = app.renderer_for(race.track)
         self.renderer.clear_skids()
@@ -378,6 +387,8 @@ class RaceScreen(Screen):
         return self.race.phase == race_module.FINISHED
 
     def result_items(self) -> list[str]:
+        if self.on_continue:
+            return ["CONTINUE"]
         if self.is_replay:
             return ["WATCH AGAIN", "BACK TO MENU"]
         return ["RACE AGAIN", "WATCH REPLAY", "SAVE REPLAY", "BACK TO MENU"]
@@ -430,7 +441,7 @@ class RaceScreen(Screen):
             if event.key in BACK or event.key == pygame.K_p:
                 self.paused = False
             else:
-                self.menu_key(event.key, self.PAUSE_ITEMS, self.choose_pause)
+                self.menu_key(event.key, self.pause_items, self.choose_pause)
         elif event.key in (pygame.K_ESCAPE, pygame.K_p):
             self.paused = True
             self.menu_index = 0
@@ -456,7 +467,10 @@ class RaceScreen(Screen):
             self.leave()
 
     def choose_result(self, item: str) -> None:
-        if item in ("RACE AGAIN", "WATCH AGAIN"):
+        if item == "CONTINUE":
+            self.app.audio.silence()
+            self.on_continue()
+        elif item in ("RACE AGAIN", "WATCH AGAIN"):
             self.restart()
         elif item == "WATCH REPLAY":
             recording = Recording.from_race(self.race)
@@ -473,7 +487,7 @@ class RaceScreen(Screen):
     def tick(self) -> None:
         events = self.race.step()
         if not self.is_replay and any(e[0] == "race_over" for e in events):
-            news = self.app.record_race(self.race)
+            news = self.on_over(self.race) if self.on_over else self.app.record_race(self.race)
             if news:
                 self.message = " ".join(news)
         if self.race.phase != race_module.COUNTDOWN:
@@ -501,11 +515,11 @@ class RaceScreen(Screen):
         race = self.race
         screen.fill((0, 0, 0))
         racing = race.phase == race_module.RACING
-        self.renderer.draw_world(screen, race.world, self.alpha if racing else 1.0)
+        self.renderer.draw_world(screen, race.world, self.alpha if racing else 1.0, self.liveries)
         banner = "REPLAY    hold F to fast-forward    ESC pause" if self.is_replay else ""
         if self.message and not self.over:
             banner = self.message
-        self.renderer.draw_hud(screen, race, banner)
+        self.renderer.draw_hud(screen, race, banner, self.liveries)
         self.renderer.draw_countdown(screen, race)
         if self.debug:
             self.renderer.draw_debug(screen, race.world, self.focus_car())
@@ -515,7 +529,7 @@ class RaceScreen(Screen):
             ui.dim(screen)
             ui.panel(screen, 50, 26, 60, 42)
             ui.text(screen, "big", "PAUSED", C_HUD_ACCENT, 80, 32, "center")
-            draw_list(ui, screen, self.PAUSE_ITEMS, self.menu_index, 62, 40, 7, "mid")
+            draw_list(ui, screen, self.pause_items, self.menu_index, 62, 40, 7, "mid")
 
     def draw_results(self, screen) -> None:
         ui = self.app.ui
@@ -529,9 +543,10 @@ class RaceScreen(Screen):
             ui.text(screen, "small", head, C_HUD_DIM, x, y)
         y += 3.6
         for row in self.race.results():
-            colour = CAR_COLOURS[row["slot"] % 4]
+            look = self.liveries[row["car"]]
+            colour = liv.rgb(look["colour"])
             ui.text(screen, "mid", PLACES[row["place"] - 1], colour, 26, y)
-            ui.text(screen, "mid", CAR_NAMES[row["slot"] % 4], colour, 37, y)
+            ui.text(screen, "mid", f"#{look['number']}", colour, 37, y)
             ui.text(screen, "mid", row["driver"].upper()[:16], C_HUD_TEXT, 55, y)
             total = format_time(row["time"]) if row["finished"] else f"DNF ({row['laps']} laps)"
             ui.text(screen, "mid", total, C_HUD_TEXT, 88, y)

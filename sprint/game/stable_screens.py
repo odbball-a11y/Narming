@@ -10,15 +10,29 @@ from pathlib import Path
 
 import pygame
 
-from ai import stable
+from ai import championship, stable
+from ai import livery as liv
 from sim import cartraits, tuning as sim_tuning
 from sim.race import Race
 from sim.track import Track
 
-from .render import CAR_COLOURS, C_CYAN, C_HUD_ACCENT, C_HUD_DIM, C_HUD_TEXT, C_PINK, WORLD_W, format_time
+from .render import (C_CYAN, C_HUD_ACCENT, C_HUD_DIM, C_HUD_TEXT, C_PINK, WORLD_W, format_time,
+                     make_car_sprite)
 from .screens import ACCEPT, DOWN, LEFT, RIGHT, UP, RaceScreen, Screen
 
 NAME_LIMIT = 18
+_chips: dict = {}
+
+
+def draw_chip(ui, screen, livery, x, y, width=6.0) -> None:
+    """A small picture of a racer's car in its livery (grey if it has none)."""
+    look = livery or {"colour": "white", "trim": "stripe", "trim_colour": "dark"}
+    key = (look["colour"], look.get("trim"), look.get("trim_colour"), round(ui.unit, 2), width)
+    if key not in _chips:
+        sprite = make_car_sprite(liv.rgb(look["colour"]), ui.unit, look.get("trim", "stripe"), liv.trim_rgb(look))
+        w = max(4, int(width * ui.unit))
+        _chips[key] = pygame.transform.smoothscale(sprite, (w, max(2, int(w * sprite.get_height() / sprite.get_width()))))
+    screen.blit(_chips[key], ui.px(x, y))
 
 
 def bar(ui, screen, x, y, w, value, colour) -> None:
@@ -78,7 +92,8 @@ class StableScreen(Screen):
 
     def rows(self) -> list:
         hall = ["hall"] if stable.hall_of_fame(self.app.stable_root) else []
-        return ["new", "breed"] + self.racers + hall + ["back"]
+        champ = [] if self.app.workshop else ["championship"]
+        return ["new", "breed"] + champ + self.racers + hall + ["back"]
 
     def breedable(self) -> list:
         return [d for d in self.racers if stable.can_breed(d)]
@@ -110,6 +125,11 @@ class StableScreen(Screen):
             elif choice == "breed":
                 if len(self.breedable()) >= 2:
                     self.app.show(BreedScreen(self.app))
+            elif choice == "championship":
+                if championship.active(self.app.stable_root):
+                    self.app.show(ChampionshipHub(self.app))
+                elif championship.eligible(self.app.stable_root):
+                    self.app.show(ChampionshipSetupScreen(self.app))
             elif choice == "back":
                 self.app.show(MainMenu(self.app))
             elif choice == "hall":
@@ -140,6 +160,17 @@ class StableScreen(Screen):
                             else "needs two racers at stud")
                     ui.text(screen, "small", need, C_HUD_DIM, 60, y + 0.8)
                 y += 7
+            elif row == "championship":
+                ch = championship.active(self.app.stable_root)
+                if ch:
+                    label, ok = f"> CONTINUE CHAMPIONSHIP  (race {len(ch['races']) + 1} of {len(ch['tracks'])})", True
+                else:
+                    ok = bool(championship.eligible(self.app.stable_root))
+                    label = "+ ENTER A CHAMPIONSHIP"
+                ui.text(screen, "mid", label, colour if ok else C_HUD_DIM, 7, y, shadow=ok)
+                if not ok:
+                    ui.text(screen, "small", "needs a trained racer that is still racing", C_HUD_DIM, 60, y + 4.2)
+                y += 7
             elif row == "back":
                 ui.text(screen, "mid", "BACK", colour, 7, y + 1, shadow=True)
             elif row == "hall":
@@ -147,7 +178,8 @@ class StableScreen(Screen):
                 y += 5
             else:
                 racer = stable.load(row)
-                ui.text(screen, "mid", racer["name"].upper(), colour, 7, y, shadow=True)
+                draw_chip(ui, screen, stable.livery_of(row), 7, y + 0.3, 5.5)
+                ui.text(screen, "mid", racer["name"].upper(), colour, 14, y, shadow=True)
                 text, tint = status_text(self.app, row)
                 ui.text(screen, "small", text, tint, 60, y + 0.8)
                 career = racer["career"]
@@ -163,11 +195,12 @@ class StableScreen(Screen):
 
         ui.panel(screen, 104, 13, 52, 66)
         ui.text(screen, "mid", "HOUSE RIVALS", C_HUD_ACCENT, 107, 15)
-        note = "train against them here" if self.app.workshop else "race them; you cannot train against them"
+        note = "train against them here" if self.app.workshop else "you meet them in the championship"
         ui.text(screen, "small", note, C_HUD_DIM, 107, 19.5)
         y = 24.0
         for rival in self.rivals:
-            ui.text(screen, "mid", rival["name"].upper(), C_HUD_TEXT, 107, y)
+            draw_chip(ui, screen, rival.get("livery"), 107, y + 0.4, 5.5)
+            ui.text(screen, "mid", rival["name"].upper(), C_HUD_TEXT, 114, y)
             bar(ui, screen, 107, y + 4.2, 20, rival.get("aggression", 0), C_PINK)
             bar(ui, screen, 130, y + 4.2, 20, rival.get("caution", 0), C_CYAN)
             y += 8.5
@@ -422,7 +455,7 @@ class RacerScreen(Screen):
         if "certificate" in self.racer:
             out.append("certificate")
         if stable.can_race(self.racer_dir):
-            out.append("race")
+            out.append("race" if self.app.workshop else "championship")
         if training_me:
             out.append("stop")
         elif stable.needs_training(self.racer_dir) and stable.can_train(self.racer_dir):
@@ -487,6 +520,11 @@ class RacerScreen(Screen):
                 self.leave()
             elif choice == "race":
                 self.race()
+            elif choice == "championship":
+                if championship.active(self.app.stable_root):
+                    self.app.show(ChampionshipHub(self.app))
+                else:
+                    self.app.show(ChampionshipSetupScreen(self.app, preselect=self.racer_dir))
             elif choice == "stop":
                 self.app.stop_training()
             elif choice == "resume":
@@ -521,6 +559,10 @@ class RacerScreen(Screen):
         ui.text(screen, "big", racer["name"].upper(), C_HUD_ACCENT, 6, 3, shadow=True)
         text, tint = status_text(self.app, self.racer_dir)
         ui.text(screen, "small", text, tint, 6, 9.5)
+        look = stable.livery_of(self.racer_dir)
+        draw_chip(ui, screen, look, 143, 3, 12)
+        ui.text(screen, "small", f"#{look['number']}  {look['colour']}, {look['trim']}", C_HUD_DIM, 149, 11.5,
+                "midtop")
         v = racer["versions"]
         born = ""
         if racer.get("parents"):
@@ -565,7 +607,9 @@ class RacerScreen(Screen):
         y = 36
         ui.text(screen, "small", "CAREER", C_HUD_ACCENT, 6, y)
         best = ", ".join(f"{t} {format_time(b)}" for t, b in c["best_laps"].items()) or "-"
-        ui.text(screen, "mid", f"{c['races']} races   {c['wins']} wins   {c['podiums']} podiums", C_HUD_TEXT, 6, y + 3)
+        titles = c.get("titles", 0)
+        ui.text(screen, "mid", f"{c['races']} races   {c['wins']} wins   {c['podiums']} podiums"
+                + (f"   {titles} title{'s' if titles != 1 else ''}" if titles else ""), C_HUD_TEXT, 6, y + 3)
         kids = stable.offspring(Path(self.racer_dir).parent, racer["id"])
         family = f"   offspring: {', '.join(kids)}" if kids else ""
         ui.text(screen, "small", f"best race laps: {best}{family}"[:110], C_HUD_DIM, 6, y + 7.5)
@@ -589,7 +633,8 @@ class RacerScreen(Screen):
                      [("passes", C_CYAN, passes), ("hits caused", C_PINK, hits)], "{:.1f}", marker, floor=0.0)
 
         labels = {"certificate": "BREEDING CERTIFICATE", "resume_breeding": "RESUME BREEDING",
-                  "race": "RACE THE HOUSE RIVALS", "stop": "STOP", "resume": "RESUME TRAINING",
+                  "race": "TEST RACE", "championship": "ENTER CHAMPIONSHIP", "stop": "STOP",
+                  "resume": "RESUME TRAINING",
                   "upskill": "UPSKILL", "retire": "RETIRE TO STUD", "publish": "PUBLISH AS HOUSE RIVAL",
                   "back": "BACK"}
         rows = self.rows()
@@ -885,3 +930,307 @@ class HallScreen(Screen):
             y += 5.5
         if not self.legends:
             ui.text(screen, "mid", "Nobody yet.", C_HUD_DIM, 8, y)
+
+
+# -------------------------------------------------------------- championship
+
+class ChampionshipSetupScreen(Screen):
+    """Choose one or two of your racers for a new championship."""
+
+    def __init__(self, app, preselect=None):
+        super().__init__(app)
+        self.candidates = championship.eligible(app.stable_root)
+        self.chosen = [Path(preselect)] if preselect and Path(preselect) in self.candidates else []
+        self.row = 0
+        self.message = ""
+
+    def rows(self) -> list:
+        return self.candidates + ["start", "back"]
+
+    def handle_event(self, event) -> None:
+        from .screens import BACK
+        if event.type != pygame.KEYDOWN:
+            return
+        rows = self.rows()
+        if event.key in BACK:
+            self.app.show(StableScreen(self.app))
+        elif event.key in UP:
+            self.row = (self.row - 1) % len(rows)
+        elif event.key in DOWN:
+            self.row = (self.row + 1) % len(rows)
+        elif event.key in ACCEPT or event.key in LEFT + RIGHT:
+            choice = rows[self.row]
+            if choice == "back":
+                self.app.show(StableScreen(self.app))
+            elif choice == "start":
+                self.start()
+            elif choice in self.chosen:
+                self.chosen.remove(choice)
+            elif len(self.chosen) >= championship.MAX_OWN:
+                self.message = f"At most {championship.MAX_OWN} of your racers can enter."
+            else:
+                self.chosen.append(choice)
+                self.message = ""
+            self.app.audio.play("blip")
+
+    def start(self) -> None:
+        if not self.chosen:
+            self.message = "Tick at least one racer to enter."
+            return
+        championship.start(self.app.stable_root, self.chosen)
+        self.app.audio.play("select")
+        self.app.show(ChampionshipHub(self.app))
+
+    def field(self) -> list[dict]:
+        """Who would be on the grid: the entered racers, then house rivals, then scripted cars."""
+        out = [{"name": stable.load(d)["name"], "livery": stable.livery_of(d), "kind": "yours"}
+               for d in self.chosen]
+        for rival in stable.house_rivals():
+            if len(out) < championship.FIELD:
+                out.append({"name": rival["name"], "livery": rival["livery"], "kind": "house rival"})
+        n = 1
+        while len(out) < championship.FIELD:
+            out.append({"name": f"Scripted {n}", "livery": None, "kind": "scripted"})
+            n += 1
+        return out
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        ui.text(screen, "big", "ENTER A CHAMPIONSHIP", C_HUD_ACCENT, 6, 4, shadow=True)
+        ui.text(screen, "small", "Five races, one per track. Pick one or two of your racers.", C_HUD_DIM, 6, 11)
+        y = 17.0
+        for i, row in enumerate(self.rows()):
+            selected = i == self.row
+            colour = C_HUD_ACCENT if selected else C_HUD_TEXT
+            if selected:
+                ui.text(screen, "mid", ">", C_PINK, 4, y)
+            if row == "start":
+                ui.text(screen, "big", "START THE CHAMPIONSHIP", colour, 7, y + 1, shadow=True)
+                y += 8
+            elif row == "back":
+                ui.text(screen, "mid", "BACK", colour, 7, y)
+            else:
+                tick = "[x]" if row in self.chosen else "[ ]"
+                draw_chip(ui, screen, stable.livery_of(row), 16, y + 0.2, 5.5)
+                ui.text(screen, "mid", f"{tick}  {stable.load(row)['name'].upper()}", colour, 24, y)
+                career = stable.load(row)["career"]
+                ui.text(screen, "small", f"race {career['races']} of {stable.CAREER_RACES}", C_HUD_DIM, 80, y + 0.8)
+                y += 6
+        if self.message:
+            ui.text(screen, "small", self.message, C_PINK, 7, 87.5, "bottomleft")
+        ui.panel(screen, 104, 13, 52, 60)
+        ui.text(screen, "mid", "THE FIELD", C_HUD_ACCENT, 107, 15)
+        y = 21.0
+        for entry in self.field():
+            draw_chip(ui, screen, entry["livery"], 107, y, 6)
+            ui.text(screen, "small", entry["name"].upper(), C_HUD_TEXT, 115, y - 0.2)
+            ui.text(screen, "small", entry["kind"], C_HUD_DIM, 115, y + 2.6)
+            y += 6.5
+        ui.text(screen, "small", "TRACKS", C_HUD_ACCENT, 107, y + 1)
+        ui.text(screen, "small", ", ".join(stable.TRACK_NAMES[t] for t in championship.TRACK_ORDER), C_HUD_DIM,
+                107, y + 4)
+        ui.text(screen, "small", "10-7-5-3 points, +1 fastest lap.", C_HUD_DIM, 107, y + 8)
+        ui.text(screen, "small", "Reverse grid: the leader starts last.", C_HUD_DIM, 107, y + 11)
+
+
+def _names(ch: dict) -> list[str]:
+    return [e["name"] for e in ch["entrants"]]
+
+
+def draw_table(ui, screen, ch, x, y, width, rows, with_arrows=True) -> float:
+    """The championship table; returns the y below it."""
+    for hx, head in ((2, "POS"), (20, "RACER"), (width - 21, "WINS"), (width - 13, "PTS"), (width - 5, "GAP")):
+        ui.text(screen, "small", head, C_HUD_DIM, x + hx, y)
+    y += 3.6
+    lead = rows[0]["points"] if rows else 0
+    for row in rows:
+        e = ch["entrants"][row["entrant"]]
+        mine = e["kind"] == "racer"
+        colour = C_HUD_ACCENT if mine else C_HUD_TEXT
+        ui.text(screen, "mid", str(row["position"]), colour, x + 2, y)
+        if with_arrows and row["moved"]:
+            ui.text(screen, "small", ("+" if row["moved"] > 0 else "-") + str(abs(row["moved"])),
+                    C_CYAN if row["moved"] > 0 else C_PINK, x + 7, y + 0.8)
+        draw_chip(ui, screen, e["livery"], x + 13, y + 0.2, 5)
+        ui.text(screen, "mid", e["name"].upper()[:14], colour, x + 20, y)
+        ui.text(screen, "mid", str(row["wins"]), C_HUD_TEXT, x + width - 21, y)
+        ui.text(screen, "mid", str(row["points"]), C_HUD_ACCENT, x + width - 13, y)
+        ui.text(screen, "small", "-" if row["points"] == lead else f"-{lead - row['points']}", C_HUD_DIM,
+                x + width - 5, y + 0.8)
+        y += 5.2
+    return y
+
+
+class ChampionshipHub(Screen):
+    """The season: table, the next race, and whether to watch or simulate it."""
+
+    ROWS = ["watch", "sim", "abandon"]
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.root = app.stable_root
+        self.ch = championship.active(self.root)
+        self.row = 0
+        self.confirm = False
+        self.thumb = None
+        self.next = championship.next_race(self.ch) if self.ch else None
+        self.track = Track.load(self.next["track"]) if self.next else None
+
+    def handle_event(self, event) -> None:
+        from .screens import BACK
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in BACK or self.ch is None:
+            self.app.show(StableScreen(self.app))
+        elif event.key in UP:
+            self.row = (self.row - 1) % len(self.ROWS)
+            self.confirm = False
+        elif event.key in DOWN:
+            self.row = (self.row + 1) % len(self.ROWS)
+            self.confirm = False
+        elif event.key in ACCEPT:
+            choice = self.ROWS[self.row]
+            if choice == "abandon":
+                if self.confirm:
+                    championship.abandon(self.root)
+                    self.app.show(StableScreen(self.app))
+                self.confirm = True
+            else:
+                self.app.audio.play("select")
+                self.run_race(watch=choice == "watch")
+
+    def run_race(self, watch: bool) -> None:
+        app, root, ch = self.app, self.root, self.ch
+        race = championship.build_race(root, ch)
+        k = len(ch["races"])
+
+        def on_over(finished) -> list[str]:
+            championship.finish_race(root, ch, finished)      # scores it and updates careers
+            return []
+
+        def to_standings() -> None:
+            app.show(StandingsScreen(app, ch, k))
+
+        if watch:
+            app.show(RaceScreen(app, race, on_over=on_over, on_continue=to_standings,
+                                back=lambda a: ChampionshipHub(a)))
+        else:
+            race.run(max_seconds=400)
+            on_over(race)
+            to_standings()
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        ch = self.ch
+        if ch is None or self.next is None:
+            ui.text(screen, "mid", "No championship under way. Press Esc.", C_HUD_TEXT, 8, 20)
+            return
+        ui.text(screen, "big", f"CHAMPIONSHIP: SEASON {ch['season']}", C_HUD_ACCENT, 6, 4, shadow=True)
+        rows = championship.standings(ch)
+        ui.text(screen, "small", f"after {len(ch['races'])} of {len(ch['tracks'])} races", C_HUD_DIM, 6, 10.5)
+        y = draw_table(ui, screen, ch, 4, 15, 84, rows)
+        nxt = self.next
+        ui.text(screen, "mid", f"NEXT: RACE {nxt['number']} OF {len(ch['tracks'])}", C_HUD_ACCENT, 6, y + 3)
+        ui.text(screen, "mid", f"{stable.TRACK_NAMES[nxt['track']].upper()}  ({self.track.default_laps} laps)",
+                C_HUD_TEXT, 6, y + 8)
+        ui.text(screen, "small", "STARTING GRID  (front to back)", C_HUD_DIM, 6, y + 13.5)
+        gy = y + 17
+        for slot, e in enumerate(nxt["grid"], start=1):
+            ent = ch["entrants"][e]
+            cx, cy = 6 + ((slot - 1) % 2) * 42, gy + ((slot - 1) // 2) * 5.5
+            draw_chip(ui, screen, ent["livery"], cx, cy, 5)
+            ui.text(screen, "small", f"{slot}. {ent['name'][:16]}", C_HUD_TEXT, cx + 7, cy + 0.6)
+        size = (int(ui.unit * 62), int(ui.unit * 36))
+        if self.thumb is None or self.thumb[0] != size:
+            self.thumb = (size, self.app.track_thumbnail(self.track, size))
+        frame = ui.panel(screen, 90, 13, 66, 38)
+        screen.blit(self.thumb[1], self.thumb[1].get_rect(center=frame.center))
+        labels = {"watch": "WATCH THE RACE", "sim": "SIMULATE THE RACE",
+                  "abandon": "ABANDON THE CHAMPIONSHIP" if not self.confirm else "PRESS AGAIN TO CONFIRM"}
+        y = 56.0
+        for i, row in enumerate(self.ROWS):
+            selected = i == self.row
+            if selected:
+                ui.text(screen, "mid", ">", C_PINK, 90, y)
+            ui.text(screen, "mid", labels[row], (C_PINK if row == "abandon" else C_HUD_ACCENT) if selected
+                    else C_HUD_TEXT, 94, y, shadow=True)
+            y += 6
+        ui.text(screen, "small", "Simulating skips the visuals and shows the result.", C_HUD_DIM, 94, y + 1)
+        ui.text(screen, "small", "ESC leaves; the season is saved.", C_HUD_DIM, 94, y + 4.5)
+
+
+class StandingsScreen(Screen):
+    """After every race: how it went, and the championship table."""
+
+    def __init__(self, app, ch: dict, k: int):
+        super().__init__(app)
+        self.ch = ch
+        self.k = k
+        self.record = ch["races"][k]
+        self.table = championship.standings(ch, k + 1)       # the table as it stood after this race
+        self.done = bool(ch.get("done")) and k + 1 == len(ch["tracks"])
+
+    def handle_event(self, event) -> None:
+        if event.type == pygame.KEYDOWN and event.key in ACCEPT + (pygame.K_ESCAPE,):
+            self.app.audio.play("select")
+            if self.done:
+                self.app.show(StableScreen(self.app))
+            else:
+                self.app.show(ChampionshipHub(self.app))
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        ch, rec = self.ch, self.record
+        total = len(ch["tracks"])
+        ui.text(screen, "big", f"RACE {self.k + 1} OF {total}: {stable.TRACK_NAMES[rec['track']].upper()}",
+                C_HUD_ACCENT, 6, 3, shadow=True)
+        # The race
+        ui.panel(screen, 3, 12, 68, 40)
+        ui.text(screen, "small", "RESULT", C_HUD_ACCENT, 6, 13.5)
+        for hx, head in ((2, "POS"), (15, "RACER"), (55, "PTS")):
+            ui.text(screen, "small", head, C_HUD_DIM, 3 + hx, 17.5)
+        y = 21.0
+        for res in sorted(rec["results"], key=lambda r: r["place"]):
+            e = ch["entrants"][res["entrant"]]
+            colour = C_HUD_ACCENT if e["kind"] == "racer" else C_HUD_TEXT
+            ui.text(screen, "mid", str(res["place"]), colour, 5, y)
+            draw_chip(ui, screen, e["livery"], 11, y + 0.2, 5)
+            ui.text(screen, "mid", e["name"].upper()[:15], colour, 18, y)
+            when = format_time(res["time"]) if res["finished"] else "did not finish"
+            ui.text(screen, "small", f"started {res['grid']}   {when}", C_HUD_DIM, 18, y + 4)
+            pts = f"+{res['points']}" + (" *" if res["fastest"] else "")
+            ui.text(screen, "mid", pts, C_HUD_ACCENT if res["points"] else C_HUD_DIM, 58, y)
+            y += 7.2
+        ui.text(screen, "small", "* fastest lap (+1)", C_HUD_DIM, 6, 49)
+        # The table
+        ui.panel(screen, 74, 12, 83, 40)
+        ui.text(screen, "small", "CHAMPIONSHIP TABLE", C_HUD_ACCENT, 77, 13.5)
+        draw_table(ui, screen, ch, 75, 17.5, 81, self.table)
+        # What next
+        y = 57.0
+        if self.done:
+            champ = ch["entrants"][ch["champion"]]
+            ui.panel(screen, 3, 55, 154, 28, border=C_HUD_ACCENT)
+            draw_chip(ui, screen, champ["livery"], 8, 58, 12)
+            ui.text(screen, "big", f"CHAMPION: {champ['name'].upper()}", C_HUD_ACCENT, 24, 58, shadow=True)
+            ny = 66.0
+            for line in ch.get("news", [])[1:6]:
+                ui.text(screen, "small", line, C_HUD_TEXT, 24, ny)
+                ny += 3.4
+            ui.text(screen, "mid", "CONTINUE", C_HUD_ACCENT, 128, 75, shadow=True)
+        else:
+            nxt = championship.next_race(ch)
+            ui.panel(screen, 3, 55, 154, 28)
+            ui.text(screen, "mid", f"NEXT: RACE {nxt['number']}  {stable.TRACK_NAMES[nxt['track']].upper()}",
+                    C_HUD_ACCENT, 8, y)
+            ui.text(screen, "small", "Starting order (leader of the table starts last):", C_HUD_DIM, 8, y + 6)
+            for slot, e in enumerate(nxt["grid"], start=1):
+                ent = ch["entrants"][e]
+                draw_chip(ui, screen, ent["livery"], 8 + (slot - 1) * 36, y + 11, 6)
+                ui.text(screen, "small", f"{slot}. {ent['name'][:11]}", C_HUD_TEXT, 15.5 + (slot - 1) * 36, y + 12)
+            for line in ch.get("news", [])[:2]:
+                ui.text(screen, "small", line, C_PINK, 8, y + 18)
+            ui.text(screen, "mid", "CONTINUE", C_HUD_ACCENT, 128, 75, shadow=True)

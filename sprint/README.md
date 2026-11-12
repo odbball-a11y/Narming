@@ -134,10 +134,28 @@ the house rivals, Dangerous Dave and Careful Keith.
   scripted cars: place, passes, collisions caused, damage, time in a tow),
   charts over every generation, and its career (races, wins, podiums, best
   race laps).
-- **Race the house rivals**: your racer against the house rivals with a
-  rolling start, on the track shown under it (Left/Right to change); the
-  starting order rotates each race. Finished races count
-  towards its career.
+- **Championships**: from the stable (or a racer's card), **Enter a
+  championship** with one or two of your racers. The field is made up to four
+  cars with the house rivals and scripted cars, and the season is five races,
+  one on each track (Oval, Speedway, Esses, Technical, Grand Prix). Every race
+  counts. Before each race you choose to **watch** it or **simulate** it
+  (no visuals, a couple of seconds), and the **championship table** is shown
+  after every race, with each racer's points, wins, places gained or lost and
+  the gap to the leader. Quitting between races saves the season; **Continue
+  championship** resumes it.
+  - Points: 10, 7, 5, 3 for 1st to 4th, nothing for not finishing, and +1 for
+    the fastest lap (among the finishers). Ties go to most wins.
+  - **Reverse grid**: race 1 is drawn, then the field starts in reverse
+    championship order, so the leader starts last.
+  - Damage resets between races. Each race counts towards the careers (20
+    races is four seasons); a racer that reaches its limit mid-season
+    finishes the season, then goes to stud. The champion gets a title on its
+    card.
+- **Livery**: every racer has its own colour, trim and number, assigned by the
+  game when it is created, so you can tell cars apart on track. Dangerous Dave
+  is always red (number 13) and Careful Keith always green (number 5); no
+  racer of yours can be red or green. A bred foal gets a family look: its own
+  free colour, its sire's colour as trim colour and its dam's trim style.
 - **Upskill**: more training for an existing racer, with a new personality
   or new partners, carrying on from its current brain.
 - Training stops if you quit the game; **Resume training** on the card

@@ -10,6 +10,8 @@ import random
 import numpy as np
 import pygame
 
+from ai import livery as liv
+
 from sim import tuning
 from sim.track import Track
 
@@ -194,8 +196,12 @@ def render_track(track: Track, camera: Camera) -> pygame.Surface:
     return pygame.transform.smoothscale(big, (w, h))
 
 
-def make_car_sprite(colour, pixels_per_unit: float) -> pygame.Surface:
-    """A little open-wheel racer pointing right (+x), drawn large for rotation."""
+def make_car_sprite(colour, pixels_per_unit: float, trim: str = "stripe",
+                    trim_colour=(250, 250, 250)) -> pygame.Surface:
+    """A little open-wheel racer pointing right (+x), drawn large for rotation.
+
+    `trim` is the racer's defining feature (see ai/livery.py): stripe, twin
+    stripes, a coloured nose, a coloured rear wing or a band across the body."""
     k = max(pixels_per_unit, 4.0) * 3.0   # oversample; rotozoom scales it down
     length = tuning.CAR_LENGTH * k
     width = tuning.CAR_WIDTH * k
@@ -211,15 +217,27 @@ def make_car_sprite(colour, pixels_per_unit: float) -> pygame.Surface:
     for x0, x1 in ((0.06, 0.28), (0.66, 0.86)):          # rear, front tyres
         rect(x0, 0.0, x1, 0.24, tyre, 0.06)
         rect(x0, 0.76, x1, 1.0, tyre, 0.06)
-    rect(0.0, 0.10, 0.10, 0.90, dark, 0.04)               # rear wing
+    rect(0.0, 0.10, 0.10, 0.90, trim_colour if trim == "wing" else dark, 0.04)    # rear wing
     rect(0.90, 0.06, 1.0, 0.94, dark, 0.04)               # front wing
+    rect(0.05, 0.19, 0.97, 0.81, (245, 245, 245), 0.27)   # light rim, so any colour stands out
     rect(0.08, 0.22, 0.94, 0.78, colour, 0.25)            # body
     rect(0.30, 0.34, 0.80, 0.66, dark, 0.14)              # shadow line
     rect(0.52, 0.30, 0.94, 0.70, colour, 0.18)            # nose
     rect(0.36, 0.36, 0.54, 0.64, (20, 20, 30), 0.12)      # cockpit
     pygame.draw.circle(surf, (250, 250, 250),
                        (int(ox + 0.44 * length), int(oy + 0.5 * width)), int(0.11 * width))  # helmet
-    rect(0.56, 0.46, 0.92, 0.54, (250, 250, 250), 0.02)   # stripe
+    if trim == "stripe":
+        rect(0.56, 0.46, 0.92, 0.54, trim_colour, 0.02)
+    elif trim == "twin":
+        rect(0.12, 0.36, 0.40, 0.42, trim_colour, 0.02)
+        rect(0.12, 0.58, 0.40, 0.64, trim_colour, 0.02)
+        rect(0.56, 0.38, 0.92, 0.44, trim_colour, 0.02)
+        rect(0.56, 0.56, 0.92, 0.62, trim_colour, 0.02)
+    elif trim == "nose":
+        rect(0.80, 0.30, 0.94, 0.70, trim_colour, 0.18)
+        rect(0.90, 0.06, 1.0, 0.94, trim_colour, 0.04)
+    elif trim == "band":
+        rect(0.58, 0.23, 0.68, 0.77, trim_colour, 0.02)
     return surf
 
 
@@ -351,8 +369,8 @@ class RaceRenderer:
         cam = self.camera
         self.track_surface = render_track(self.track, cam)
         self.skid_layer = pygame.Surface(cam.size, pygame.SRCALPHA)
-        self.sprites = [make_car_sprite(c, cam.scale) for c in CAR_COLOURS]
-        self.sprite_zoom = cam.scale * tuning.CAR_LENGTH / (self.sprites[0].get_width() - 4)
+        self.sprite_cache: dict = {}
+        self.sprite_zoom = cam.scale * tuning.CAR_LENGTH / (self.sprite_for(None).get_width() - 4)
         size = int(cam.scale * 5)
         self.shadow = pygame.Surface((size, size), pygame.SRCALPHA)
         pygame.draw.ellipse(self.shadow, (0, 0, 0, 70),
@@ -373,6 +391,15 @@ class RaceRenderer:
         self.ghost_leader = make_car_sprite((255, 214, 10), cam.scale)
         self.ghost_out = make_car_sprite((150, 60, 80), cam.scale)
         self.ghost_out.set_alpha(70)
+
+    def sprite_for(self, livery: dict | None):
+        """The car sprite for a livery (cached); None = a plain red car."""
+        if livery is None:
+            livery = {"colour": "red", "trim": "stripe", "trim_colour": "white"}
+        key = (livery["colour"], livery.get("trim", "stripe"), livery.get("trim_colour", "white"))
+        if key not in self.sprite_cache:
+            self.sprite_cache[key] = make_car_sprite(liv.rgb(key[0]), self.camera.scale, key[1], liv.trim_rgb(livery))
+        return self.sprite_cache[key]
 
     def clear_skids(self) -> None:
         self.skid_layer.fill((0, 0, 0, 0))
@@ -471,7 +498,7 @@ class RaceRenderer:
                     pts.append(cam.to_screen(x + c * bx - s * by, y + s * bx + c * by))
                 pygame.draw.line(self.skid_layer, (20, 20, 24, 110), pts[0], pts[1], width)
 
-    def draw_world(self, screen: pygame.Surface, world, alpha: float = 1.0) -> None:
+    def draw_world(self, screen: pygame.Surface, world, alpha: float = 1.0, liveries=None) -> None:
         """`alpha` in 0..1 blends each car from its previous tick to its current one."""
         cam = self.camera
         screen.blit(self.track_surface, (0, 0))
@@ -488,7 +515,9 @@ class RaceRenderer:
         # Parked (finished) cars first and faded: they are no longer solid.
         for i in sorted(range(len(poses)), key=lambda k: not world.cars[k].retired):
             x, y, heading = poses[i]
-            sprite = self.sprites[world.slots[i] % len(self.sprites)]
+            sprite = self.sprite_for(liveries[i] if liveries else
+                                     {"colour": liv.SLOT_COLOURS[world.slots[i] % 4], "trim": "stripe",
+                                      "trim_colour": "white"})
             # Heavy cars are drawn bigger and light cars smaller.
             mass = world.cars[i].params.mass
             size = 1.12 if mass > 1.1 else 0.9 if mass < 0.9 else 1.0
@@ -498,7 +527,7 @@ class RaceRenderer:
             screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))
         self.draw_effects(screen, world, poses)
 
-    def draw_hud(self, screen: pygame.Surface, race, banner: str = "") -> None:
+    def draw_hud(self, screen: pygame.Surface, race, banner: str = "", liveries=None) -> None:
         """Top strip: one panel per car (in its slot's place) with position,
         lap, current / last / best lap time and speed."""
         ui = self.ui
@@ -510,7 +539,8 @@ class RaceRenderer:
         panel_w = WORLD_W / 4.0
         for i, car in enumerate(world.cars):
             slot = world.slots[i] % 4
-            colour = CAR_COLOURS[slot]
+            look = liveries[i] if liveries else {"colour": liv.SLOT_COLOURS[slot], "number": slot + 1}
+            colour = liv.rgb(look["colour"])
             x0 = slot * panel_w
             pygame.draw.rect(screen, colour, ui.rect(x0 + 0.6, 0.9, 0.9, HUD_H - 2.0))
             place = order.index(i)
@@ -520,7 +550,8 @@ class RaceRenderer:
                 ui.text(screen, "small", "DRAFT >>>"[:6 + (world.tick // 12) % 4], C_CYAN, x0 + 2.4, 5.4)
             else:
                 ui.text(screen, "small", label[:14], C_HUD_DIM, x0 + 2.4, 5.4)
-            ui.text(screen, "small", f"SPEED {int(round(car.speed * 6)):3d}", C_HUD_TEXT, x0 + 2.4, 7.8)
+            ui.text(screen, "small", f"#{look['number']} SPD {int(round(car.speed * 6)):3d}", C_HUD_TEXT,
+                    x0 + 2.4, 7.8)
             lap_now = min(car.laps + 1, world.laps)
             ui.text(screen, "small", f"LAP {lap_now}/{world.laps}", C_HUD_ACCENT, x0 + 14.5, 0.9)
             if car.finished:
