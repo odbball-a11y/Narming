@@ -338,7 +338,7 @@ def test_create_screen_chooses_the_training_focus(app):
     assert screen.focus == "oval"
     press(app, pygame.K_RIGHT, pygame.K_RIGHT)
     assert screen.focus == "esses"
-    press(app, pygame.K_LEFT, pygame.K_LEFT, pygame.K_LEFT)               # wraps back round to the last
+    press(app, pygame.K_LEFT, pygame.K_LEFT, pygame.K_LEFT, pygame.K_LEFT)   # back to the start, then wraps
     assert screen.focus == "grandprix"
     press(app, pygame.K_RIGHT)
     assert screen.focus is None
@@ -346,3 +346,13 @@ def test_create_screen_chooses_the_training_focus(app):
     screen.row = screen.rows().index("start")
     press(app, pygame.K_RETURN)
     assert stable.load(app.started[-1])["versions"][0]["focus"] == "oval"
+
+
+def test_a_race_not_finished_still_counts_towards_the_career_but_is_no_win(dirs):
+    root = stable.STABLE_DIR
+    zoe = instant_racer(root, "Zoe")
+    stable.record_result(zoe, 1, None, "oval", finished=False)
+    career = stable.load(zoe)["career"]
+    assert career["races"] == 1 and career["wins"] == 0 and career["podiums"] == 0
+    stable.record_result(zoe, 1, 11.0, "oval")
+    assert stable.load(zoe)["career"]["wins"] == 1

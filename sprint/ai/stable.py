@@ -524,7 +524,7 @@ def house_driver(rival_id: str) -> NeuralDriver:
 
 
 def record_result(racer_dir, place: int, best_lap: float | None, track: str,
-                  defer_retire: bool = False, tick: bool = True) -> list[str]:
+                  defer_retire: bool = False, tick: bool = True, finished: bool = True) -> list[str]:
     """Add one finished race to a racer's career; the stable's clock moves
     on (once per race: `tick`).  Returns news: retirements and deaths.
     `defer_retire` leaves a racer that reaches its limit racing until the
@@ -540,8 +540,8 @@ def record_result(racer_dir, place: int, best_lap: float | None, track: str,
     racer = load(racer_dir)
     career = racer["career"]
     career["races"] += 1
-    career["wins"] += place == 1
-    career["podiums"] += place <= 3
+    career["wins"] += finished and place == 1          # a race not finished still counts as a race
+    career["podiums"] += finished and place <= 3
     if best_lap is not None:
         old = career["best_laps"].get(track)
         if old is None or best_lap < old:
@@ -564,9 +564,9 @@ def record_race(race, defer_retire: bool = False) -> list[str]:
     first = True
     for row in race.results():
         racer_dir = getattr(race.drivers[row["car"]], "racer_dir", None)
-        if racer_dir and row["finished"]:
+        if racer_dir:
             news += record_result(racer_dir, row["place"], row["best_lap"], race.track.key,
-                                  defer_retire=defer_retire, tick=first)
+                                  defer_retire=defer_retire, tick=first, finished=row["finished"])
             first = False
     return news
 

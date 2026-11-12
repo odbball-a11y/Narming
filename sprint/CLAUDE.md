@@ -263,6 +263,18 @@ a careful racer that still overtakes.
   Create and Upskill screens have a TRAINING ON row; the card shows it.
   Every championship race is `championship.RACE_LAPS` = 5 laps (user request).
 
+Specialist experiment (15 generations each, same personality and car, one
+racer on all tracks, one on the Oval only, `stable.train` from the
+graduate): Oval lap 10.74 -> 10.70 (general) v 10.79 -> 10.38 (specialist,
+3% quicker on its track); elsewhere the specialist got worse as it forgot
+(Esses 14.29 -> 15.35 s, Technical 21.45 -> 22.23, Grand Prix 22.93 ->
+24.48 with 51% damage) while the all-rounder improved slightly everywhere.
+So focus works as intended: a clear but modest gain on the chosen track, at
+a real cost elsewhere. One seed only.
+
+Careers count every race a racer starts, finished or not (a DNF is no win or
+podium): `record_result(..., finished=)`.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 
