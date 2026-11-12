@@ -291,6 +291,16 @@ podium): `record_result(..., finished=)`.
   `car_params`). Screens: ratings in the championship tables, `RatingsScreen`
   (scrolls), racer card, Hall of Fame (peak), certificate.
 
+- Championship stars and training budget: a racer's titles show as gold
+  stars (`draw_stars`) on the ratings screen, house panel, card and champion
+  banner (`rating.add_title` / `titles_for_key` / `championship.titles_of`;
+  house and scripted cars keep titles in `ratings.json`). Each racer has a
+  lifetime budget of `stable.TRAINING_BUDGET` = 50 training generations
+  (`training_planned` / `training_left`; None in the workshop). `create`
+  and `upskill` refuse more than is left, the Create/Upskill screens offer
+  `generation_choices(left)` (10..50, or what remains), foals count
+  `CAMP_GENERATIONS`, and the card hides UPSKILL when fully trained.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

@@ -412,3 +412,7 @@ headless.py, train.py, compare.py, render_frames.py   command-line tools
 ```
 
 See `CLAUDE.md` for the architecture, conventions and the Stage 2 plan.
+
+## Stars and training budget
+
+Championship titles show as gold stars next to a racer's name. Every racer can train for 50 generations in its whole life (the card shows "training N of 50"); once used up it can only race. Races are limited separately (20 per career).

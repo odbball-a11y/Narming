@@ -356,3 +356,55 @@ def test_a_race_not_finished_still_counts_towards_the_career_but_is_no_win(dirs)
     assert career["races"] == 1 and career["wins"] == 0 and career["podiums"] == 0
     stable.record_result(zoe, 1, 11.0, "oval")
     assert stable.load(zoe)["career"]["wins"] == 1
+
+
+# ----------------------------------------------------- lifetime training budget
+
+def test_a_racer_has_fifty_training_generations_for_life(dirs):
+    root = stable.STABLE_DIR
+    p = [{"name": "Scripted car", "kind": "scripted"}]
+    with pytest.raises(ValueError):
+        stable.create(root, "Greedy", 0.5, 0.5, p, 60)
+    racer = instant_racer(root, "Budget")
+    data = stable.load(racer)
+    data["versions"][0]["generations"] = 40                              # 40 of 50 used
+    stable.save(racer, data)
+    assert stable.training_planned(racer) == 40 and stable.training_left(racer) == 10
+    with pytest.raises(ValueError):
+        stable.upskill(racer, 0.5, 0.5, p, 25)                           # more than is left
+    stable.upskill(racer, 0.5, 0.5, p, 10)                               # the last ten
+    assert stable.training_left(racer) == 0
+    with pytest.raises(ValueError):
+        stable.upskill(racer, 0.5, 0.5, p, 10)
+    assert stable.generation_choices(0) == [] and stable.generation_choices(7) == [7]
+    assert stable.generation_choices(30) == [10, 20, 30] and stable.generation_choices(50) == [10, 20, 30, 40, 50]
+    assert stable.generation_choices(None)[-1] == 80
+
+
+def test_the_workshop_has_no_training_limit(dirs):
+    root = stable.WORKSHOP_DIR
+    racer = stable.create(root, "House Rival", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 80)
+    assert stable.training_left(racer) is None
+
+
+def test_screens_offer_only_the_training_that_is_left(app):
+    from game.stable_screens import CreateScreen, RacerScreen
+    root = stable.STABLE_DIR
+    racer = instant_racer(root, "Almost Done")
+    data = stable.load(racer)
+    data["versions"][0]["generations"] = 44
+    stable.save(racer, data)
+    create = CreateScreen(app, racer)
+    assert create.left == 6 and stable.generation_choices(create.left) == [6] and create.generations == 6
+    app.show(create)
+    app.draw()
+    new = CreateScreen(app)
+    assert new.left == 50 and new.generations == 20
+    card = RacerScreen(app, racer)
+    assert "upskill" in card.rows()
+    data["versions"][0]["generations"] = 50
+    stable.save(racer, data)
+    card = RacerScreen(app, racer)
+    app.show(card)
+    app.draw()
+    assert "upskill" not in card.rows()                                  # fully trained

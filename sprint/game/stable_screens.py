@@ -6,6 +6,7 @@ published into house/rivals/, which ships with the game.
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pygame
@@ -22,6 +23,39 @@ from .screens import ACCEPT, DOWN, LEFT, RIGHT, UP, RaceScreen, Screen
 
 NAME_LIMIT = 18
 _chips: dict = {}
+
+
+STAR_GOLD = (255, 214, 10)
+STAR_EDGE = (160, 112, 0)
+
+
+def draw_stars(ui, screen, count: int, x: float, y: float, size: float = 2.4, max_shown: int = 5) -> float:
+    """One gold star per championship won, with its top-left at world (x, y);
+    more than `max_shown` shows that many and "+N".  Returns the width used."""
+    if count <= 0:
+        return 0.0
+    shown = min(count, max_shown)
+    step = size * 1.2
+    for k in range(shown):
+        cx, cy = ui.px(x + size / 2 + k * step, y + size / 2)
+        outer, inner = size / 2 * ui.unit, size / 2 * ui.unit * 0.42
+        points = []
+        for i in range(10):
+            angle = -math.pi / 2 + i * math.pi / 5
+            radius = outer if i % 2 == 0 else inner
+            points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+        pygame.draw.polygon(screen, STAR_GOLD, points)
+        pygame.draw.polygon(screen, STAR_EDGE, points, max(1, int(ui.unit * 0.15)))
+    width = shown * step
+    if count > shown:
+        rect = ui.text(screen, "small", f"+{count - shown}", C_HUD_ACCENT, x + width + 0.2, y - 0.1)
+        width += rect.width / ui.unit + 0.5
+    return width
+
+
+def text_width(ui, font: str, string: str) -> float:
+    """Width of text in world units."""
+    return ui.fonts[font].size(string)[0] / ui.unit
 
 
 def draw_chip(ui, screen, livery, x, y, width=6.0) -> None:
@@ -185,6 +219,8 @@ class StableScreen(Screen):
                 racer = stable.load(row)
                 draw_chip(ui, screen, stable.livery_of(row), 7, y + 0.3, 5.5)
                 ui.text(screen, "mid", racer["name"].upper(), colour, 14, y, shadow=True)
+                draw_stars(ui, screen, racer["career"].get("titles", 0), 15.5 + text_width(ui, "mid", racer["name"].upper()),
+                           y + 0.6, 2.4, 4)
                 text, tint = status_text(self.app, row)
                 ui.text(screen, "small", text, tint, 60, y + 0.8)
                 career = racer["career"]
@@ -209,6 +245,8 @@ class StableScreen(Screen):
         for rival in self.rivals:
             draw_chip(ui, screen, rival.get("livery"), 107, y + 0.4, 5.5)
             ui.text(screen, "mid", rival["name"].upper(), C_HUD_TEXT, 114, y)
+            draw_stars(ui, screen, rating.titles_of(self.app.stable_root, f"house:{rival['id']}"),
+                       115.5 + text_width(ui, "mid", rival["name"].upper()), y + 0.6, 2.2, 3)
             bar(ui, screen, 107, y + 4.2, 20, rival.get("aggression", 0), C_PINK)
             bar(ui, screen, 130, y + 4.2, 20, rival.get("caution", 0), C_CYAN)
             y += 8.5
@@ -233,10 +271,13 @@ class CreateScreen(Screen):
         self.name = racer["name"] if racer else ""
         self.aggression = racer["aggression"] if racer else 0.3
         self.caution = racer["caution"] if racer else 0.3
+        self.left = stable.training_left(racer_dir) if racer else (None if app.workshop else stable.TRAINING_BUDGET)
         self.generations = 20
         self.focus = None                      # None = train on all five tracks
         self.traits = dict(racer.get("traits") or cartraits.default()) if racer else cartraits.default()
         exclude = racer["id"] if racer else None
+        options = stable.generation_choices(self.left)
+        self.generations = 20 if 20 in options else options[-1] if options else 0
         self.partners = stable.partner_options(app.stable_root, exclude, include_house=app.workshop)
         if not racer:
             self.partners = [p for p in self.partners if p["kind"] != "self"]   # nothing of its own yet
@@ -301,9 +342,10 @@ class CreateScreen(Screen):
                 i = options.index(self.focus) + (1 if key in RIGHT else -1)
                 self.focus = options[i % len(options)]
             elif row == "generations":
-                choices = stable.GENERATION_CHOICES
-                i = choices.index(self.generations) + (1 if key in RIGHT else -1)
-                self.generations = choices[max(0, min(len(choices) - 1, i))]
+                choices = stable.generation_choices(self.left)
+                if choices:
+                    i = choices.index(self.generations) + (1 if key in RIGHT else -1)
+                    self.generations = choices[max(0, min(len(choices) - 1, i))]
             elif row in self.chosen or row in {p["key"] for p in self.partners}:
                 self.toggle(row)
         elif key in ACCEPT:
@@ -329,6 +371,9 @@ class CreateScreen(Screen):
             return
         if not self.chosen:
             self.message = "Pick at least one training partner."
+            return
+        if self.generations <= 0:
+            self.message = "No training generations left for this racer."
             return
         if not self.racer_dir and self.stars_left() != 0:
             self.message = f"Spend all {sim_tuning.TRAIT_BUDGET} car stars ({self.stars_left()} left)."
@@ -411,6 +456,10 @@ class CreateScreen(Screen):
                 minutes = self.generations * 0.7
                 ui.text(screen, "mid", f"<  {self.generations}  >", colour, 40, y)
                 ui.text(screen, "small", f"about {minutes:.0f} min", C_HUD_DIM, 62, y + 0.8)
+                if self.left is not None:
+                    ui.text(screen, "small", f"{self.left} of {stable.TRAINING_BUDGET} left for this racer's whole "
+                            "life", C_HUD_DIM if self.left else C_PINK, 40, y + 4.2)
+                    y += 3.5
                 y += 5.5
             elif row == "start":
                 ui.text(screen, "big", "START TRAINING", colour, 7, y, shadow=True)
@@ -483,7 +532,8 @@ class RacerScreen(Screen):
             out.append("stop")
         elif stable.needs_training(self.racer_dir) and stable.can_train(self.racer_dir):
             out.append("resume")
-        if trained and not training_me and stable.can_train(self.racer_dir):
+        left = stable.training_left(self.racer_dir)
+        if trained and not training_me and stable.can_train(self.racer_dir) and (left is None or left > 0):
             out.append("upskill")
         if (trained and not training_me and stable.status(self.racer_dir) == "racing"
                 and stable.careers_enabled(Path(self.racer_dir).parent)):
@@ -637,8 +687,18 @@ class RacerScreen(Screen):
         ui.text(screen, "small", "CAREER", C_HUD_ACCENT, 6, y)
         best = ", ".join(f"{t} {format_time(b)}" for t, b in c["best_laps"].items()) or "-"
         titles = c.get("titles", 0)
-        ui.text(screen, "mid", f"{c['races']} races   {c['wins']} wins   {c['podiums']} podiums"
-                + (f"   {titles} title{'s' if titles != 1 else ''}" if titles else ""), C_HUD_TEXT, 6, y + 3)
+        ui.text(screen, "mid", f"{c['races']} races   {c['wins']} wins   {c['podiums']} podiums", C_HUD_TEXT, 6, y + 3)
+        left = stable.training_left(self.racer_dir)
+        if left is not None:
+            ui.text(screen, "small", "training", C_HUD_DIM, 70, y + 3.6)
+            bar(ui, screen, 82, y + 3.8, 30, min(1.0, stable.training_planned(self.racer_dir)
+                                                 / stable.TRAINING_BUDGET), C_CYAN)
+            ui.text(screen, "small", f"{stable.training_planned(self.racer_dir)} of {stable.TRAINING_BUDGET}"
+                    + ("  fully trained" if left == 0 else ""), C_HUD_DIM, 114, y + 3.6)
+        if titles:
+            used = draw_stars(ui, screen, titles, 20, y - 0.2, 3.0, 6)
+            ui.text(screen, "small", f"{titles} championship{'s' if titles != 1 else ''}", C_HUD_ACCENT,
+                    21 + used, y + 0.4)
         kids = stable.offspring(Path(self.racer_dir).parent, racer["id"])
         family = f"   offspring: {', '.join(kids)}" if kids else ""
         ui.text(screen, "small", f"best race laps: {best}{family}"[:110], C_HUD_DIM, 6, y + 7.5)
@@ -958,10 +1018,11 @@ class HallScreen(Screen):
             best = min(c["best_laps"].values()) if c["best_laps"] else None
             skill = rating.summary(root, f"racer:{r['id']}")
             for x, value in ((8, r["name"].upper()), (46, str(c["races"])), (58, str(c["wins"])),
-                             (68, str(c.get("titles", 0))), (80, f"{skill['peak']:.0f}" if skill else "-"),
+                             (80, f"{skill['peak']:.0f}" if skill else "-"),
                              (96, format_time(best)), (113, str(len(stable.offspring(root, r["id"]))))):
                 ui.text(screen, "mid", value, colour, x, y)
             ui.text(screen, "small", r.get("death_cause", ""), C_HUD_DIM, 124, y + 0.8)
+            draw_stars(ui, screen, c.get("titles", 0), 68, y + 0.4, 2.2, 4)
             y += 5.5
         if not self.legends:
             ui.text(screen, "mid", "Nobody yet.", C_HUD_DIM, 8, y)
@@ -1018,11 +1079,12 @@ class ChampionshipSetupScreen(Screen):
 
     def field(self) -> list[dict]:
         """Who would be on the grid: the entered racers, then house rivals, then scripted cars."""
-        out = [{"name": stable.load(d)["name"], "livery": stable.livery_of(d), "kind": "yours"}
-               for d in self.chosen]
+        out = [{"name": stable.load(d)["name"], "livery": stable.livery_of(d), "kind": "yours",
+                "titles": stable.load(d)["career"].get("titles", 0)} for d in self.chosen]
         for rival in stable.house_rivals():
             if len(out) < championship.FIELD:
-                out.append({"name": rival["name"], "livery": rival["livery"], "kind": "house rival"})
+                out.append({"name": rival["name"], "livery": rival["livery"], "kind": "house rival",
+                            "titles": rating.titles_of(self.app.stable_root, f"house:{rival['id']}")})
         n = 1
         while len(out) < championship.FIELD:
             out.append({"name": f"Scripted {n}", "livery": None, "kind": "scripted"})
@@ -1049,6 +1111,8 @@ class ChampionshipSetupScreen(Screen):
                 tick = "[x]" if row in self.chosen else "[ ]"
                 draw_chip(ui, screen, stable.livery_of(row), 16, y + 0.2, 5.5)
                 ui.text(screen, "mid", f"{tick}  {stable.load(row)['name'].upper()}", colour, 24, y)
+                draw_stars(ui, screen, stable.load(row)["career"].get("titles", 0),
+                           25.5 + text_width(ui, "mid", f"{tick}  {stable.load(row)['name'].upper()}"), y + 0.5, 2.4, 4)
                 career = stable.load(row)["career"]
                 ui.text(screen, "small", f"race {career['races']} of {stable.CAREER_RACES}", C_HUD_DIM, 80, y + 0.8)
                 y += 6
@@ -1060,6 +1124,8 @@ class ChampionshipSetupScreen(Screen):
         for entry in self.field():
             draw_chip(ui, screen, entry["livery"], 107, y, 6)
             ui.text(screen, "small", entry["name"].upper(), C_HUD_TEXT, 115, y - 0.2)
+            draw_stars(ui, screen, entry.get("titles", 0), 116.5 + text_width(ui, "small", entry["name"].upper()),
+                       y - 0.4, 2.0, 3)
             ui.text(screen, "small", entry["kind"], C_HUD_DIM, 115, y + 2.6)
             y += 6.5
         ui.text(screen, "small", "TRACKS", C_HUD_ACCENT, 107, y + 1)
@@ -1258,6 +1324,8 @@ class StandingsScreen(Screen):
             ui.panel(screen, 3, 55, 154, 28, border=C_HUD_ACCENT)
             draw_chip(ui, screen, champ["livery"], 8, 58, 12)
             ui.text(screen, "big", f"CHAMPION: {champ['name'].upper()}", C_HUD_ACCENT, 24, 58, shadow=True)
+            draw_stars(ui, screen, championship.titles_of(self.app.stable_root, champ),
+                       26 + text_width(ui, "big", f"CHAMPION: {champ['name'].upper()}"), 58.6, 4.0, 6)
             ny = 66.0
             for line in ch.get("news", [])[1:6]:
                 ui.text(screen, "small", line, C_HUD_TEXT, 24, ny)
@@ -1323,6 +1391,8 @@ class RatingsScreen(Screen):
             draw_chip(ui, screen, row["livery"], 12, y + 0.4, 5)
             ui.text(screen, "mid", row["name"].upper()[:15], colour, 20, y)
             ui.text(screen, "small", self.kind_text(row), C_HUD_DIM, 20, y + 4.0)
+            draw_stars(ui, screen, stable.titles_for_key(self.app.stable_root, row["key"]),
+                       21.5 + text_width(ui, "small", self.kind_text(row)), y + 4.0, 2.2, 5)
             ui.text(screen, "mid", f"{row['rating']:.0f}", colour, 66, y)
             ui.text(screen, "small", f"+/-{row['sigma']:.0f}", C_HUD_DIM, 66, y + 4.0)
             ui.text(screen, "small", f"{row['peak']:.0f}", C_HUD_DIM, 86, y + 0.8)

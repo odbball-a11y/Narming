@@ -229,6 +229,8 @@ def complete(root, ch: dict) -> list[str]:
     news = [f"{ch['entrants'][champion]['name']} is the champion!"]
     for i, e in enumerate(ch["entrants"]):
         if e["kind"] != "racer":
+            if i == champion:
+                rating.add_title(root, e)              # house rivals and scripted cars collect titles too
             continue
         racer_dir = root / e["id"]
         racer = stable.load(racer_dir)
@@ -247,3 +249,12 @@ def complete(root, ch: dict) -> list[str]:
 
 def titles(racer_dir) -> int:
     return stable.load(racer_dir)["career"].get("titles", 0)
+
+
+def titles_of(root, entrant: dict) -> int:
+    """Championships won by an entrant: your racers keep them in their
+    career, the others in the ratings file."""
+    if entrant["kind"] == "racer":
+        racer_dir = Path(root) / entrant["id"]
+        return titles(racer_dir) if (racer_dir / "racer.json").exists() else 0
+    return rating.titles_of(root, rating.key(entrant))

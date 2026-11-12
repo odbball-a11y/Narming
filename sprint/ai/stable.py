@@ -47,7 +47,8 @@ STABLE_DIR = evolve.PROJECT / "stable"
 WORKSHOP_DIR = evolve.PROJECT / "workshop"
 
 POPULATION = 80
-GENERATION_CHOICES = [10, 20, 40, 80]
+GENERATION_CHOICES = [10, 20, 30, 40, 50]
+TRAINING_BUDGET = 50    # training generations a racer gets in its whole life (not in the workshop)
 CAREER_RACES = 20       # races before a racer retires to stud
 STUD_BREEDINGS = 5      # litters a racer at stud can sire before it dies
 STUD_LIFETIME = 40      # stable races (by anyone) a racer lives for at stud
@@ -397,6 +398,30 @@ def _new_version(racer: dict, aggression: float, caution: float, partners: list[
             "track": track, "focus": focus}
 
 
+def training_planned(racer_dir) -> int:
+    """Training generations a racer has used or has committed to."""
+    return sum(int(v["generations"]) for v in load(racer_dir)["versions"])
+
+
+def training_left(racer_dir) -> int | None:
+    """Training generations still available to a racer (None: unlimited, as
+    in the workshop where house rivals are made)."""
+    if not careers_enabled(Path(racer_dir).parent):
+        return None
+    return max(0, TRAINING_BUDGET - training_planned(racer_dir))
+
+
+def generation_choices(left: int | None) -> list[int]:
+    """Training lengths on offer given what is left (always including what
+    is left, so the last generations can be used up)."""
+    if left is None:
+        return list(GENERATION_CHOICES) + [80]
+    options = [c for c in GENERATION_CHOICES if c <= left]
+    if left > 0 and left not in options:
+        options.append(left)
+    return sorted(options)
+
+
 def create(root: Path, name: str, aggression: float, caution: float, partners: list[dict],
            generations: int, track: str = "speedway", traits: dict | None = None,
            focus: str | None = None) -> Path:
@@ -409,6 +434,8 @@ def create(root: Path, name: str, aggression: float, caution: float, partners: l
     if not cartraits.is_valid(traits):
         raise ValueError(f"car traits must use exactly {cartraits.tuning.TRAIT_BUDGET} stars, 1-5 each")
     root = Path(root)
+    if careers_enabled(root) and generations > TRAINING_BUDGET:
+        raise ValueError(f"a racer gets {TRAINING_BUDGET} training generations in all, not {generations}")
     root.mkdir(parents=True, exist_ok=True)
     for existing in list_racers(root):          # older racers get theirs first, in order
         livery_of(existing)
@@ -436,6 +463,9 @@ def upskill(racer_dir, aggression: float, caution: float, partners: list[dict], 
         raise ValueError("train the racer before upskilling it")
     if not can_train(racer_dir):
         raise ValueError("only racers still racing can be trained")
+    left = training_left(racer_dir)
+    if left is not None and generations > left:
+        raise ValueError(f"only {left} of {TRAINING_BUDGET} training generations are left")
     racer = load(racer_dir)
     racer["versions"].append(_new_version(racer, aggression, caution, partners,
                                           generations, racer["versions"][-1]["track"], focus))
@@ -556,6 +586,15 @@ def record_result(racer_dir, place: int, best_lap: float | None, track: str,
         for name in check_deaths(root):
             news.append(f"{name} has died. Remembered in the hall of fame.")
     return news
+
+
+def titles_for_key(root, k: str) -> int:
+    """Championships won, by a ratings key ("racer:<id>", "house:<id>", ...)."""
+    kind, _, ident = k.partition(":")
+    if kind == "racer":
+        d = Path(root) / ident
+        return load(d)["career"].get("titles", 0) if (d / "racer.json").exists() else 0
+    return rating.titles_of(root, k)
 
 
 def record_race(race, defer_retire: bool = False) -> list[str]:

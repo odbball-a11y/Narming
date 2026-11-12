@@ -61,6 +61,19 @@ def _fresh(entrant: dict) -> dict:
             "overall": {"mu": ENV.mu, "sigma": ENV.sigma, "races": 0, "peak": START}, "tracks": {}}
 
 
+def add_title(root, entrant: dict) -> None:
+    """A championship won by a car that is not one of your racers (those keep
+    their titles in their career): the house rivals and scripted cars."""
+    data = load(root)
+    entry = data.setdefault(key(entrant), _fresh(entrant))
+    entry["titles"] = entry.get("titles", 0) + 1
+    _save(root, data)
+
+
+def titles_of(root, k: str) -> int:
+    return load(root).get(k, {}).get("titles", 0)
+
+
 def summary(root, k: str) -> dict | None:
     """What to show for a car: rating, uncertainty, rated races, peak and
     per-track ratings (None if it has never raced a rated race)."""
@@ -137,5 +150,6 @@ def table(root) -> list[dict]:
         o = e["overall"]
         rows.append({"key": k, "name": e["name"], "kind": e["kind"], "livery": e.get("livery"),
                      "rating": show(o["mu"]), "sigma": SCALE * o["sigma"], "races": o["races"],
-                     "peak": o["peak"], "tracks": {t: show(v["mu"]) for t, v in e["tracks"].items()}})
+                     "peak": o["peak"], "titles": e.get("titles", 0),
+                     "tracks": {t: show(v["mu"]) for t, v in e["tracks"].items()}})
     return sorted(rows, key=lambda r: (-r["rating"], r["name"]))
