@@ -1,0 +1,8 @@
+- ` 0.00h` dynasty running until hour 8.0
+- ` 0.00h` founded **Tilly Thunderbolt**: speed 5  accel 4  handling 2  brakes 1  light, aggression 0.8, caution 0.2
+- ` 0.00h` founded **Barnaby Brick**: speed 3  accel 2  handling 3  brakes 4  heavy, aggression 0.6, caution 0.4
+- ` 0.00h` founded **Sally Slipstream**: speed 4  accel 2  handling 3  brakes 3  medium, aggression 0.5, caution 0.5
+- ` 0.00h` founded **Nora Nimble**: speed 2  accel 3  handling 5  brakes 2  light, aggression 0.3, caution 0.6
+- ` 0.00h` founded **Gus Granite**: speed 4  accel 3  handling 2  brakes 3  heavy, aggression 0.7, caution 0.3
+- ` 0.00h` founded **Vera Velvet**: speed 3  accel 3  handling 3  brakes 3  medium, aggression 0.4, caution 0.5
+- ` 0.00h` training Barnaby Brick ...
