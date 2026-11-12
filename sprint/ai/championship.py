@@ -33,6 +33,7 @@ from sim.track import Track
 
 from . import livery as liveries
 from . import rating
+from . import records
 from . import stable
 from sim import tuning
 from sim.driver import create_driver
@@ -209,6 +210,10 @@ def finish_race(root, ch: dict, race: Race) -> dict:
         res["track_rating"] = [round(ch_["track_before"], 1), round(ch_["track_after"], 1)]
         res["sigma"] = round(ch_["sigma"], 1)
     record = {"track": race.track.key, "order": order, "results": results}
+    for res in results:                      # the fastest lap of the race may be a track record
+        if res["fastest"]:
+            res["track_record"] = records.update(root, race.track.key, res["best_lap"],
+                                                 ch["entrants"][res["entrant"]], ch.get("season", 0))
     ch["races"].append(record)
     ch["news"] = career_news
     if len(ch["races"]) >= len(ch["tracks"]):
@@ -245,6 +250,21 @@ def complete(root, ch: dict) -> list[str]:
     _write(seasons_dir(root) / f"season_{ch['season']:03d}.json", ch)
     abandon(root)
     return news
+
+
+def past_champions(root) -> list[dict]:
+    """Every finished season's champion, newest first."""
+    out = []
+    for f in sorted(seasons_dir(root).glob("season_*.json"), reverse=True):
+        try:
+            ch = json.loads(f.read_text(encoding="utf-8"))
+            e = ch["entrants"][ch["champion"]]
+            top = standings(ch)[0]
+        except (OSError, ValueError, KeyError, IndexError):
+            continue
+        out.append({"season": ch.get("season"), "name": e["name"], "livery": e["livery"],
+                    "points": top["points"]})
+    return out
 
 
 def titles(racer_dir) -> int:

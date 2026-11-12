@@ -301,6 +301,13 @@ podium): `record_result(..., finished=)`.
   `generation_choices(left)` (10..50, or what remains), foals count
   `CAMP_GENERATIONS`, and the card hides UPSKILL when fully trained.
 
+- Track records and Hall of Fame (`ai/records.py`, `stable/records.json`):
+  `finish_race` records the race's fastest lap as a track record when it
+  beats the old one (`track_record` on that result). `StandingsScreen` shows
+  "FASTEST LAP name time" (and NEW TRACK RECORD, or the current record).
+  `HallScreen` (always in the stable menu) has track records, past
+  champions (`championship.past_champions`) and the legends (dead racers).
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

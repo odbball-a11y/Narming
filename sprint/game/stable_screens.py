@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pygame
 
-from ai import championship, rating, stable
+from ai import championship, rating, records, stable
 from ai import livery as liv
 from sim import cartraits, tuning as sim_tuning
 from sim.race import Race
@@ -125,7 +125,7 @@ class StableScreen(Screen):
         self.rivals = stable.house_rivals()
 
     def rows(self) -> list:
-        hall = ["hall"] if stable.hall_of_fame(self.app.stable_root) else []
+        hall = ["hall"]
         champ = [] if self.app.workshop else ["championship", "ratings"]
         return ["new", "breed"] + champ + self.racers + hall + ["back"]
 
@@ -970,11 +970,14 @@ class CertificateScreen(Screen):
 
 
 class HallScreen(Screen):
-    """Racers who have died: their records and their families."""
+    """Track records, past champions, and the racers who have died."""
 
     def __init__(self, app):
         super().__init__(app)
-        self.legends = stable.hall_of_fame(app.stable_root)
+        root = app.stable_root
+        self.legends = stable.hall_of_fame(root)
+        self.records = records.load(root)
+        self.champions = championship.past_champions(root)
         self.row = 0
 
     def handle_event(self, event) -> None:
@@ -999,17 +1002,45 @@ class HallScreen(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         ui.text(screen, "big", "HALL OF FAME", C_HUD_ACCENT, 6, 4, shadow=True)
-        y = 15.0
-        for x, head in ((8, "RACER"), (46, "RACES"), (58, "WINS"), (68, "TITLES"), (80, "PEAK RATING"),
-                        (96, "BEST LAP"), (113, "FOALS"), (124, "DIED")):
+        # Track records (left) and champions (right)
+        ui.panel(screen, 3, 13, 76, 30)
+        ui.text(screen, "small", "TRACK RECORDS (fastest race lap)", C_HUD_ACCENT, 6, 14.5)
+        y = 19.0
+        for track in championship.TRACK_ORDER:
+            ui.text(screen, "small", stable.TRACK_NAMES[track].upper(), C_HUD_TEXT, 6, y + 0.6)
+            rec = self.records.get(track)
+            if rec:
+                ui.text(screen, "mid", format_time(rec["time"]), C_HUD_ACCENT, 28, y)
+                if rec.get("livery"):
+                    draw_chip(ui, screen, rec["livery"], 47, y + 0.2, 4)
+                ui.text(screen, "small", rec["name"].upper()[:16], C_HUD_TEXT, 52, y + 0.6)
+            else:
+                ui.text(screen, "small", "no record yet", C_HUD_DIM, 28, y + 0.6)
+            y += 4.8
+        ui.panel(screen, 82, 13, 75, 30)
+        ui.text(screen, "small", "CHAMPIONS", C_HUD_ACCENT, 85, 14.5)
+        y = 19.0
+        for c in self.champions[:5]:
+            ui.text(screen, "small", f"SEASON {c['season']}", C_HUD_DIM, 85, y + 0.6)
+            draw_chip(ui, screen, c["livery"], 105, y + 0.2, 4)
+            ui.text(screen, "small", f"{c['name'].upper()[:16]}  {c['points']} pts", C_HUD_TEXT, 110, y + 0.6)
+            y += 4.8
+        if not self.champions:
+            ui.text(screen, "small", "No season finished yet.", C_HUD_DIM, 85, y)
+        # Legends
+        y = 46.0
+        ui.text(screen, "small", "LEGENDS", C_HUD_ACCENT, 6, y)
+        for x, head in ((50, "RACES"), (62, "WINS"), (72, "TITLES"), (84, "PEAK"),
+                        (98, "BEST LAP"), (116, "FOALS"), (127, "DIED")):
             ui.text(screen, "small", head, C_HUD_DIM, x, y)
-        y += 4
+        y += 4.2
         root = self.app.stable_root
-        for i, d in enumerate(self.legends + ["back"]):
+        shown = self.legends[:6]
+        for i, d in enumerate(shown + ["back"]):
             selected = i == self.row
             colour = C_HUD_ACCENT if selected else C_HUD_TEXT
             if selected:
-                ui.text(screen, "mid", ">", C_PINK, 4, y)
+                ui.text(screen, "mid", ">", C_PINK, 3, y)
             if d == "back":
                 ui.text(screen, "mid", "BACK", colour, 8, y + 1)
                 break
@@ -1017,15 +1048,15 @@ class HallScreen(Screen):
             c = r["career"]
             best = min(c["best_laps"].values()) if c["best_laps"] else None
             skill = rating.summary(root, f"racer:{r['id']}")
-            for x, value in ((8, r["name"].upper()), (46, str(c["races"])), (58, str(c["wins"])),
-                             (80, f"{skill['peak']:.0f}" if skill else "-"),
-                             (96, format_time(best)), (113, str(len(stable.offspring(root, r["id"]))))):
-                ui.text(screen, "mid", value, colour, x, y)
-            ui.text(screen, "small", r.get("death_cause", ""), C_HUD_DIM, 124, y + 0.8)
-            draw_stars(ui, screen, c.get("titles", 0), 68, y + 0.4, 2.2, 4)
-            y += 5.5
+            for x, value in ((8, r["name"].upper()[:18]), (50, str(c["races"])), (62, str(c["wins"])),
+                             (84, f"{skill['peak']:.0f}" if skill else "-"),
+                             (98, format_time(best)), (116, str(len(stable.offspring(root, r["id"]))))):
+                ui.text(screen, "small", value, colour, x, y + 0.6)
+            ui.text(screen, "small", r.get("death_cause", ""), C_HUD_DIM, 127, y + 0.6)
+            draw_stars(ui, screen, c.get("titles", 0), 72, y + 0.4, 2.2, 4)
+            y += 4.6
         if not self.legends:
-            ui.text(screen, "mid", "Nobody yet.", C_HUD_DIM, 8, y)
+            ui.text(screen, "small", "No racer has died yet.", C_HUD_DIM, 8, y + 6)
 
 
 # -------------------------------------------------------------- championship
@@ -1298,7 +1329,7 @@ class StandingsScreen(Screen):
         ui.text(screen, "small", "RESULT", C_HUD_ACCENT, 6, 13.5)
         for hx, head in ((2, "POS"), (15, "RACER"), (55, "PTS")):
             ui.text(screen, "small", head, C_HUD_DIM, 3 + hx, 17.5)
-        y = 21.0
+        y = 20.0
         for res in sorted(rec["results"], key=lambda r: r["place"]):
             e = ch["entrants"][res["entrant"]]
             colour = C_HUD_ACCENT if e["kind"] == "racer" else C_HUD_TEXT
@@ -1309,8 +1340,20 @@ class StandingsScreen(Screen):
             ui.text(screen, "small", f"started {res['grid']}   {when}", C_HUD_DIM, 18, y + 4)
             pts = f"+{res['points']}" + (" *" if res["fastest"] else "")
             ui.text(screen, "mid", pts, C_HUD_ACCENT if res["points"] else C_HUD_DIM, 58, y)
-            y += 7.2
-        ui.text(screen, "small", "* fastest lap (+1)", C_HUD_DIM, 6, 49)
+            y += 6.4
+        quick = next((r for r in rec["results"] if r["fastest"]), None)
+        if quick:
+            e = ch["entrants"][quick["entrant"]]
+            line = f"FASTEST LAP  {e['name'].upper()}  {format_time(quick['best_lap'])}"
+            draw_chip(ui, screen, e["livery"], 6, 45.8, 3.6)
+            ui.text(screen, "small", line, C_HUD_ACCENT, 11, 46.4)
+            if quick.get("track_record"):
+                ui.text(screen, "small", "NEW TRACK RECORD", C_PINK, 11, 49.6)
+            else:
+                best = records.load(self.app.stable_root).get(rec["track"])
+                if best:
+                    ui.text(screen, "small", f"record {format_time(best['time'])} {best['name']}",
+                            C_HUD_DIM, 11, 49.6)
         # The table
         ui.panel(screen, 74, 12, 83, 40)
         ui.text(screen, "small", "CHAMPIONSHIP TABLE", C_HUD_ACCENT, 77, 13.5)

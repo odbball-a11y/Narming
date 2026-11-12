@@ -408,3 +408,37 @@ def test_screens_offer_only_the_training_that_is_left(app):
     app.show(card)
     app.draw()
     assert "upskill" not in card.rows()                                  # fully trained
+
+
+# ------------------------------------------------- track records and the hall
+
+def test_records_only_improve(tmp_path):
+    from ai import records
+    who = {"name": "Ann", "livery": None}
+    assert records.update(tmp_path, "oval", 11.0, who, 1)
+    assert not records.update(tmp_path, "oval", 11.5, who, 1)
+    assert not records.update(tmp_path, "oval", None, who, 1)
+    assert records.update(tmp_path, "oval", 10.9, {"name": "Bo", "livery": None}, 2)
+    assert records.load(tmp_path)["oval"]["name"] == "Bo" and records.load(tmp_path)["oval"]["season"] == 2
+
+
+def test_a_race_shows_its_fastest_lap_and_the_hall_shows_records_and_champions(app):
+    from ai import records
+    from game.stable_screens import HallScreen, StandingsScreen
+    root = stable.STABLE_DIR
+    zoe = instant_racer(root, "Zoe")
+    ch = championship.start(root, [zoe])
+    ch["tracks"] = ["oval"]
+    championship._write(championship.path(root), ch)
+    race = championship.build_race(root, ch)
+    race.run(max_seconds=200)
+    rec = championship.finish_race(root, ch, race)
+    quick = [r for r in rec["results"] if r["fastest"]]
+    assert len(quick) == 1 and quick[0]["track_record"]            # the first lap on a track is a record
+    assert records.load(root)["oval"]["time"] == round(quick[0]["best_lap"], 3)
+    app.show(StandingsScreen(app, ch, 0))
+    app.draw()
+    hall = HallScreen(app)
+    assert hall.records["oval"] and len(hall.champions) == 1
+    app.show(hall)
+    app.draw()
