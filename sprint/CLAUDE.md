@@ -170,8 +170,9 @@ width 10.5-11, four r=14 sweeps) and `tracks/grandprix.json` (504 long,
 scripted 24.0 s, width 9-9.5, three r=9 hairpins around two infield loops,
 chicane, kink). Both were generated from line-and-arc paths (a small turtle
 script, not kept in the repo; dense points every ~6.5 units, tighter on
-small arcs, give clean splines). A fifth, short track is still to be chosen
-by the user. No AI has been trained on the new tracks: the graduate and all
+small arcs, give clean splines). The fifth, chosen by the user, is
+`tracks/oval.json` (drafting oval: 314 long, width 13, r=27 turns, scripted
+11.5 s, 5 laps by default). All five exist now. No AI has been trained on the new tracks: the graduate and all
 stable racers only know Speedway.
 
 Still to build: (5) championship

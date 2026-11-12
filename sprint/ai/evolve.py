@@ -64,10 +64,10 @@ FORMAT = 2
 
 # Seconds per test: about two laps for a good driver.  Training races must be
 # long enough for damage to cost real time, or barging pays.
-SOLO_SECONDS = {"speedway": 30.0, "technical": 46.0, "esses": 36.0, "grandprix": 50.0}
-RACE_SECONDS = {"speedway": 30.0, "technical": 46.0, "esses": 36.0, "grandprix": 50.0}
+SOLO_SECONDS = {"speedway": 30.0, "technical": 46.0, "esses": 36.0, "grandprix": 50.0, "oval": 25.0}
+RACE_SECONDS = {"speedway": 30.0, "technical": 46.0, "esses": 36.0, "grandprix": 50.0, "oval": 25.0}
 # Roughly how long a good lap takes, to turn --race-laps into seconds.
-LAP_SECONDS = {"speedway": 14.0, "technical": 23.0, "esses": 17.5, "grandprix": 24.0}
+LAP_SECONDS = {"speedway": 14.0, "technical": 23.0, "esses": 17.5, "grandprix": 24.0, "oval": 11.5}
 DEFAULT_SECONDS = 40.0
 
 # Driving-school score: laps covered minus this per unit of damage picked up.
