@@ -6,6 +6,8 @@ published into house/rivals/, which ships with the game.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pygame
 
 from ai import stable
@@ -28,7 +30,18 @@ def bar(ui, screen, x, y, w, value, colour) -> None:
     pygame.draw.rect(screen, C_HUD_DIM, frame, 1)
 
 
+STAGES = {"waiting": "waiting to start", "litter": "breeding the litter",
+          "trial": "round 1: trialling all the foals", "camp": "round 2: mini-camps",
+          "done": "done"}
+
+
 def status_text(app, racer_dir) -> tuple[str, tuple]:
+    if stable.is_breeding(racer_dir):
+        b = stable.breeding_progress(racer_dir) or {"stage": "waiting"}
+        if app.training_dir() != str(racer_dir):
+            return "BREEDING PAUSED: resume it from its card", C_PINK
+        extra = f" {b['done'] + 1}/{b['of']}" if b["stage"] == "camp" else ""
+        return f"BREEDING: {STAGES.get(b['stage'], b['stage'])}{extra}", C_CYAN
     p = stable.progress(racer_dir)
     if app.training_dir() == str(racer_dir):
         return f"TRAINING  gen {p['done']}/{p['target']}", C_CYAN
@@ -54,7 +67,10 @@ class StableScreen(Screen):
         self.rivals = stable.house_rivals()
 
     def rows(self) -> list:
-        return ["new"] + self.racers + ["back"]
+        return ["new", "breed"] + self.racers + ["back"]
+
+    def breedable(self) -> list:
+        return [d for d in self.racers if stable.brain_file(d) is not None and not stable.is_breeding(d)]
 
     def update(self, seconds: float) -> None:
         self.timer += seconds
@@ -80,6 +96,9 @@ class StableScreen(Screen):
             choice = rows[self.row]
             if choice == "new":
                 self.app.show(CreateScreen(self.app))
+            elif choice == "breed":
+                if len(self.breedable()) >= 2:
+                    self.app.show(BreedScreen(self.app))
             elif choice == "back":
                 self.app.show(MainMenu(self.app))
             else:
@@ -99,6 +118,12 @@ class StableScreen(Screen):
                 ui.text(screen, "mid", ">", C_PINK, 4, y)
             if row == "new":
                 ui.text(screen, "mid", "+ CREATE A RACER", colour, 7, y, shadow=True)
+                y += 5.5
+            elif row == "breed":
+                ok = len(self.breedable()) >= 2
+                ui.text(screen, "mid", "+ BREED TWO RACERS", colour if ok else C_HUD_DIM, 7, y, shadow=ok)
+                if not ok:
+                    ui.text(screen, "small", "needs two trained racers", C_HUD_DIM, 60, y + 0.8)
                 y += 7
             elif row == "back":
                 ui.text(screen, "mid", "BACK", colour, 7, y + 1, shadow=True)
@@ -329,6 +354,10 @@ class RacerScreen(Screen):
         out = []
         trained = stable.brain_file(self.racer_dir) is not None
         training_me = self.app.training_dir() == str(self.racer_dir)
+        if stable.is_breeding(self.racer_dir):
+            return (["stop"] if training_me else ["resume_breeding"]) + ["back"]
+        if "certificate" in self.racer:
+            out.append("certificate")
         if trained:
             out.append("race")
         if training_me:
@@ -385,6 +414,13 @@ class RacerScreen(Screen):
                     self.message = "Another racer is training. Stop it first."
                 else:
                     self.app.start_training(self.racer_dir)
+            elif choice == "resume_breeding":
+                if self.app.training_dir():
+                    self.message = "Another racer is training. Stop it first."
+                else:
+                    self.app.start_breeding(self.racer_dir)
+            elif choice == "certificate":
+                self.app.show(CertificateScreen(self.app, self.racer_dir))
             elif choice == "upskill":
                 self.app.show(CreateScreen(self.app, self.racer_dir))
             elif choice == "publish":
@@ -401,8 +437,12 @@ class RacerScreen(Screen):
         text, tint = status_text(self.app, self.racer_dir)
         ui.text(screen, "small", text, tint, 6, 9.5)
         v = racer["versions"]
-        ui.text(screen, "small", f"created {racer['created']}   version {len(v)}   "
-                f"{sum(x['generations'] for x in v)} generations planned", C_HUD_DIM, 40, 9.5)
+        born = ""
+        if racer.get("parents"):
+            names = [stable.load(Path(self.racer_dir).parent / p)["name"] if (Path(self.racer_dir).parent / p
+                     / "racer.json").exists() else p for p in racer["parents"]]
+            born = f"   by {names[0]} out of {names[1]}"
+        ui.text(screen, "small", f"created {racer['created']}   version {len(v)}{born}", C_HUD_DIM, 40, 9.5)
 
         # Personality
         ui.text(screen, "small", "AGGRESSION", C_HUD_DIM, 6, 14)
@@ -451,7 +491,8 @@ class RacerScreen(Screen):
             ui.chart(screen, 58, 46, 52, 40, "TEST RACE", xs,
                      [("passes", C_CYAN, passes), ("hits caused", C_PINK, hits)], "{:.0f}", marker, floor=0.0)
 
-        labels = {"race": "RACE THE HOUSE RIVALS", "stop": "STOP TRAINING", "resume": "RESUME TRAINING",
+        labels = {"certificate": "BREEDING CERTIFICATE", "resume_breeding": "RESUME BREEDING",
+                  "race": "RACE THE HOUSE RIVALS", "stop": "STOP", "resume": "RESUME TRAINING",
                   "upskill": "UPSKILL", "publish": "PUBLISH AS HOUSE RIVAL", "back": "BACK"}
         rows = self.rows()
         y = 48.0
@@ -463,3 +504,212 @@ class RacerScreen(Screen):
             y += 5.5
         if self.message:
             ui.text(screen, "small", self.message, C_PINK, 112, 86)
+
+
+class BreedScreen(Screen):
+    """Pick a sire and a dam, name the foal and choose how the best foal of
+    the litter is picked."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.parents = [d for d in stable.list_racers(app.stable_root)
+                        if stable.brain_file(d) is not None and not stable.is_breeding(d)]
+        self.sire, self.dam = 0, 1
+        self.name = ""
+        self.criterion = "fastest"
+        self.row = 0
+        self.message = ""
+        pygame.key.start_text_input()
+
+    ROWS = ["sire", "dam", "name", "criterion", "start", "back"]
+
+    def back(self) -> None:
+        pygame.key.stop_text_input()
+        self.app.show(StableScreen(self.app))
+
+    def cycle(self, which: str, step: int) -> None:
+        n = len(self.parents)
+        value = getattr(self, which)
+        other = self.dam if which == "sire" else self.sire
+        value = (value + step) % n
+        if value == other:
+            value = (value + step) % n
+        setattr(self, which, value)
+
+    def handle_event(self, event) -> None:
+        row = self.ROWS[self.row]
+        if event.type == pygame.TEXTINPUT:
+            if row == "name" and len(self.name) < NAME_LIMIT:
+                self.name += event.text
+            return
+        if event.type != pygame.KEYDOWN:
+            return
+        key = event.key
+        if key == pygame.K_ESCAPE:
+            self.back()
+        elif key == pygame.K_BACKSPACE:
+            if row == "name":
+                self.name = self.name[:-1]
+        elif key in UP:
+            self.row = (self.row - 1) % len(self.ROWS)
+        elif key in DOWN or key == pygame.K_TAB:
+            self.row = (self.row + 1) % len(self.ROWS)
+        elif key in LEFT + RIGHT:
+            step = 1 if key in RIGHT else -1
+            if row in ("sire", "dam"):
+                self.cycle(row, step)
+            elif row == "criterion":
+                self.criterion = "learner" if self.criterion == "fastest" else "fastest"
+        elif key in ACCEPT:
+            if row == "start":
+                self.start()
+            elif row == "back":
+                self.back()
+            else:
+                self.row += 1
+
+    def start(self) -> None:
+        if not self.name.strip():
+            self.message = "Name the foal first."
+            return
+        if self.app.training_dir():
+            self.message = "Another racer is training. Wait for it, or stop it from its card."
+            return
+        foal = stable.mate(self.app.stable_root, self.parents[self.sire], self.parents[self.dam],
+                           self.name, self.criterion)
+        pygame.key.stop_text_input()
+        self.app.audio.play("select")
+        self.app.start_breeding(foal)
+        self.app.show(RacerScreen(self.app, foal))
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        ui.text(screen, "big", "BREED TWO RACERS", C_HUD_ACCENT, 6, 4, shadow=True)
+        sire, dam = stable.load(self.parents[self.sire]), stable.load(self.parents[self.dam])
+        y = 15.0
+        for i, row in enumerate(self.ROWS):
+            selected = i == self.row
+            colour = C_HUD_ACCENT if selected else C_HUD_TEXT
+            if selected:
+                ui.text(screen, "mid", ">", C_PINK, 4, y)
+            if row in ("sire", "dam"):
+                parent = sire if row == "sire" else dam
+                ui.text(screen, "mid", row.upper(), C_HUD_DIM, 7, y)
+                ui.text(screen, "mid", f"<  {parent['name'].upper()}  >", colour, 30, y)
+                bar(ui, screen, 30, y + 4.4, 18, parent["aggression"], C_PINK)
+                bar(ui, screen, 51, y + 4.4, 18, parent["caution"], C_CYAN)
+                c = parent["career"]
+                ui.text(screen, "small", f"{c['races']} races, {c['wins']} wins", C_HUD_DIM, 72, y + 4.0)
+                y += 9
+            elif row == "name":
+                ui.text(screen, "mid", "FOAL'S NAME", C_HUD_DIM, 7, y)
+                cursor = "_" if selected and (pygame.time.get_ticks() // 400) % 2 else ""
+                ui.text(screen, "mid", (self.name or ("type a name" if not selected else "")) + cursor,
+                        colour if self.name else C_HUD_DIM, 40, y)
+                y += 7
+            elif row == "criterion":
+                ui.text(screen, "mid", "PICK BY", C_HUD_DIM, 7, y)
+                ui.text(screen, "mid", "<  FASTEST LAP  >" if self.criterion == "fastest"
+                        else "<  QUICKEST LEARNER  >", colour, 40, y)
+                ui.text(screen, "small", stable.CRITERIA[self.criterion], C_HUD_DIM, 40, y + 4.2)
+                y += 10
+            elif row == "start":
+                ui.text(screen, "big", "BREED", colour, 7, y, shadow=True)
+                y += 7
+            else:
+                ui.text(screen, "mid", "BACK", colour, 7, y)
+        if self.message:
+            ui.text(screen, "small", self.message, C_PINK, 7, 87.5, "bottomleft")
+        a = (sire["aggression"] + dam["aggression"]) / 2
+        c = (sire["caution"] + dam["caution"]) / 2
+        ui.panel(screen, 100, 13, 56, 56)
+        lines = [
+            ("THE FOAL", C_HUD_ACCENT, ""),
+            ("", C_HUD_TEXT, f"Personality near aggression {a:.1f}, caution {c:.1f}"),
+            ("", C_HUD_TEXT, "(its parents' average, give or take)."),
+            ("HOW IT IS PICKED", C_HUD_ACCENT, ""),
+            ("", C_HUD_TEXT, f"A litter of {stable.LITTER} foals, each mixing whole"),
+            ("", C_HUD_TEXT, "neurons from both parents."),
+            ("", C_HUD_TEXT, f"Round 1: all {stable.LITTER} drive and race once;"),
+            ("", C_HUD_TEXT, f"the best {stable.SHORTLIST} go through."),
+            ("", C_HUD_TEXT, f"Round 2: {stable.CAMP_GENERATIONS} generations of training each;"),
+            ("", C_HUD_TEXT, "the winner is your foal."),
+            ("", C_HUD_DIM, "Takes a few minutes, in the background."),
+        ]
+        y = 16.0
+        for head, colour, text in lines:
+            if head:
+                ui.text(screen, "small", head, colour, 103, y)
+            else:
+                ui.text(screen, "small", text, colour, 103, y)
+            y += 3.4
+
+
+class CertificateScreen(Screen):
+    """The foal's breeding certificate."""
+
+    def __init__(self, app, racer_dir):
+        super().__init__(app)
+        self.racer_dir = racer_dir
+
+    def handle_event(self, event) -> None:
+        if event.type == pygame.KEYDOWN and event.key in ACCEPT + (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            self.app.show(RacerScreen(self.app, self.racer_dir))
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        racer = stable.load(self.racer_dir)
+        cert = racer["certificate"]
+        ui.panel(screen, 3, 2, 154, 86, border=C_HUD_ACCENT)
+        ui.text(screen, "big", f"BREEDING CERTIFICATE: {racer['name'].upper()}", C_HUD_ACCENT, 80, 4.5, "midtop")
+
+        # Pedigree
+        y = 12.5
+        ui.text(screen, "small", "PEDIGREE", C_HUD_ACCENT, 7, y)
+        for k, role in enumerate(("sire", "dam")):
+            p = cert[role]
+            x = 7 + k * 50
+            ui.text(screen, "mid", f"{role.upper()}: {p['name']}", C_HUD_TEXT, x, y + 3)
+            lap = f"{p['lap_alone']:.2f}s alone" if p.get("lap_alone") else "no lap time"
+            ui.text(screen, "small", f"{p.get('wins', 0)} wins in {p.get('races', 0)} races, {lap}",
+                    C_HUD_DIM, x, y + 7)
+            grand = cert["grandparents"].get(p["name"]) or []
+            ui.text(screen, "small", "by " + " out of ".join(grand) if grand else "a founder",
+                    C_HUD_DIM, x, y + 9.8)
+        t = cert["temperament"]
+        ui.text(screen, "small", "TEMPERAMENT", C_HUD_ACCENT, 110, y)
+        ui.text(screen, "small", "aggression", C_HUD_DIM, 110, y + 3.4)
+        bar(ui, screen, 126, y + 3.6, 26, t["aggression"], C_PINK)
+        ui.text(screen, "small", "caution", C_HUD_DIM, 110, y + 6.6)
+        bar(ui, screen, 126, y + 6.8, 26, t["caution"], C_CYAN)
+
+        # Litter
+        y = 28.5
+        ui.text(screen, "small", f"THE LITTER: {cert['litter']} foals, {cert['shortlist']} shortlisted.  "
+                f"Picked by: {cert['criterion_text']} (target {cert['target_lap']:.2f}s)", C_HUD_ACCENT, 7, y)
+        y += 3.6
+        for x, head in ((9, "FOAL"), (24, "ROUND 1"), (42, "BEST LAP"), (62, "GENS TO TARGET"),
+                        (90, "TEST RACE"), (110, "PASSES"), (126, "HITS"), (140, "DAMAGE")):
+            ui.text(screen, "small", head, C_HUD_DIM, x, y)
+        for c in cert["candidates"]:
+            y += 3.4
+            colour = C_HUD_ACCENT if c["chosen"] else C_HUD_TEXT
+            if c["chosen"]:
+                ui.text(screen, "small", ">", C_PINK, 6, y)
+            lap = f"{c['best_lap']:.2f}s" if c["best_lap"] else "-"
+            gens = str(c["gens_to_target"]) if c["gens_to_target"] else "not reached"
+            for x, value in ((9, f"no. {c['foal']}"), (24, f"{c['trial_rank']} of {cert['litter']}"), (42, lap),
+                             (62, gens), (90, f"P{c['race_place']}"), (110, str(c["passes"])),
+                             (126, f"{c['hits']:g}"), (140, f"{c['damage'] * 100:.0f}%")):
+                ui.text(screen, "small", value, colour, x, y)
+
+        # Expectations
+        y += 6
+        ui.text(screen, "small", "WHAT TO EXPECT  (predictions from the family; its races will tell)",
+                C_HUD_ACCENT, 7, y)
+        for note in cert["expectations"]:
+            y += 3.4
+            ui.text(screen, "small", "- " + note, C_HUD_TEXT, 7, y)
+        ui.text(screen, "small", "ENTER or ESC to go back", C_HUD_DIM, 80, 86.5, "midbottom")

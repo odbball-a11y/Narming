@@ -26,6 +26,8 @@ import datetime
 import json
 import os
 import re
+import shutil
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +35,7 @@ import numpy as np
 from sim.driver import register_driver, unregister_drivers
 
 from . import evolve
-from .brain import NeuralDriver
+from .brain import NeuralDriver, layer_sizes, unpack
 
 HOUSE_DIR = evolve.PROJECT / "house"
 RIVALS_DIR = HOUSE_DIR / "rivals"
@@ -131,6 +133,8 @@ def progress(racer_dir) -> dict:
 
 
 def needs_training(racer_dir) -> bool:
+    if is_breeding(racer_dir):
+        return False
     p = progress(racer_dir)
     return p["done"] < p["target"]
 
@@ -337,6 +341,239 @@ def register(root: Path | None = None) -> list[str]:
     return keys
 
 
+# ----------------------------------------------------------------- breeding
+
+LITTER = 20             # foals bred per mating
+SHORTLIST = 5           # foals that go on to a mini training camp
+CAMP_GENERATIONS = 3    # length of each mini-camp
+CAMP_POPULATION = 16
+TEMPERAMENT_SPREAD = 0.08   # how far a foal's personality strays from its parents' average
+CRITERIA = {"fastest": "Fastest lap after its mini-camp",
+            "learner": "Quickest learner: fewest generations to match its parents' pace"}
+
+
+def brain(racer_dir) -> np.ndarray:
+    """The racer's own weights (its champion)."""
+    with np.load(brain_file(racer_dir)) as data:
+        return data["pop"][0].astype(np.float64)
+
+
+def crossover(a: np.ndarray, b: np.ndarray, arch: dict, rng: np.random.Generator) -> np.ndarray:
+    """A child brain made of whole neurons from each parent.
+
+    Every neuron (its incoming weights and bias, in every layer including the
+    outputs) is copied whole from one parent or the other, so working units
+    such as "react to a car on my left" are kept rather than blurred.  This
+    only makes sense because all racers descend from the same graduate, so
+    the parents' neurons line up.  A few small mutations follow.
+    """
+    child = np.empty_like(a)
+    la, lb, lc = unpack(a, arch), unpack(b, arch), unpack(child, arch)
+    for (wa, ba), (wb, bb), (wc, bc) in zip(la, lb, lc):
+        pick = rng.random(len(ba)) < 0.5
+        wc[:] = np.where(pick[:, None], wa, wb)
+        bc[:] = np.where(pick, ba, bb)
+    mask = rng.random(len(child)) < 0.2
+    return child + rng.normal(0.0, 0.02, len(child)) * mask
+
+
+def breeding_progress(foal_dir) -> dict | None:
+    path = Path(foal_dir) / "breeding.json"
+    return _read(path) if path.exists() else None
+
+
+def _progress(foal_dir, **state) -> None:
+    _write(Path(foal_dir) / "breeding.json", state)
+
+
+def is_breeding(racer_dir) -> bool:
+    """A foal whose litter has not been decided yet."""
+    racer = load(racer_dir)
+    return "breeding" in racer and "certificate" not in racer
+
+
+def mate(root: Path, sire_dir, dam_dir, name: str, criterion: str = "fastest") -> Path:
+    """Register a foal; `breed` then makes the litter and picks it."""
+    if Path(sire_dir) == Path(dam_dir):
+        raise ValueError("pick two different parents")
+    if criterion not in CRITERIA:
+        raise ValueError(f"criterion must be one of {sorted(CRITERIA)}")
+    sire, dam = load(sire_dir), load(dam_dir)
+    for parent in (sire, dam):
+        if brain_file(Path(root) / parent["id"]) is None:
+            raise ValueError(f"{parent['name']} must be trained before breeding")
+    seed = zlib.crc32(f"{sire['id']}|{dam['id']}|{name}".encode())
+    rng = np.random.default_rng(seed)
+
+    def blend(key):
+        value = (sire[key] + dam[key]) / 2 + rng.normal(0.0, TEMPERAMENT_SPREAD)
+        return round(float(min(1.0, max(0.0, value))), 2)
+
+    aggression, caution = blend("aggression"), blend("caution")
+    foal_dir = create(root, name, aggression, caution, [{"name": "Scripted car", "kind": "scripted"}],
+                      CAMP_GENERATIONS, sire["versions"][-1]["track"])
+    racer = load(foal_dir)
+    racer["parents"] = [sire["id"], dam["id"]]
+    racer["breeding"] = {"sire": sire["id"], "dam": dam["id"], "criterion": criterion, "seed": seed}
+    save(foal_dir, racer)
+    _progress(foal_dir, stage="waiting")
+    return foal_dir
+
+
+def _parent_summary(root: Path, racer_id: str) -> dict:
+    d = Path(root) / racer_id
+    if not (d / "racer.json").exists():
+        return {"id": racer_id, "name": racer_id}
+    r = load(d)
+    exam = latest_exam(d)
+    e = next(iter(exam.values())) if exam else {}
+    return {"id": r["id"], "name": r["name"], "aggression": r["aggression"], "caution": r["caution"],
+            "races": r["career"]["races"], "wins": r["career"]["wins"], "podiums": r["career"]["podiums"],
+            "best_laps": r["career"]["best_laps"], "parents": r.get("parents", []),
+            "lap_alone": e.get("solo_best_lap"), "passes": e.get("race_overtakes"),
+            "hits": e.get("race_fault"), "damage": e.get("race_damage")}
+
+
+def expectations(sire: dict, dam: dict, foal: dict) -> list[str]:
+    """Plain-language predictions from the parents' records (labelled as
+    expectations: the foal's own races will tell)."""
+    notes = []
+    laps = [p["lap_alone"] for p in (sire, dam) if p.get("lap_alone")]
+    if laps:
+        notes.append(f"Pace: its parents lap Speedway alone in {' and '.join(f'{l:.2f}s' for l in laps)}; "
+                     "expect similar speed.")
+    a, c = foal["aggression"], foal["caution"]
+    if a >= 0.6 and c < 0.5:
+        notes.append("Style: likely an attacker. Expect passes, and some knocks.")
+    elif c >= 0.6 and a < 0.5:
+        notes.append("Style: likely careful. Expect clean races and few collisions.")
+    elif a >= 0.5 and c >= 0.5:
+        notes.append("Style: bold but tidy, if the mix works. Could be special, could be confused.")
+    else:
+        notes.append("Style: balanced; no strong leaning either way.")
+    passes = [p["passes"] for p in (sire, dam) if p.get("passes") is not None]
+    if passes and sum(passes) / len(passes) >= 2:
+        notes.append("Overtaking: both sides of the family pass well in traffic.")
+    hits = [p["hits"] for p in (sire, dam) if p.get("hits") is not None]
+    if hits and max(hits) <= 0.5:
+        notes.append("Consistency: neither parent causes many collisions; should race cleanly.")
+    wins = sire.get("wins", 0) + dam.get("wins", 0)
+    if wins:
+        notes.append(f"Winning stock: its parents have {wins} wins between them.")
+    tracks = set(sire.get("best_laps", {})) & set(dam.get("best_laps", {}))
+    if tracks:
+        notes.append("Tracks: both parents have raced at " + ", ".join(sorted(tracks)).title()
+                     + "; expect it to suit them.")
+    else:
+        notes.append("Tracks: only Speedway raced so far; other tracks are unknown.")
+    shared = set(sire.get("parents", [])) & set(dam.get("parents", []))
+    if shared:
+        notes.append("Close relatives: the parents share a parent. Expect little variety.")
+    return notes
+
+
+def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHORTLIST,
+          camp_generations: int = CAMP_GENERATIONS, camp_population: int = CAMP_POPULATION) -> dict:
+    """Make the litter, trial it in two rounds, keep the best foal as this
+    racer's version 1 and write its breeding certificate."""
+    from concurrent.futures import ProcessPoolExecutor
+
+    foal_dir = Path(foal_dir)
+    root = foal_dir.parent
+    racer = load(foal_dir)
+    info = racer["breeding"]
+    rng = np.random.default_rng(info["seed"])
+    grad = graduate()
+    arch = grad["arch"]
+    track = racer["versions"][0]["track"]
+    seconds = grad["race_seconds"][track]
+    sire_w, dam_w = brain(root / info["sire"]), brain(root / info["dam"])
+    litter_dir = foal_dir / "litter"
+    if litter_dir.exists():
+        shutil.rmtree(litter_dir)
+    litter_dir.mkdir()
+
+    # The litter.
+    _progress(foal_dir, stage="litter", done=0, of=litter)
+    foals = np.array([crossover(sire_w, dam_w, arch, rng) for _ in range(litter)])
+
+    # Round 1: every foal straight from breeding, alone and in one race,
+    # all scored the same (balanced) way so the comparison is fair.
+    _progress(foal_dir, stage="trial", done=0, of=litter)
+    trial = [{"track": track, "slot": 3, "rivals": ["scripted"] * 3, "seconds": seconds}]
+    pool = ProcessPoolExecutor(workers) if workers > 1 else None
+    try:
+        score, _ = evolve.score_population(foals, arch, [track], trial, 0.0, pool, chunks=max(1, workers),
+                                           weights=sliders_to_weights(0.0, 0.0))
+    finally:
+        if pool:
+            pool.shutdown()
+    order = [int(i) for i in np.argsort(-score, kind="stable")]
+    picked = order[:shortlist]
+
+    # Round 2: a short training camp each, with the foal's own personality.
+    parents = [_parent_summary(root, info["sire"]), _parent_summary(root, info["dam"])]
+    laps = [p["lap_alone"] for p in parents if p.get("lap_alone")]
+    target = round(sum(laps) / len(laps), 3) if laps else 13.98
+    weights = sliders_to_weights(racer["aggression"], racer["caution"])
+    candidates = []
+    for k, i in enumerate(picked):
+        _progress(foal_dir, stage="camp", done=k, of=len(picked))
+        start = litter_dir / f"foal_{i:02d}.npz"
+        np.savez_compressed(start, pop=foals[i:i + 1].astype(np.float32))
+        run = f"cand_{i:02d}"
+        evolve.train(run=run, root=litter_dir, generations=camp_generations, population=camp_population,
+                     elites=2, seed=info["seed"] % 100000 + i, tracks=[track], arch=arch, races_per_track=2,
+                     race_bonuses=False, start_file=str(start), race_seconds={track: seconds},
+                     race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
+                     workers=workers, log=lambda m: None)
+        hist = evolve.load_history(litter_dir / run)
+        lap_by_gen = [h["exam"][track]["solo_best_lap"] for h in hist]
+        valid = [lap for lap in lap_by_gen if lap]
+        to_target = next((h["gen"] for h in hist if (h["exam"][track]["solo_best_lap"] or 99) <= target), None)
+        last = hist[-1]["exam"][track]
+        candidates.append({"foal": i + 1, "trial_rank": k + 1, "trial_score": round(float(score[i]), 3),
+                           "best_lap": min(valid) if valid else None, "gens_to_target": to_target,
+                           "race_place": last["race_place"], "passes": last["race_overtakes"],
+                           "hits": last["race_fault"], "damage": last["race_damage"], "run": run})
+
+    def key(c):
+        lap = c["best_lap"] or 99.0
+        if info["criterion"] == "learner":
+            return (c["gens_to_target"] or 99, lap)
+        return (lap, -c["trial_score"])
+
+    winner = min(candidates, key=key)
+    for c in candidates:
+        c["chosen"] = c is winner
+    # The winner's camp becomes the foal's first version.
+    v1 = foal_dir / racer["versions"][0]["run"]
+    if v1.exists():
+        shutil.rmtree(v1)
+    shutil.move(str(litter_dir / winner["run"]), str(v1))
+    kept = foal_dir / "foal.npz"
+    shutil.copy(litter_dir / f"foal_{winner['foal'] - 1:02d}.npz", kept)
+    config = evolve.load_config(v1)
+    config["parent"] = {"file": evolve.project_path(kept)}
+    _write(v1 / "config.json", config)
+    shutil.rmtree(litter_dir)
+
+    grandparents = {p["name"]: [_parent_summary(root, g)["name"] for g in p.get("parents", [])] for p in parents}
+    certificate = {
+        "sire": parents[0], "dam": parents[1], "grandparents": grandparents,
+        "litter": litter, "shortlist": len(picked), "criterion": info["criterion"],
+        "criterion_text": CRITERIA[info["criterion"]], "target_lap": target,
+        "candidates": candidates, "winner": winner,
+        "temperament": {"aggression": racer["aggression"], "caution": racer["caution"]},
+        "expectations": expectations(parents[0], parents[1], racer),
+    }
+    racer = load(foal_dir)
+    racer["certificate"] = certificate
+    save(foal_dir, racer)
+    _progress(foal_dir, stage="done")
+    return certificate
+
+
 # --------------------------------------------------------------------- CLI
 
 def main(argv=None) -> int:
@@ -345,7 +582,16 @@ def main(argv=None) -> int:
     t = sub.add_parser("train", help="train a racer's latest version")
     t.add_argument("racer_dir")
     t.add_argument("--workers", type=int, default=max(1, min(3, (os.cpu_count() or 2) - 1)))
+    b = sub.add_parser("breed", help="make a foal's litter and pick the best foal")
+    b.add_argument("racer_dir")
+    b.add_argument("--workers", type=int, default=max(1, min(3, (os.cpu_count() or 2) - 1)))
     args = ap.parse_args(argv)
+    if args.command == "breed":
+        cert = breed(args.racer_dir, workers=args.workers)
+        w = cert["winner"]
+        print(f"picked foal {w['foal']} of {cert['litter']}: best lap {w['best_lap']}, "
+              f"generations to target {w['gens_to_target']}", flush=True)
+        return 0
     if args.command == "train":
         def report(entry):
             exam = next(iter(entry["exam"].values()))

@@ -71,12 +71,19 @@ class App:
 
     def start_training(self, racer_dir) -> None:
         """Train a racer in a separate process, so the game stays smooth."""
+        self._start_job("train", racer_dir)
+
+    def start_breeding(self, foal_dir) -> None:
+        """Breed a foal's litter and pick the best, in a separate process."""
+        self._start_job("breed", foal_dir)
+
+    def _start_job(self, command: str, racer_dir) -> None:
         from ai import evolve
         if self.training_dir():
             raise RuntimeError("already training")
         workers = max(1, min(3, (os.cpu_count() or 2) - 1))
         log = open(Path(racer_dir) / "train.log", "a", encoding="utf-8")
-        proc = subprocess.Popen([sys.executable, "-m", "ai.stable", "train", str(racer_dir),
+        proc = subprocess.Popen([sys.executable, "-m", "ai.stable", command, str(racer_dir),
                                  "--workers", str(workers)],
                                 cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT)
         self.trainer = {"proc": proc, "dir": str(racer_dir), "log": log}

@@ -453,7 +453,7 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
     some children get small changes, to refine, and some large, to explore.
     """
     n = sorted_pop.shape[1]
-    parents = max(2, len(sorted_pop) // 4)
+    parents = min(len(sorted_pop), max(2, len(sorted_pop) // 4))
     children = [sorted_pop[i].copy() for i in range(min(elites, len(sorted_pop)))]
     while len(children) < size:
         child = sorted_pop[min(rng.integers(0, parents, 2))].copy()     # 2-way tournament

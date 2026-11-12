@@ -223,3 +223,122 @@ def test_training_runs_in_a_separate_process_and_can_be_stopped(dirs):
         a.start_training(racer_dir)
     a.stop_training()
     assert a.training_dir() is None and (racer_dir / "train.log").exists()
+
+
+# ------------------------------------------------------------------ breeding
+
+def two_trained(root):
+    p = [{"name": "Scripted car", "kind": "scripted"}]
+    a = stable.create(root, "Bold Betty", 0.9, 0.1, p, 1)
+    b = stable.create(root, "Steady Sam", 0.1, 0.9, p, 1)
+    quick_train(a)
+    quick_train(b)
+    return a, b
+
+
+def small_breed(foal_dir):
+    return stable.breed(foal_dir, litter=4, shortlist=2, camp_generations=1, camp_population=4)
+
+
+def test_crossover_copies_whole_neurons_from_either_parent():
+    from ai.brain import random_weights, unpack
+    arch = stable.graduate()["arch"]
+    rng = np.random.default_rng(0)
+    a, b = random_weights(rng, 2, arch)
+    child = stable.crossover(a, b, arch, rng)
+    for (wa, ba), (wb, bb), (wc, bc) in zip(unpack(a, arch), unpack(b, arch), unpack(child, arch)):
+        from_a = [np.allclose(wc[j], wa[j], atol=0.15) and abs(bc[j] - ba[j]) < 0.15 for j in range(len(bc))]
+        from_b = [np.allclose(wc[j], wb[j], atol=0.15) and abs(bc[j] - bb[j]) < 0.15 for j in range(len(bc))]
+        assert all(x or y for x, y in zip(from_a, from_b))        # every neuron is one parent's
+        assert any(from_a) and any(from_b)                       # and both parents contribute
+
+
+def test_mate_breed_and_certificate(dirs):
+    root = stable.STABLE_DIR
+    betty, sam = two_trained(root)
+    with pytest.raises(ValueError):
+        stable.mate(root, betty, betty, "Clone")
+    foal = stable.mate(root, betty, sam, "Little Lucky", "learner")
+    racer = stable.load(foal)
+    assert racer["parents"] == ["bold-betty", "steady-sam"]
+    assert 0.2 <= racer["aggression"] <= 0.8 and 0.2 <= racer["caution"] <= 0.8   # near the middle
+    assert stable.is_breeding(foal) and stable.brain_file(foal) is None
+    assert not stable.needs_training(foal)
+    cert = small_breed(foal)
+    assert not stable.is_breeding(foal) and stable.brain_file(foal) is not None
+    assert not (foal / "litter").exists() and (foal / "foal.npz").exists()
+    assert cert["litter"] == 4 and len(cert["candidates"]) == 2
+    assert sum(c["chosen"] for c in cert["candidates"]) == 1
+    assert cert["sire"]["name"] == "Bold Betty" and cert["dam"]["name"] == "Steady Sam"
+    assert cert["criterion"] == "learner" and cert["target_lap"] > 0
+    assert cert["expectations"] and all(isinstance(n, str) for n in cert["expectations"])
+    assert stable.load(foal)["certificate"] == cert
+    # The foal races, and can itself be upskilled and bred.
+    assert stable.champion(foal).label == "Little Lucky"
+    stable.upskill(foal, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(foal)
+    grandchild = stable.mate(root, foal, betty, "Lucky Too")
+    cert2 = small_breed(grandchild)
+    assert cert2["grandparents"]["Little Lucky"] == ["Bold Betty", "Steady Sam"]
+    assert any("relatives" in n for n in cert2["expectations"]) is False   # Betty is a founder: no shared parent
+
+
+def test_same_parents_and_name_breed_the_same_foal(dirs):
+    root = stable.STABLE_DIR
+    betty, sam = two_trained(root)
+    first = stable.mate(root, betty, sam, "Twin")
+    c1 = small_breed(first)
+    shutil.rmtree(first)
+    second = stable.mate(root, betty, sam, "Twin")
+    c2 = small_breed(second)
+    assert [c["foal"] for c in c1["candidates"]] == [c["foal"] for c in c2["candidates"]]
+    assert c1["winner"]["foal"] == c2["winner"]["foal"]
+
+
+def test_breed_through_the_screens(app, monkeypatch):
+    from game.stable_screens import BreedScreen, CertificateScreen, RacerScreen, StableScreen
+    root = stable.STABLE_DIR
+    app.show(StableScreen(app))
+    app.current.row = app.current.rows().index("breed")
+    press(app, pygame.K_RETURN)
+    assert isinstance(app.current, StableScreen)                 # not enough trained racers yet
+    two_trained(root)
+    bred = []
+    monkeypatch.setattr(app, "start_breeding", lambda d: (bred.append(d), small_breed(d)))
+    app.show(StableScreen(app))
+    app.current.row = app.current.rows().index("breed")
+    press(app, pygame.K_RETURN)
+    screen = app.current
+    assert isinstance(screen, BreedScreen)
+    assert {stable.load(p)["name"] for p in screen.parents} == {"Bold Betty", "Steady Sam"}
+    press(app, pygame.K_RIGHT)                                   # sire cycles but never equals the dam
+    assert screen.sire != screen.dam
+    screen.row = screen.ROWS.index("start")
+    press(app, pygame.K_RETURN)
+    assert "Name" in screen.message
+    screen.row = screen.ROWS.index("name")
+    type_text(app, "Little Lucky")
+    screen.row = screen.ROWS.index("criterion")
+    press(app, pygame.K_RIGHT)
+    assert screen.criterion == "learner"
+    screen.row = screen.ROWS.index("start")
+    press(app, pygame.K_RETURN)
+    card = app.current
+    assert isinstance(card, RacerScreen) and bred
+    card.reload()
+    assert card.rows()[0] == "certificate"
+    press(app, pygame.K_RETURN)
+    assert isinstance(app.current, CertificateScreen)
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.current, RacerScreen)
+
+
+def test_interrupted_breeding_can_be_resumed_from_the_card(app):
+    from game.stable_screens import RacerScreen, status_text
+    betty, sam = two_trained(stable.STABLE_DIR)
+    foal = stable.mate(stable.STABLE_DIR, betty, sam, "Paused Pip")
+    card = RacerScreen(app, foal)
+    app.show(card)
+    app.draw()
+    assert card.rows() == ["resume_breeding", "back"]
+    assert "PAUSED" in status_text(app, foal)[0]

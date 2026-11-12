@@ -101,7 +101,7 @@ aggressive cars he tails closely and runs into them when they cut in and
 brake (rear contact counts as caused). Proposed next: camps whose rival pool
 includes the other personalities' champions.
 
-## The stable (built: step 1 of 5)
+## The stable (built: steps 1-3 of 5)
 
 Agreed design, from the user: an AI-only racing stable in the spirit of Derby
 Owners Club. The player creates named racers (name, aggression and caution
@@ -136,14 +136,23 @@ ones in the workshop.
   it (also on quit; training resumes later), `record_race` adds finished
   races to careers (not replays).
 
-Still to build, in order: (3) breeding: litter of ~20 foals by swapping
-whole hidden neurons between the parents (they share the graduate as an
-ancestor), temperament = parents' mean plus noise; round 1 trials all foals
-(solo laps + one race, ~30 s) and shortlists 5; round 2 gives each a
-3-generation mini-camp and picks by the player's criterion (fastest lap, or
-fewest generations to a target time); the winner gets a breeding
-certificate (pedigree, litter rank, measured stats, temperament, labelled
-expectations from the parents' records). (4) careers: 20 races, then stud
+- Breeding (`ai/stable.py`): `mate(root, sire, dam, name, criterion)`
+  registers the foal (temperament = parents' mean + N(0, 0.08), seed from
+  the names, `racer["breeding"]`); `breed(foal_dir)` (run as `python -m
+  ai.stable breed`, `App.start_breeding`) makes `LITTER` foals with
+  `crossover` (each neuron's incoming weights and bias, in every layer,
+  copied from one parent, then small mutations), round 1 scores all with
+  `score_population` (balanced weights, solo + one race from last v three
+  scripted) and keeps `SHORTLIST`, round 2 runs a `CAMP_GENERATIONS` x
+  `CAMP_POPULATION` camp for each with the foal's own weights, picks by
+  "fastest" (best solo lap) or "learner" (first generation whose solo lap
+  beats the parents' average), moves the winner's camp to `v1/`, and saves
+  `racer["certificate"]` (sire, dam, grandparents, candidates, winner,
+  temperament, `expectations()`). Progress in `breeding.json`;
+  `is_breeding` until the certificate exists. Full size takes ~47 s on 4
+  cores. Screens: `BreedScreen`, `CertificateScreen`.
+
+Still to build, in order: (4) careers: 20 races, then stud
 for up to 5 breedings, then death and a hall of fame. (5) championship
 across tracks, weather (wet/dry specialists from camp conditions), car
 traits on a fixed budget, 6-8 cars.

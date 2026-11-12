@@ -131,8 +131,27 @@ the house rivals, Dangerous Dave and Careful Keith.
 
 Your racers are saved in the `stable` folder.
 
-Coming next: breeding (litters, the best foal picked for you, a breeding
-certificate), careers with retirement to stud, and championships.
+### Breeding
+
+**Breed two racers** (on the stable screen, once two racers are trained):
+pick a sire and a dam, name the foal, and choose how the best foal is picked:
+
+- **Fastest lap** after its mini-camp, or
+- **Quickest learner**: fewest training generations to match its parents'
+  pace.
+
+The game then breeds a litter of 20 foals in the background (about a minute
+on a 4-core PC). Each foal is made of whole neurons from one parent or the
+other, plus a few small mutations; its personality is its parents' average,
+give or take. Round 1 tries every foal alone and in one race; the best 5 go
+on to round 2, three generations of training each with their own
+personality. The winner is your foal.
+
+Its **breeding certificate** (on its card) shows the pedigree (parents and
+grandparents), its temperament, the shortlisted foals side by side with the
+one picked, and what to expect from it, as predictions from its family.
+
+Coming next: careers with retirement to stud, and championships.
 
 ### Making house rivals (Workshop)
 
