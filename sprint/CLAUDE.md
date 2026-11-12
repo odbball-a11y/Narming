@@ -163,6 +163,17 @@ ones in the workshop.
   `offspring`. News (retirements, deaths) returns from `record_result` and
   shows on the results screen. `HallScreen`; card has RETIRE TO STUD.
 
+Tracks for the championship (user asked for 5 in the existing style; chose
+"flowing esses" and "mixed grand prix", varied overtaking, spread lap
+lengths, descriptive names): `tracks/esses.json` (376 long, scripted 17.4 s,
+width 10.5-11, four r=14 sweeps) and `tracks/grandprix.json` (504 long,
+scripted 24.0 s, width 9-9.5, three r=9 hairpins around two infield loops,
+chicane, kink). Both were generated from line-and-arc paths (a small turtle
+script, not kept in the repo; dense points every ~6.5 units, tighter on
+small arcs, give clean splines). A fifth, short track is still to be chosen
+by the user. No AI has been trained on the new tracks: the graduate and all
+stable racers only know Speedway.
+
 Still to build: (5) championship
 across tracks, weather (wet/dry specialists from camp conditions), car
 traits on a fixed budget, 6-8 cars.

@@ -13,7 +13,8 @@ from sim.track import Track
 from helpers import make_world, put_on_track
 
 # Target lap times from the brief (seconds), with the band we accept.
-LAP_BANDS = {"speedway": (11.0, 19.0), "technical": (19.0, 31.0)}
+LAP_BANDS = {"speedway": (11.0, 19.0), "technical": (19.0, 31.0),
+             "esses": (14.0, 21.0), "grandprix": (21.0, 30.0)}
 
 
 def scripted_race(track, cars=1, laps=3):

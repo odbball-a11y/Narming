@@ -46,7 +46,7 @@ py render_frames.py --out shots     # save a PNG of every screen without opening
 Main menu: **Race**, **Stable**, **AI Lab**, **Controls**, **Replays**, **Quit**. Menus use the arrow
 keys, Enter and Esc.
 
-**Race setup:** pick the track (Speedway or Technical), the number of laps,
+**Race setup:** pick the track (Speedway, Technical, Esses or Grand Prix), the number of laps,
 the start (rolling, the default: single file and already at speed, car 1
 leading; or a standing grid), and who drives each of the four cars: `None`, any of the four keyboard sets,
 any connected gamepad, `Scripted` (the computer), or a trained AI champion
@@ -84,6 +84,17 @@ The results screen lets you race again, watch the replay, or save it to
 
 Many keyboards cannot report more than a few keys held at once, so four
 players on one keyboard may see dropped inputs. That is hardware, not the game.
+
+## Tracks
+
+| Track | Character | Width | Scripted lap |
+|---|---|---|---|
+| Speedway | fast, long straights, sweeping bends | wide | about 14 s |
+| Esses | four flowing left-right sweeps, no hard braking | average | about 17 s |
+| Technical | hairpin, chicane, narrow climb | narrow in places | about 22 s |
+| Grand Prix | long straight, three hairpins, chicane, long sweep | narrow | about 24 s |
+
+The AI racers in the stable only know Speedway so far.
 
 ## Damage and drafting
 
