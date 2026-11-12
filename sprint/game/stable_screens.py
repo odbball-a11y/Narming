@@ -42,6 +42,13 @@ def status_text(app, racer_dir) -> tuple[str, tuple]:
             return "BREEDING PAUSED: resume it from its card", C_PINK
         extra = f" {b['done'] + 1}/{b['of']}" if b["stage"] == "camp" else ""
         return f"BREEDING: {STAGES.get(b['stage'], b['stage'])}{extra}", C_CYAN
+    racer = stable.load(racer_dir)
+    state = racer.get("status", "racing")
+    if state == "dead":
+        return f"IN THE HALL OF FAME: died {racer.get('death_cause', '')}", C_HUD_DIM
+    if state == "stud":
+        return (f"AT STUD: {racer.get('breedings', 0)}/{stable.STUD_BREEDINGS} litters, "
+                f"{stable.stud_life_left(racer_dir)} races left to live"), C_HUD_ACCENT
     p = stable.progress(racer_dir)
     if app.training_dir() == str(racer_dir):
         return f"TRAINING  gen {p['done']}/{p['target']}", C_CYAN
@@ -49,7 +56,9 @@ def status_text(app, racer_dir) -> tuple[str, tuple]:
         if p["done"] == 0 and p["version"] == 1:
             return "NOT TRAINED YET", C_PINK
         return f"PAUSED  gen {p['done']}/{p['target']}", C_PINK
-    return "READY TO RACE", C_HUD_ACCENT
+    if not stable.careers_enabled(Path(racer_dir).parent):
+        return "READY TO RACE", C_HUD_ACCENT
+    return f"RACING: race {racer['career']['races']} of {stable.CAREER_RACES}", C_HUD_ACCENT
 
 
 class StableScreen(Screen):
@@ -67,10 +76,11 @@ class StableScreen(Screen):
         self.rivals = stable.house_rivals()
 
     def rows(self) -> list:
-        return ["new", "breed"] + self.racers + ["back"]
+        hall = ["hall"] if stable.hall_of_fame(self.app.stable_root) else []
+        return ["new", "breed"] + self.racers + hall + ["back"]
 
     def breedable(self) -> list:
-        return [d for d in self.racers if stable.brain_file(d) is not None and not stable.is_breeding(d)]
+        return [d for d in self.racers if stable.can_breed(d)]
 
     def update(self, seconds: float) -> None:
         self.timer += seconds
@@ -101,6 +111,8 @@ class StableScreen(Screen):
                     self.app.show(BreedScreen(self.app))
             elif choice == "back":
                 self.app.show(MainMenu(self.app))
+            elif choice == "hall":
+                self.app.show(HallScreen(self.app))
             else:
                 self.app.show(RacerScreen(self.app, choice))
 
@@ -123,10 +135,15 @@ class StableScreen(Screen):
                 ok = len(self.breedable()) >= 2
                 ui.text(screen, "mid", "+ BREED TWO RACERS", colour if ok else C_HUD_DIM, 7, y, shadow=ok)
                 if not ok:
-                    ui.text(screen, "small", "needs two trained racers", C_HUD_DIM, 60, y + 0.8)
+                    need = ("needs two trained racers" if self.app.workshop
+                            else "needs two racers at stud")
+                    ui.text(screen, "small", need, C_HUD_DIM, 60, y + 0.8)
                 y += 7
             elif row == "back":
                 ui.text(screen, "mid", "BACK", colour, 7, y + 1, shadow=True)
+            elif row == "hall":
+                ui.text(screen, "mid", "HALL OF FAME", colour, 7, y + 1, shadow=True)
+                y += 5
             else:
                 racer = stable.load(row)
                 ui.text(screen, "mid", racer["name"].upper(), colour, 7, y, shadow=True)
@@ -358,14 +375,17 @@ class RacerScreen(Screen):
             return (["stop"] if training_me else ["resume_breeding"]) + ["back"]
         if "certificate" in self.racer:
             out.append("certificate")
-        if trained:
+        if stable.can_race(self.racer_dir):
             out.append("race")
         if training_me:
             out.append("stop")
-        elif stable.needs_training(self.racer_dir):
+        elif stable.needs_training(self.racer_dir) and stable.can_train(self.racer_dir):
             out.append("resume")
-        if trained and not training_me:
+        if trained and not training_me and stable.can_train(self.racer_dir):
             out.append("upskill")
+        if (trained and not training_me and stable.status(self.racer_dir) == "racing"
+                and stable.careers_enabled(Path(self.racer_dir).parent)):
+            out.append("retire")
         if self.app.workshop and trained:
             out.append("publish")
         out.append("back")
@@ -376,6 +396,12 @@ class RacerScreen(Screen):
         if self.timer > 1.0:
             self.timer = 0.0
             self.reload()
+
+    def leave(self) -> None:
+        if stable.status(self.racer_dir) == "dead":
+            self.app.show(HallScreen(self.app))
+        else:
+            self.app.show(StableScreen(self.app))
 
     def race(self) -> None:
         rivals = [r for r in stable.house_rivals() if r["id"] != self.racer["id"]][:3]
@@ -397,7 +423,7 @@ class RacerScreen(Screen):
         rows = self.rows()
         self.row = min(self.row, len(rows) - 1)
         if event.key in BACK:
-            self.app.show(StableScreen(self.app))
+            self.leave()
         elif event.key in UP:
             self.row = (self.row - 1) % len(rows)
         elif event.key in DOWN:
@@ -405,7 +431,9 @@ class RacerScreen(Screen):
         elif event.key in ACCEPT:
             self.app.audio.play("select")
             choice = rows[self.row]
-            if choice == "race":
+            if choice == "back":
+                self.leave()
+            elif choice == "race":
                 self.race()
             elif choice == "stop":
                 self.app.stop_training()
@@ -421,6 +449,11 @@ class RacerScreen(Screen):
                     self.app.start_breeding(self.racer_dir)
             elif choice == "certificate":
                 self.app.show(CertificateScreen(self.app, self.racer_dir))
+            elif choice == "retire":
+                stable.retire(self.racer_dir)
+                self.message = f"{self.racer['name']} retires to stud."
+                self.row = 0
+                self.reload()
             elif choice == "upskill":
                 self.app.show(CreateScreen(self.app, self.racer_dir))
             elif choice == "publish":
@@ -477,7 +510,12 @@ class RacerScreen(Screen):
         ui.text(screen, "small", "CAREER", C_HUD_ACCENT, 6, y)
         best = ", ".join(f"{t} {format_time(b)}" for t, b in c["best_laps"].items()) or "-"
         ui.text(screen, "mid", f"{c['races']} races   {c['wins']} wins   {c['podiums']} podiums", C_HUD_TEXT, 6, y + 3)
-        ui.text(screen, "small", f"best race laps: {best}", C_HUD_DIM, 6, y + 7.5)
+        kids = stable.offspring(Path(self.racer_dir).parent, racer["id"])
+        family = f"   offspring: {', '.join(kids)}" if kids else ""
+        ui.text(screen, "small", f"best race laps: {best}{family}"[:110], C_HUD_DIM, 6, y + 7.5)
+        if stable.careers_enabled(Path(self.racer_dir).parent) and racer.get("status", "racing") == "racing":
+            ui.text(screen, "small", "career", C_HUD_DIM, 70, y + 0.2)
+            bar(ui, screen, 82, y + 0.4, 30, min(1.0, c["races"] / stable.CAREER_RACES), C_HUD_ACCENT)
 
         # Charts over every generation trained
         if self.history:
@@ -493,7 +531,8 @@ class RacerScreen(Screen):
 
         labels = {"certificate": "BREEDING CERTIFICATE", "resume_breeding": "RESUME BREEDING",
                   "race": "RACE THE HOUSE RIVALS", "stop": "STOP", "resume": "RESUME TRAINING",
-                  "upskill": "UPSKILL", "publish": "PUBLISH AS HOUSE RIVAL", "back": "BACK"}
+                  "upskill": "UPSKILL", "retire": "RETIRE TO STUD", "publish": "PUBLISH AS HOUSE RIVAL",
+                  "back": "BACK"}
         rows = self.rows()
         y = 48.0
         for i, row in enumerate(rows):
@@ -512,8 +551,7 @@ class BreedScreen(Screen):
 
     def __init__(self, app):
         super().__init__(app)
-        self.parents = [d for d in stable.list_racers(app.stable_root)
-                        if stable.brain_file(d) is not None and not stable.is_breeding(d)]
+        self.parents = [d for d in stable.list_racers(app.stable_root) if stable.can_breed(d)]
         self.sire, self.dam = 0, 1
         self.name = ""
         self.criterion = "fastest"
@@ -713,3 +751,60 @@ class CertificateScreen(Screen):
             y += 3.4
             ui.text(screen, "small", "- " + note, C_HUD_TEXT, 7, y)
         ui.text(screen, "small", "ENTER or ESC to go back", C_HUD_DIM, 80, 86.5, "midbottom")
+
+
+class HallScreen(Screen):
+    """Racers who have died: their records and their families."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.legends = stable.hall_of_fame(app.stable_root)
+        self.row = 0
+
+    def handle_event(self, event) -> None:
+        from .screens import BACK
+        if event.type != pygame.KEYDOWN:
+            return
+        rows = self.legends + ["back"]
+        if event.key in BACK:
+            self.app.show(StableScreen(self.app))
+        elif event.key in UP:
+            self.row = (self.row - 1) % len(rows)
+        elif event.key in DOWN:
+            self.row = (self.row + 1) % len(rows)
+        elif event.key in ACCEPT:
+            choice = rows[self.row]
+            if choice == "back":
+                self.app.show(StableScreen(self.app))
+            else:
+                self.app.show(RacerScreen(self.app, choice))
+
+    def draw(self, screen) -> None:
+        ui = self.app.ui
+        ui.backdrop(screen)
+        ui.text(screen, "big", "HALL OF FAME", C_HUD_ACCENT, 6, 4, shadow=True)
+        y = 15.0
+        for x, head in ((8, "RACER"), (52, "RACES"), (66, "WINS"), (78, "PODIUMS"), (94, "BEST LAP"),
+                        (112, "FOALS"), (124, "DIED")):
+            ui.text(screen, "small", head, C_HUD_DIM, x, y)
+        y += 4
+        root = self.app.stable_root
+        for i, d in enumerate(self.legends + ["back"]):
+            selected = i == self.row
+            colour = C_HUD_ACCENT if selected else C_HUD_TEXT
+            if selected:
+                ui.text(screen, "mid", ">", C_PINK, 4, y)
+            if d == "back":
+                ui.text(screen, "mid", "BACK", colour, 8, y + 1)
+                break
+            r = stable.load(d)
+            c = r["career"]
+            best = min(c["best_laps"].values()) if c["best_laps"] else None
+            for x, value in ((8, r["name"].upper()), (52, str(c["races"])), (66, str(c["wins"])),
+                             (78, str(c["podiums"])), (94, format_time(best)),
+                             (112, str(len(stable.offspring(root, r["id"]))))):
+                ui.text(screen, "mid", value, colour, x, y)
+            ui.text(screen, "small", r.get("death_cause", ""), C_HUD_DIM, 124, y + 0.8)
+            y += 5.5
+        if not self.legends:
+            ui.text(screen, "mid", "Nobody yet.", C_HUD_DIM, 8, y)

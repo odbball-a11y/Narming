@@ -101,7 +101,7 @@ aggressive cars he tails closely and runs into them when they cut in and
 brake (rear contact counts as caused). Proposed next: camps whose rival pool
 includes the other personalities' champions.
 
-## The stable (built: steps 1-3 of 5)
+## The stable (built: steps 1-4 of 5)
 
 Agreed design, from the user: an AI-only racing stable in the spirit of Derby
 Owners Club. The player creates named racers (name, aggression and caution
@@ -152,8 +152,18 @@ ones in the workshop.
   `is_breeding` until the certificate exists. Full size takes ~47 s on 4
   cores. Screens: `BreedScreen`, `CertificateScreen`.
 
-Still to build, in order: (4) careers: 20 races, then stud
-for up to 5 breedings, then death and a hall of fame. (5) championship
+- Careers (`ai/stable.py`, not in the workshop: `careers_enabled`):
+  `racer["status"]` racing -> stud -> dead. `record_result` ticks the
+  stable clock (`stable/stable.json` races) and retires at `CAREER_RACES`
+  (20); `retire` also works early. `can_race`/`can_train` need "racing",
+  `can_breed` needs "stud"; `mate` counts `breedings` on both parents;
+  `check_deaths` kills studs at `STUD_BREEDINGS` (5) or after
+  `STUD_LIFETIME` (40) stable races at stud. `list_racers` hides the dead
+  (`include_dead=True` for partners: legends still spar); `hall_of_fame`,
+  `offspring`. News (retirements, deaths) returns from `record_result` and
+  shows on the results screen. `HallScreen`; card has RETIRE TO STUD.
+
+Still to build: (5) championship
 across tracks, weather (wet/dry specialists from camp conditions), car
 traits on a fixed budget, 6-8 cars.
 

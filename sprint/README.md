@@ -133,7 +133,7 @@ Your racers are saved in the `stable` folder.
 
 ### Breeding
 
-**Breed two racers** (on the stable screen, once two racers are trained):
+**Breed two racers** (on the stable screen, once two racers are at stud):
 pick a sire and a dam, name the foal, and choose how the best foal is picked:
 
 - **Fastest lap** after its mini-camp, or
@@ -151,7 +151,22 @@ Its **breeding certificate** (on its card) shows the pedigree (parents and
 grandparents), its temperament, the shortlisted foals side by side with the
 one picked, and what to expect from it, as predictions from its family.
 
-Coming next: careers with retirement to stud, and championships.
+### Careers
+
+- A racer has a **racing career of 20 races**. After the 20th it retires to
+  stud. **Retire to stud** on its card ends the career early.
+- Only racers **at stud** can be bred from, and studs no longer race or train.
+- A stud dies after **5 litters**, or of old age after **40 stable races**
+  (run by any of your racers) at stud, whichever comes first.
+- The dead go to the **Hall of Fame** (on the stable screen) with their
+  record and number of foals. Their brains stay available as training
+  partners.
+- None of this applies in the workshop.
+
+The numbers are `CAREER_RACES`, `STUD_BREEDINGS` and `STUD_LIFETIME` in
+`ai/stable.py`.
+
+Coming next: championships across several tracks, weather and car traits.
 
 ### Making house rivals (Workshop)
 

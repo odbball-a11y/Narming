@@ -233,6 +233,8 @@ def two_trained(root):
     b = stable.create(root, "Steady Sam", 0.1, 0.9, p, 1)
     quick_train(a)
     quick_train(b)
+    stable.retire(a)          # only racers at stud can breed
+    stable.retire(b)
     return a, b
 
 
@@ -277,6 +279,7 @@ def test_mate_breed_and_certificate(dirs):
     assert stable.champion(foal).label == "Little Lucky"
     stable.upskill(foal, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
     quick_train(foal)
+    stable.retire(foal)
     grandchild = stable.mate(root, foal, betty, "Lucky Too")
     cert2 = small_breed(grandchild)
     assert cert2["grandparents"]["Little Lucky"] == ["Bold Betty", "Steady Sam"]
@@ -289,6 +292,10 @@ def test_same_parents_and_name_breed_the_same_foal(dirs):
     first = stable.mate(root, betty, sam, "Twin")
     c1 = small_breed(first)
     shutil.rmtree(first)
+    for parent in (betty, sam):                    # undo the first litter's breeding count
+        r = stable.load(parent)
+        r["breedings"] = 0
+        stable.save(parent, r)
     second = stable.mate(root, betty, sam, "Twin")
     c2 = small_breed(second)
     assert [c["foal"] for c in c1["candidates"]] == [c["foal"] for c in c2["candidates"]]
@@ -342,3 +349,113 @@ def test_interrupted_breeding_can_be_resumed_from_the_card(app):
     app.draw()
     assert card.rows() == ["resume_breeding", "back"]
     assert "PAUSED" in status_text(app, foal)[0]
+
+
+# ------------------------------------------------------------------- careers
+
+def test_career_ends_at_stud_after_the_race_limit(dirs, monkeypatch):
+    monkeypatch.setattr(stable, "CAREER_RACES", 3)
+    root = stable.STABLE_DIR
+    racer = stable.create(root, "Short Career", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(racer)
+    assert stable.can_race(racer) and not stable.can_breed(racer)
+    news = []
+    for k in range(3):
+        news += stable.record_result(racer, 2, 12.5, "speedway")
+    assert stable.status(racer) == "stud" and "retires to stud" in news[-1]
+    assert stable.clock(root) == 3
+    assert not stable.can_race(racer) and not stable.can_train(racer) and stable.can_breed(racer)
+    assert stable.record_result(racer, 1, 11.0, "speedway") == []     # studs no longer race
+    assert stable.load(racer)["career"]["races"] == 3
+    with pytest.raises(ValueError):
+        stable.upskill(racer, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    assert "racer:short-career" not in stable.register(root)          # not offered for races
+
+
+def test_studs_die_after_their_litters_or_of_old_age(dirs, monkeypatch):
+    monkeypatch.setattr(stable, "STUD_BREEDINGS", 1)
+    root = stable.STABLE_DIR
+    betty, sam = two_trained(root)
+    with pytest.raises(ValueError):
+        stable.mate(root, stable.create(root, "Racing", 0.5, 0.5, [], 1), betty, "No")
+    foal = stable.mate(root, betty, sam, "Last Foal")
+    assert stable.load(betty)["breedings"] == 1
+    small_breed(foal)
+    assert stable.status(betty) == "dead" and stable.status(sam) == "dead"
+    assert stable.load(betty)["death_cause"] == "after 1 litter"
+    assert [d.name for d in stable.hall_of_fame(root)] == ["bold-betty", "steady-sam"]
+    assert betty not in stable.list_racers(root)
+    assert stable.offspring(root, "bold-betty") == ["Last Foal"]
+    assert any(p["name"] == "Bold Betty" for p in stable.partner_options(root))   # legends still spar
+    # Old age: a stud with no litters dies after STUD_LIFETIME stable races.
+    monkeypatch.setattr(stable, "STUD_LIFETIME", 2)
+    old = stable.create(root, "Old Timer", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(old)
+    stable.retire(old)
+    assert stable.stud_life_left(old) == 2
+    stable.record_result(foal, 1, 12.0, "speedway")
+    assert stable.status(old) == "stud"
+    news = stable.record_result(foal, 1, 12.0, "speedway")
+    assert stable.status(old) == "dead" and any("Old Timer" in n for n in news)
+    assert "old age" in stable.load(old)["death_cause"]
+
+
+def test_workshop_racers_have_no_career_limits(dirs, monkeypatch):
+    monkeypatch.setattr(stable, "CAREER_RACES", 1)
+    root = stable.WORKSHOP_DIR
+    a = stable.create(root, "W One", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    b = stable.create(root, "W Two", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(a)
+    quick_train(b)
+    for _ in range(3):
+        stable.record_result(a, 1, 12.0, "speedway")
+    assert stable.status(a) == "racing" and stable.can_race(a) and stable.can_breed(a)
+    foal = stable.mate(root, a, b, "W Foal")
+    assert stable.load(a).get("breedings", 0) == 0 and foal.exists()
+
+
+def test_career_screens(app, monkeypatch):
+    from game.stable_screens import HallScreen, RacerScreen, StableScreen, status_text
+    monkeypatch.setattr(stable, "STUD_BREEDINGS", 1)
+    root = stable.STABLE_DIR
+    racer = stable.create(root, "Retiree", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(racer)
+    card = RacerScreen(app, racer)
+    app.show(card)
+    app.draw()
+    assert "RACING" in status_text(app, racer)[0]
+    assert "retire" in card.rows() and "race" in card.rows()
+    card.row = card.rows().index("retire")
+    press(app, pygame.K_RETURN)
+    assert stable.status(racer) == "stud" and "retires" in card.message
+    assert card.rows() == ["back"] and "AT STUD" in status_text(app, racer)[0]
+    other = stable.create(root, "Mate", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(other)
+    stable.retire(other)
+    small_breed(stable.mate(root, racer, other, "Heir"))
+    app.show(StableScreen(app))
+    app.draw()
+    assert "hall" in app.current.rows()
+    app.current.row = app.current.rows().index("hall")
+    press(app, pygame.K_RETURN)
+    hall = app.current
+    assert isinstance(hall, HallScreen) and len(hall.legends) == 2
+    press(app, pygame.K_RETURN)
+    assert isinstance(app.current, RacerScreen) and "HALL OF FAME" in status_text(app, racer)[0]
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.current, HallScreen)
+
+
+def test_race_news_appears_on_the_results_screen(app, monkeypatch):
+    from game.stable_screens import RacerScreen
+    monkeypatch.setattr(stable, "CAREER_RACES", 1)
+    racer = stable.create(stable.STABLE_DIR, "One Race", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(racer)
+    card = RacerScreen(app, racer)
+    app.show(card)
+    card.race()
+    view = app.current
+    while not view.over:
+        view.tick()
+    assert "retires to stud" in view.message
+    assert stable.status(racer) == "stud"

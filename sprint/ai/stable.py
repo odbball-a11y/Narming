@@ -45,7 +45,9 @@ WORKSHOP_DIR = evolve.PROJECT / "workshop"
 
 POPULATION = 80
 GENERATION_CHOICES = [10, 20, 40, 80]
-CAREER_RACES = 20       # races before a racer retires to stud (step 4)
+CAREER_RACES = 20       # races before a racer retires to stud
+STUD_BREEDINGS = 5      # litters a racer at stud can sire before it dies
+STUD_LIFETIME = 40      # stable races (by anyone) a racer lives for at stud
 
 # Personality sliders, each 0..1, and the race scoring at their ends.
 # (0, 0) is the balanced scoring; aggression 1 is Dangerous Dave's upbringing,
@@ -106,13 +108,117 @@ def save(racer_dir, racer: dict) -> None:
     _write(Path(racer_dir) / "racer.json", racer)
 
 
-def list_racers(root: Path) -> list[Path]:
-    """Racer folders in a stable or workshop, oldest first."""
+def list_racers(root: Path, include_dead: bool = False) -> list[Path]:
+    """Racer folders in a stable or workshop, oldest first.  The dead are
+    left out unless asked for (they live on in the hall of fame)."""
     root = Path(root)
     if not root.exists():
         return []
     dirs = [p for p in root.iterdir() if (p / "racer.json").exists()]
+    if not include_dead:
+        dirs = [p for p in dirs if status(p) != "dead"]
     return sorted(dirs, key=lambda p: (load(p).get("created", ""), p.name))
+
+
+# ----------------------------------------------------------------- careers
+#
+# A racer races (status "racing") for CAREER_RACES races, or until retired
+# early, then stands at stud ("stud"): it can be bred from but no longer
+# races or trains.  It dies ("dead") after STUD_BREEDINGS litters or after
+# STUD_LIFETIME stable races at stud, whichever comes first, and joins the
+# hall of fame.  The stable's clock is its total number of races.  None of
+# this applies in the workshop, where house rivals are made.
+
+def careers_enabled(root) -> bool:
+    return Path(root).resolve() != Path(WORKSHOP_DIR).resolve()
+
+
+def status(racer_dir) -> str:
+    return load(racer_dir).get("status", "racing")
+
+
+def clock(root) -> int:
+    path = Path(root) / "stable.json"
+    return _read(path).get("races", 0) if path.exists() else 0
+
+
+def _tick(root) -> int:
+    path = Path(root) / "stable.json"
+    data = _read(path) if path.exists() else {}
+    data["races"] = data.get("races", 0) + 1
+    _write(path, data)
+    return data["races"]
+
+
+def can_race(racer_dir) -> bool:
+    return status(racer_dir) == "racing" and brain_file(racer_dir) is not None and not is_breeding(racer_dir)
+
+
+def can_train(racer_dir) -> bool:
+    return status(racer_dir) == "racing"
+
+
+def can_breed(racer_dir) -> bool:
+    if brain_file(racer_dir) is None or is_breeding(racer_dir):
+        return False
+    if not careers_enabled(Path(racer_dir).parent):
+        return True
+    return status(racer_dir) == "stud"
+
+
+def retire(racer_dir, reason: str = "retired early") -> None:
+    """End a racer's racing career: it goes to stud."""
+    racer = load(racer_dir)
+    if racer.get("status", "racing") != "racing":
+        return
+    racer["status"] = "stud"
+    racer["retired_at"] = clock(Path(racer_dir).parent)
+    racer["retired_reason"] = reason
+    racer.setdefault("breedings", 0)
+    save(racer_dir, racer)
+
+
+def stud_life_left(racer_dir) -> int:
+    racer = load(racer_dir)
+    return max(0, STUD_LIFETIME - (clock(Path(racer_dir).parent) - racer.get("retired_at", 0)))
+
+
+def _die(racer_dir, cause: str) -> None:
+    racer = load(racer_dir)
+    racer["status"] = "dead"
+    racer["died_at"] = clock(Path(racer_dir).parent)
+    racer["died"] = datetime.date.today().isoformat()
+    racer["death_cause"] = cause
+    save(racer_dir, racer)
+
+
+def check_deaths(root) -> list[str]:
+    """Studs that have run out of breedings or years die.  Returns names."""
+    if not careers_enabled(root):
+        return []
+    died = []
+    for d in list_racers(root):
+        racer = load(d)
+        if racer.get("status") != "stud" or is_breeding(d):
+            continue
+        if racer.get("breedings", 0) >= STUD_BREEDINGS:
+            _die(d, f"after {STUD_BREEDINGS} litter{'s' if STUD_BREEDINGS != 1 else ''}")
+            died.append(racer["name"])
+        elif stud_life_left(d) == 0:
+            _die(d, "of old age")
+            died.append(racer["name"])
+    return died
+
+
+def offspring(root, racer_id: str) -> list[str]:
+    """Names of the racers bred from this one."""
+    return [load(d)["name"] for d in list_racers(root, include_dead=True)
+            if racer_id in load(d).get("parents", [])]
+
+
+def hall_of_fame(root) -> list[Path]:
+    dead = [d for d in list_racers(root, include_dead=True) if status(d) == "dead"]
+    return sorted(dead, key=lambda d: load(d).get("died_at", 0))
 
 
 # --------------------------------------------------------------- versions
@@ -172,7 +278,7 @@ def partner_options(root: Path, exclude: str | None = None, include_house: bool 
     workshop only) the house rivals."""
     options = [{"key": "scripted", "name": "Scripted car", "kind": "scripted"},
                {"key": "self", "name": "Itself (its own best so far)", "kind": "self"}]
-    for d in list_racers(root):
+    for d in list_racers(root, include_dead=True):
         if d.name == exclude:
             continue
         f = brain_file(d)
@@ -223,6 +329,8 @@ def upskill(racer_dir, aggression: float, caution: float, partners: list[dict], 
     possibly with a new personality and new partners."""
     if brain_file(racer_dir) is None:
         raise ValueError("train the racer before upskilling it")
+    if not can_train(racer_dir):
+        raise ValueError("only racers still racing can be trained")
     racer = load(racer_dir)
     racer["versions"].append(_new_version(racer, aggression, caution, partners,
                                           generations, racer["versions"][-1]["track"]))
@@ -290,8 +398,16 @@ def house_driver(rival_id: str) -> NeuralDriver:
     return NeuralDriver(weights, meta["arch"], meta["name"])
 
 
-def record_result(racer_dir, place: int, best_lap: float | None, track: str) -> None:
-    """Add one finished race to a racer's career."""
+def record_result(racer_dir, place: int, best_lap: float | None, track: str) -> list[str]:
+    """Add one finished race to a racer's career; the stable's clock moves
+    on.  Returns news: retirements and deaths."""
+    racer_dir = Path(racer_dir)
+    root = racer_dir.parent
+    news = []
+    if careers_enabled(root):
+        if status(racer_dir) != "racing":
+            return news
+        _tick(root)
     racer = load(racer_dir)
     career = racer["career"]
     career["races"] += 1
@@ -302,6 +418,13 @@ def record_result(racer_dir, place: int, best_lap: float | None, track: str) -> 
         if old is None or best_lap < old:
             career["best_laps"][track] = round(best_lap, 3)
     save(racer_dir, racer)
+    if careers_enabled(root):
+        if career["races"] >= CAREER_RACES:
+            retire(racer_dir, f"after {CAREER_RACES} races")
+            news.append(f"{racer['name']} retires to stud after {CAREER_RACES} races.")
+        for name in check_deaths(root):
+            news.append(f"{name} has died. Remembered in the hall of fame.")
+    return news
 
 
 def publish(racer_dir) -> Path:
@@ -334,7 +457,7 @@ def register(root: Path | None = None) -> list[str]:
         register_driver(key, rival["name"], lambda slot=0, r=rival["id"]: house_driver(r))
         keys.append(key)
     for d in list_racers(root) if root else []:
-        if brain_file(d) is not None:
+        if can_race(d):
             key = f"racer:{d.name}"
             register_driver(key, load(d)["name"], lambda slot=0, p=d: champion(p))
             keys.append(key)
@@ -402,6 +525,8 @@ def mate(root: Path, sire_dir, dam_dir, name: str, criterion: str = "fastest") -
     for parent in (sire, dam):
         if brain_file(Path(root) / parent["id"]) is None:
             raise ValueError(f"{parent['name']} must be trained before breeding")
+        if not can_breed(Path(root) / parent["id"]):
+            raise ValueError(f"{parent['name']} must be retired to stud before breeding")
     seed = zlib.crc32(f"{sire['id']}|{dam['id']}|{name}".encode())
     rng = np.random.default_rng(seed)
 
@@ -417,6 +542,11 @@ def mate(root: Path, sire_dir, dam_dir, name: str, criterion: str = "fastest") -
     racer["breeding"] = {"sire": sire["id"], "dam": dam["id"], "criterion": criterion, "seed": seed}
     save(foal_dir, racer)
     _progress(foal_dir, stage="waiting")
+    if careers_enabled(root):
+        for parent_dir in (sire_dir, dam_dir):
+            parent = load(parent_dir)
+            parent["breedings"] = parent.get("breedings", 0) + 1
+            save(parent_dir, parent)
     return foal_dir
 
 
@@ -568,9 +698,11 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
         "expectations": expectations(parents[0], parents[1], racer),
     }
     racer = load(foal_dir)
+    racer["versions"][0]["generations"] = camp_generations    # its camp is its first training
     racer["certificate"] = certificate
     save(foal_dir, racer)
     _progress(foal_dir, stage="done")
+    check_deaths(root)
     return certificate
 
 

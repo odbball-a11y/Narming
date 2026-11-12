@@ -473,7 +473,9 @@ class RaceScreen(Screen):
     def tick(self) -> None:
         events = self.race.step()
         if not self.is_replay and any(e[0] == "race_over" for e in events):
-            self.app.record_race(self.race)
+            news = self.app.record_race(self.race)
+            if news:
+                self.message = " ".join(news)
         if self.race.phase != race_module.COUNTDOWN:
             self.renderer.on_tick(self.race.world)
         self.app.audio.handle_events(events)
