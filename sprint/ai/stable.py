@@ -299,6 +299,36 @@ def progress(racer_dir) -> dict:
     return {"version": len(racer["versions"]), "done": done, "target": v["generations"]}
 
 
+def focus_of(version: dict) -> str | None:
+    return version.get("focus")
+
+
+def specialty(racer_dir) -> tuple[str | None, dict]:
+    """(track it specialises in or None, generations trained per focus).
+    A racer is a specialist at a track once more than half of its training
+    generations were spent there; otherwise it is an all-rounder."""
+    racer = load(racer_dir)
+    spent: dict = {}
+    for v in racer["versions"]:
+        done = len(evolve.list_generations(Path(racer_dir) / v["run"]))
+        key = focus_of(v) or "all"
+        spent[key] = spent.get(key, 0) + done
+    total = sum(spent.values())
+    best = max((k for k in spent if k != "all"), key=lambda k: spent[k], default=None)
+    if best and total and spent[best] * 2 > total:
+        return best, spent
+    return None, spent
+
+
+def specialty_text(racer_dir) -> str:
+    track, spent = specialty(racer_dir)
+    if sum(spent.values()) == 0:
+        return "not trained yet"
+    if track:
+        return f"{TRACK_NAMES[track]} specialist"
+    return "all-rounder"
+
+
 def needs_training(racer_dir) -> bool:
     if is_breeding(racer_dir):
         return False
@@ -357,15 +387,18 @@ def partner_options(root: Path, exclude: str | None = None, include_house: bool 
 # ------------------------------------------------------- create / upskill
 
 def _new_version(racer: dict, aggression: float, caution: float, partners: list[dict],
-                 generations: int, track: str) -> dict:
+                 generations: int, track: str, focus: str | None = None) -> dict:
+    if focus is not None and focus not in TRACK_NAMES:
+        raise ValueError(f"unknown track {focus!r}")
     return {"run": f"v{len(racer['versions']) + 1}", "generations": int(generations),
             "aggression": round(float(aggression), 2), "caution": round(float(caution), 2),
             "partners": [{k: p[k] for k in ("name", "kind", "file", "traits") if k in p} for p in partners],
-            "track": track}
+            "track": track, "focus": focus}
 
 
 def create(root: Path, name: str, aggression: float, caution: float, partners: list[dict],
-           generations: int, track: str = "speedway", traits: dict | None = None) -> Path:
+           generations: int, track: str = "speedway", traits: dict | None = None,
+           focus: str | None = None) -> Path:
     """Register a new racer with its car (`traits`, default the standard
     car); train it with `train`.  The car is the racer's for life."""
     name = name.strip()
@@ -388,21 +421,23 @@ def create(root: Path, name: str, aggression: float, caution: float, partners: l
              "career": {"races": 0, "wins": 0, "podiums": 0, "best_laps": {}}}
     racer["versions"].append(_new_version(racer, aggression, caution, partners or [{"name": "Scripted car",
                                                                                    "kind": "scripted"}],
-                                          generations, track))
+                                          generations, track, focus))
     save(racer_dir, racer)
     return racer_dir
 
 
-def upskill(racer_dir, aggression: float, caution: float, partners: list[dict], generations: int) -> None:
+def upskill(racer_dir, aggression: float, caution: float, partners: list[dict], generations: int,
+            focus: str | None = None) -> None:
     """Add a training version that carries on from the racer's current brain,
-    possibly with a new personality and new partners."""
+    possibly with a new personality, new partners and a new training focus
+    (one track, to specialise, or None for all five)."""
     if brain_file(racer_dir) is None:
         raise ValueError("train the racer before upskilling it")
     if not can_train(racer_dir):
         raise ValueError("only racers still racing can be trained")
     racer = load(racer_dir)
     racer["versions"].append(_new_version(racer, aggression, caution, partners,
-                                          generations, racer["versions"][-1]["track"]))
+                                          generations, racer["versions"][-1]["track"], focus))
     racer["aggression"], racer["caution"] = round(float(aggression), 2), round(float(caution), 2)
     save(racer_dir, racer)
 
@@ -422,8 +457,14 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
         prev = racer_dir / racer["versions"][index - 1]["run"]
         start = evolve.gen_path(prev, evolve.list_generations(prev)[-1])
     grad = graduate()
+    focus = v.get("focus")
+    tracks = [focus] if focus else list(grad["tracks"])
+    # The same effort either way: a single track gets as many races per
+    # generation as all five together, so it trains harder on that track.
+    races = grad["races_per_track"] * len(grad["tracks"]) // len(tracks)
     evolve.train(run=v["run"], root=racer_dir, generations=remaining, population=population,
-                 seed=index, tracks=grad["tracks"], arch=grad["arch"], races_per_track=grad["races_per_track"],
+                 seed=index, tracks=tracks, exam_tracks=list(grad["tracks"]), arch=grad["arch"],
+                 races_per_track=races,
                  race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                  race_weights=sliders_to_weights(v["aggression"], v["caution"]),
                  partners=v["partners"], name=racer["name"], workers=workers, car=traits_of(racer_dir),

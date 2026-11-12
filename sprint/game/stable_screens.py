@@ -226,6 +226,7 @@ class CreateScreen(Screen):
         self.aggression = racer["aggression"] if racer else 0.3
         self.caution = racer["caution"] if racer else 0.3
         self.generations = 20
+        self.focus = None                      # None = train on all five tracks
         self.traits = dict(racer.get("traits") or cartraits.default()) if racer else cartraits.default()
         exclude = racer["id"] if racer else None
         self.partners = stable.partner_options(app.stable_root, exclude, include_house=app.workshop)
@@ -243,7 +244,7 @@ class CreateScreen(Screen):
     def rows(self) -> list:
         car = [] if self.racer_dir else list(cartraits.STARS) + ["weight"]    # a car is for life
         return (["name", "aggression", "caution"] + car + [p["key"] for p in self.partners]
-                + ["generations", "start", "back"])
+                + ["focus", "generations", "start", "back"])
 
     def stars_left(self) -> int:
         return sim_tuning.TRAIT_BUDGET - cartraits.stars_used(self.traits)
@@ -287,6 +288,10 @@ class CreateScreen(Screen):
             elif row == "weight":
                 i = cartraits.WEIGHTS.index(self.traits["weight"]) + (1 if key in RIGHT else -1)
                 self.traits["weight"] = cartraits.WEIGHTS[i % 3]
+            elif row == "focus":
+                options = [None] + list(championship.TRACK_ORDER)
+                i = options.index(self.focus) + (1 if key in RIGHT else -1)
+                self.focus = options[i % len(options)]
             elif row == "generations":
                 choices = stable.GENERATION_CHOICES
                 i = choices.index(self.generations) + (1 if key in RIGHT else -1)
@@ -325,11 +330,12 @@ class CreateScreen(Screen):
             return
         partners = [p for p in self.partners if p["key"] in self.chosen]
         if self.racer_dir:
-            stable.upskill(self.racer_dir, self.aggression, self.caution, partners, self.generations)
+            stable.upskill(self.racer_dir, self.aggression, self.caution, partners, self.generations,
+                           self.focus)
             racer_dir = self.racer_dir
         else:
             racer_dir = stable.create(self.app.stable_root, self.name, self.aggression, self.caution,
-                                      partners, self.generations, traits=self.traits)
+                                      partners, self.generations, traits=self.traits, focus=self.focus)
         pygame.key.stop_text_input()
         self.app.audio.play("select")
         self.app.start_training(racer_dir)
@@ -384,10 +390,17 @@ class CreateScreen(Screen):
                 y += 5.0
                 ui.text(screen, "small", "TRAINING PARTNERS  (Enter or Left/Right to tick)", C_HUD_DIM, 7, y)
                 y += 3.5
-            elif row == "generations":
+            elif row == "focus":
                 y += 1.0
+                ui.text(screen, "mid", "TRAINING ON", C_HUD_DIM, 7, y)
+                name = "ALL TRACKS" if self.focus is None else stable.TRACK_NAMES[self.focus].upper()
+                ui.text(screen, "mid", f"<  {name}  >", colour, 40, y)
+                ui.text(screen, "small", "all-rounder" if self.focus is None else "builds a specialist",
+                        C_HUD_DIM, 75, y + 0.8)
+                y += 5.0
+            elif row == "generations":
                 ui.text(screen, "mid", "GENERATIONS", C_HUD_DIM, 7, y)
-                minutes = self.generations * 0.5
+                minutes = self.generations * 0.7
                 ui.text(screen, "mid", f"<  {self.generations}  >", colour, 40, y)
                 ui.text(screen, "small", f"about {minutes:.0f} min", C_HUD_DIM, 62, y + 0.8)
                 y += 5.5
@@ -404,7 +417,7 @@ class CreateScreen(Screen):
         if self.message:
             ui.text(screen, "small", self.message, C_PINK, 7, 87.5, "bottomleft")
 
-        ui.panel(screen, 100, 13, 56, 66)
+        ui.panel(screen, 100, 13, 56, 74)
         lines = [
             ("AGGRESSION", C_PINK, "Training rewards places, passes and slipstreaming;"),
             ("", C_PINK, "damage is cheap.  Dangerous Dave is 1.0."),
@@ -420,7 +433,9 @@ class CreateScreen(Screen):
                 y += 2.8
             ui.text(screen, "small", text, C_HUD_TEXT, 103, y)
             y += 3.4
-        for head, colour, text in (("THE CAR", C_HUD_ACCENT, f"{sim_tuning.TRAIT_BUDGET} stars over four traits, 1-5 each."),
+        for head, colour, text in (("TRAINING ON", C_HUD_ACCENT, "All tracks makes an all-rounder. One track,"),
+                                   ("", C_HUD_ACCENT, "for the same generations, makes a specialist."),
+                                   ("THE CAR", C_HUD_ACCENT, f"{sim_tuning.TRAIT_BUDGET} stars over four traits, 1-5 each."),
                                    ("", C_HUD_ACCENT, "Weight is free: heavy shoves harder but is"),
                                    ("", C_HUD_ACCENT, "slower to speed up and stop; light the reverse."),
                                    ("", C_HUD_ACCENT, "A racer keeps its car for life.")):
@@ -580,6 +595,7 @@ class RacerScreen(Screen):
         ui.text(screen, "small", f"trained against: {partners}"[:80], C_HUD_DIM, 52, 14)
         ui.text(screen, "small", "CAR: " + cartraits.describe(stable.traits_of(self.racer_dir)).upper(),
                 C_HUD_TEXT, 52, 17.5)
+        ui.text(screen, "small", "TRAINING: " + stable.specialty_text(self.racer_dir).upper(), C_CYAN, 52, 21)
 
         # Measured racecraft (latest exam: time trial + race from last v three scripted cars)
         exam = self.history[-1]["exam"] if self.history else None
@@ -1030,7 +1046,8 @@ class ChampionshipSetupScreen(Screen):
         ui.text(screen, "small", "TRACKS", C_HUD_ACCENT, 107, y + 1)
         ui.text(screen, "small", ", ".join(stable.TRACK_NAMES[t] for t in championship.TRACK_ORDER), C_HUD_DIM,
                 107, y + 4)
-        ui.text(screen, "small", "10-7-5-3 points, +1 fastest lap.", C_HUD_DIM, 107, y + 8)
+        ui.text(screen, "small", f"{championship.RACE_LAPS} laps each. 10-7-5-3 points, +1 fastest lap.", C_HUD_DIM,
+                107, y + 8)
         ui.text(screen, "small", "Reverse grid: the leader starts last.", C_HUD_DIM, 107, y + 11)
 
 
@@ -1133,7 +1150,7 @@ class ChampionshipHub(Screen):
         y = draw_table(ui, screen, ch, 4, 15, 84, rows)
         nxt = self.next
         ui.text(screen, "mid", f"NEXT: RACE {nxt['number']} OF {len(ch['tracks'])}", C_HUD_ACCENT, 6, y + 3)
-        ui.text(screen, "mid", f"{stable.TRACK_NAMES[nxt['track']].upper()}  ({self.track.default_laps} laps)",
+        ui.text(screen, "mid", f"{stable.TRACK_NAMES[nxt['track']].upper()}  ({championship.RACE_LAPS} laps)",
                 C_HUD_TEXT, 6, y + 8)
         ui.text(screen, "small", "STARTING GRID  (front to back)", C_HUD_DIM, 6, y + 13.5)
         gy = y + 17

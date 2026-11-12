@@ -119,7 +119,7 @@ def test_a_season_has_five_races_the_right_points_and_a_reverse_grid(dirs):
             table = championship.standings(ch)
             assert nxt["grid"][-1] == table[0]["entrant"] and nxt["grid"][0] == table[-1]["entrant"]
         race = championship.build_race(root, ch)
-        assert race.rolling and race.laps == race.track.default_laps
+        assert race.rolling and race.laps == championship.RACE_LAPS == 5
         assert [d.label for d in race.drivers] == [ch["entrants"][e]["name"] for e in nxt["grid"]]
         race.run(max_seconds=400)
         record = championship.finish_race(root, ch, race)
@@ -282,3 +282,67 @@ def test_stable_screens_show_liveries_and_titles(app):
         app.show(screen)
         app.draw()
     assert RacerScreen(app, zoe).rows()[0] == "championship"
+
+
+# --------------------------------------------------------- training focus
+
+def test_a_single_track_focus_trains_hard_on_that_track_and_is_still_measured_everywhere(dirs):
+    from ai import evolve
+    from test_stable import quick_train
+    root = stable.STABLE_DIR
+    p = [{"name": "Scripted car", "kind": "scripted"}]
+    general = stable.create(root, "General", 0.5, 0.5, p, 1)
+    ace = stable.create(root, "Oval Ace", 0.5, 0.5, p, 1, focus="oval")
+    assert stable.load(general)["versions"][0]["focus"] is None
+    for d in (general, ace):
+        quick_train(d)
+    g, a = evolve.load_config(general / "v1"), evolve.load_config(ace / "v1")
+    assert g["tracks"] == ["oval", "speedway", "esses", "technical", "grandprix"] and g["races_per_track"] == 1
+    assert a["tracks"] == ["oval"] and a["races_per_track"] == 5          # the same effort on one track
+    assert a["exam_tracks"] == g["exam_tracks"] == g["tracks"]
+    assert len(evolve.load_history(ace / "v1")[0]["scenarios"]) == 5
+    assert {s["track"] for s in evolve.load_history(ace / "v1")[0]["scenarios"]} == {"oval"}
+    exam = evolve.load_history(ace / "v1")[0]["exam"]
+    assert set(exam) == set(g["tracks"])                                    # a specialist is tested everywhere
+    assert stable.specialty(general)[0] is None and stable.specialty_text(general) == "all-rounder"
+    assert stable.specialty(ace)[0] == "oval" and stable.specialty_text(ace) == "Oval specialist"
+
+
+def test_upskilling_on_a_track_can_turn_a_generalist_into_a_specialist(dirs):
+    from test_stable import quick_train
+    root = stable.STABLE_DIR
+    racer = stable.create(root, "Late Bloomer", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+    quick_train(racer)
+    assert stable.specialty(racer)[0] is None
+    stable.upskill(racer, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 2, focus="esses")
+    assert stable.load(racer)["versions"][-1]["focus"] == "esses"
+    racer_data = stable.load(racer)
+    racer_data["versions"][-1]["generations"] = 2
+    stable.save(racer, racer_data)
+    quick_train(racer)
+    track, spent = stable.specialty(racer)
+    assert spent == {"all": 1, "esses": 2} and track == "esses"          # two of three generations on Esses
+    with pytest.raises(ValueError):
+        stable.upskill(racer, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1, focus="moon")
+
+
+def test_create_screen_chooses_the_training_focus(app):
+    from game.stable_screens import CreateScreen
+    from test_stable import type_text
+    app.show(CreateScreen(app))
+    screen = app.current
+    type_text(app, "Focused")
+    screen.row = screen.rows().index("focus")
+    assert screen.focus is None
+    press(app, pygame.K_RIGHT)
+    assert screen.focus == "oval"
+    press(app, pygame.K_RIGHT, pygame.K_RIGHT)
+    assert screen.focus == "esses"
+    press(app, pygame.K_LEFT, pygame.K_LEFT, pygame.K_LEFT)               # wraps back round to the last
+    assert screen.focus == "grandprix"
+    press(app, pygame.K_RIGHT)
+    assert screen.focus is None
+    press(app, pygame.K_RIGHT)
+    screen.row = screen.rows().index("start")
+    press(app, pygame.K_RETURN)
+    assert stable.load(app.started[-1])["versions"][0]["focus"] == "oval"

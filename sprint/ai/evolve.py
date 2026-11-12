@@ -662,7 +662,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           name: str | None = None, workers: int = 0, on_generation=None, log=print,
           root=None, start_file: str | None = None, race_weights: dict | None = None,
           race_seconds: dict | None = None, partners: list | None = None, car=None,
-          driving_school: bool = False) -> Path:
+          driving_school: bool = False, exam_tracks: list | None = None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -722,7 +722,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
                   "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
                   "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
-                  "partners": partners, "car": car,
+                  "partners": partners, "car": car, "exam_tracks": exam_tracks,
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
@@ -792,7 +792,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 "bonus": round(bonus, 3),
                 "solo_setup": solo_setup(gen),
                 "car": car_for(config, gen),
-                "exam": exam(pop[0], arch, tracks,
+                "exam": exam(pop[0], arch, config.get("exam_tracks") or tracks,
                              car=config.get("car") if isinstance(config.get("car"), dict) else None),
             }
             if racing:

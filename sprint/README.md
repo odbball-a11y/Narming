@@ -129,6 +129,16 @@ the house rivals, Dangerous Dave and Careful Keith.
     becomes a possible partner for the next, and an upskill can train
     against the racer itself. House rivals are never training partners:
     they are what your racers are built to beat.
+- **Training focus**: when you create or upskill a racer, **Training on** is
+  either **all tracks** or one particular track, for the same number of
+  generations. A single track makes a **specialist**: it gets as many races
+  per generation on that track as an all-rounder gets across all five, so it
+  trains harder there. Its card says "Oval specialist" once more than half
+  its training generations were on one track, otherwise "all-rounder", and
+  the test after every generation still covers all five tracks, so you see
+  what a specialist gives up elsewhere. Upskilling can change the focus, and
+  breeding from specialists passes their strengths on: the certificate
+  predicts the family's quickest and slowest tracks.
 - **The racer's card** shows its personality, what it trained against, its
   measured racecraft (best lap alone, and a test race from last against three
   scripted cars: place, passes, collisions caused, damage, time in a tow),
@@ -136,9 +146,9 @@ the house rivals, Dangerous Dave and Careful Keith.
   race laps).
 - **Championships**: from the stable (or a racer's card), **Enter a
   championship** with one or two of your racers. The field is made up to four
-  cars with the house rivals and scripted cars, and the season is five races,
-  one on each track (Oval, Speedway, Esses, Technical, Grand Prix). Every race
-  counts. Before each race you choose to **watch** it or **simulate** it
+  cars with the house rivals and scripted cars, and the season is five races
+  of 5 laps each, one on each track (Oval, Speedway, Esses, Technical, Grand
+  Prix). Every race counts. Before each race you choose to **watch** it or **simulate** it
   (no visuals, a couple of seconds), and the **championship table** is shown
   after every race, with each racer's points, wins, places gained or lost and
   the gap to the leader. Quitting between races saves the season; **Continue

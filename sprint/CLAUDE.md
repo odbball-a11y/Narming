@@ -252,6 +252,17 @@ a careful racer that still overtakes.
   game-assigned colours then inheritance; my defaults: 10-7-5-3 + fastest
   lap, damage resets, one or two of your racers.
 
+- Training focus (user request: "choose all tracks or a particular track for
+  the same amount of generations; a single track should make you a
+  specialist"): each racer version has `focus` (a track key or None).
+  `stable.train` trains on `[focus]` or all five tracks with
+  `races_per_track = graduate races x 5 / tracks trained` (equal effort), and
+  always `exam_tracks` = all five, so a specialist is measured everywhere
+  (`evolve.train(exam_tracks=)`). `specialty` / `specialty_text`: a specialist
+  at a track when more than half of the racer's generations were on it.
+  Create and Upskill screens have a TRAINING ON row; the card shows it.
+  Every championship race is `championship.RACE_LAPS` = 5 laps (user request).
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

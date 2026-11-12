@@ -8,6 +8,7 @@ after quitting.  Rules:
   points      10, 7, 5, 3 for 1st to 4th (more places for bigger fields),
               nothing for not finishing, +1 for the fastest lap among the
               finishers; ties go to most wins, then best finishing places
+  laps        5 on every track
   grid        race 1 is drawn (seeded); after that the field starts in
               reverse championship order, so the leader starts last
   damage      resets between races
@@ -36,6 +37,7 @@ POINTS = [10, 7, 5, 3, 2, 1, 0, 0]
 FASTEST_LAP_POINT = 1
 MAX_OWN = 2
 FIELD = 4
+RACE_LAPS = 5          # every championship race, on every track
 TRACK_ORDER = ["oval", "speedway", "esses", "technical", "grandprix"]
 
 
@@ -174,7 +176,7 @@ def build_race(root, ch: dict) -> Race:
         raise ValueError("the championship is over")
     entries = [(slot, _driver(root, ch["entrants"][e], slot)) for slot, e in enumerate(nxt["grid"])]
     track = Track.load(nxt["track"])
-    return Race(track, entries, laps=track.default_laps, seed=ch["seed"] + nxt["number"], rolling=True)
+    return Race(track, entries, laps=RACE_LAPS, seed=ch["seed"] + nxt["number"], rolling=True)
 
 
 def finish_race(root, ch: dict, race: Race) -> dict:
