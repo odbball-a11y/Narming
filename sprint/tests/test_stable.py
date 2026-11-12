@@ -384,7 +384,10 @@ def test_career_ends_at_stud_after_the_race_limit(dirs, monkeypatch):
     assert stable.load(racer)["career"]["races"] == 3
     with pytest.raises(ValueError):
         stable.upskill(racer, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
-    assert "racer:short-career" not in stable.register(root)          # not offered for races
+    assert "racer:short-career" in stable.register(root)              # retired racers still turn out for practice
+    assert dict(driver_types())["racer:short-career"].endswith("(retired)")
+    from ai import championship
+    assert racer not in championship.eligible(root)                   # but never for the championship
 
 
 def test_studs_die_after_their_litters_or_of_old_age(dirs, monkeypatch):

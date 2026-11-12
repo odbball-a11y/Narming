@@ -634,7 +634,8 @@ def publish(racer_dir) -> Path:
 
 def register(root: Path | None = None) -> list[str]:
     """Put the house rivals, and the trained racers of `root`, in the
-    driver registry so race setup can use them."""
+    driver registry so race setup can use them.  Retired racers and legends
+    are included, for practice races (never for championships)."""
     unregister_drivers("house:")
     unregister_drivers("racer:")
     keys = []
@@ -642,11 +643,14 @@ def register(root: Path | None = None) -> list[str]:
         key = f"house:{rival['id']}"
         register_driver(key, rival["name"], lambda slot=0, r=rival["id"]: house_driver(r))
         keys.append(key)
-    for d in list_racers(root) if root else []:
-        if can_race(d):
-            key = f"racer:{d.name}"
-            register_driver(key, load(d)["name"], lambda slot=0, p=d: champion(p))
-            keys.append(key)
+    for d in list_racers(root, include_dead=True) if root else []:
+        if brain_file(d) is None or is_breeding(d):
+            continue                       # untrained or still being bred: nothing to race yet
+        state = status(d)                  # retired and dead racers still turn out for practice races
+        tag = "" if state == "racing" else (" (retired)" if state == "stud" else " (legend)")
+        key = f"racer:{d.name}"
+        register_driver(key, load(d)["name"] + tag, lambda slot=0, p=d: champion(p))
+        keys.append(key)
     return keys
 
 

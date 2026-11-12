@@ -308,6 +308,7 @@ podium): `record_result(..., finished=)`.
   `HallScreen` (always in the stable menu) has track records, past
   champions (`championship.past_champions`) and the legends (dead racers).
 
+- Practice races can use retired racers and legends too (`register` tags them "(retired)" / "(legend)"); championships never do.
 - Plain races count for nothing: only championship races (`RaceScreen`
   with `on_over`) touch careers, the stable clock, ratings, titles or track
   records; a race from the main menu or the workshop is practice.
