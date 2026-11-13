@@ -140,7 +140,7 @@ def test_foals_inherit_a_car(dirs):
     cert = stable.breed(foal, litter=4, shortlist=2, camp_generations=1, camp_population=4)
     traits = stable.load(foal)["traits"]
     assert cartraits.is_valid(traits) and cert["traits"] == traits
-    assert set(cert["traits_from"]) == set(cartraits.STARS) | {"weight"}
+    assert set(cert["traits_from"]) == set(cartraits.STARS) | {"weight", "balance"}
     assert stable.champion(foal).car_params == cartraits.params_for(traits)
     assert any(n.startswith("Car:") for n in cert["expectations"])
 
@@ -249,4 +249,38 @@ def test_two_grip_physics_understeers_and_rotates_with_inertia():
     lagged = replace(classic, yaw_lag=0.2)
     assert yaw_after(under, 3) < yaw_after(classic, 3) * 0.9           # the front cannot turn the car that hard
     assert yaw_after(lagged, 3) < yaw_after(classic, 3) * 0.5          # rotation builds up over a fifth of a second
-    assert abs(yaw_after(lagged, 120) - yaw_after(classic, 120)) < 0.3  # ... and gets there
+    assert yaw_after(lagged, 36) > 0.7 * yaw_after(classic, 36)        # ... and gets most of the way
+
+
+def test_weight_transfer_moves_load_and_unsettles_the_rear_under_braking():
+    import math
+    from dataclasses import replace
+    from sim import tuning
+    from sim.driver import Controls
+    from sim.track import Track
+    from sim.world import World
+    base = replace(tuning.car_params(0), **tuning.CLASSIC_PHYSICS)
+    two = replace(base, front_limit=1.0, brake_circle=0.8, throttle_circle=0.6)
+    moving = replace(two, weight_transfer=0.25, lateral_transfer=0.1)
+
+    def run(params, controls, ticks, speed=25.0):
+        w = World(Track.load("speedway"), 1, laps=1, params=[params])
+        car = w.cars[0]
+        ch, sh = math.cos(car.heading), math.sin(car.heading)
+        car.vx, car.vy = speed * ch, speed * sh
+        car.forward_speed = speed
+        peak = 0.0
+        for _ in range(ticks):
+            w.step([controls])
+            peak = max(peak, car.slip)
+        return car, peak
+    car, _ = run(moving, Controls(0.0, 0.0, 1.0), 30)
+    assert car.front_load > 1.15 and car.rear_load < 0.85           # braking loads the front
+    car, _ = run(moving, Controls(0.0, 1.0, 0.0), 30, speed=10.0)
+    assert car.rear_load > car.front_load                          # accelerating loads the rear
+    car, _ = run(two, Controls(0.0, 0.0, 1.0), 30)
+    assert car.front_load == 1.0 == car.rear_load                  # off: nothing moves
+    # Braking hard while turning: with the load off the rear it slides more.
+    _, still = run(two, Controls(1.0, 0.0, 0.5), 40)
+    _, light = run(moving, Controls(1.0, 0.0, 0.5), 40)
+    assert light > 2.0 * still

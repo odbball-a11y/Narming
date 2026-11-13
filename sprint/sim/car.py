@@ -27,6 +27,7 @@ class Car:
         "finished", "finish_time",
         "damage", "draft", "draft_source", "retired",
         "yaw_rate", "front_use", "rear_slip",
+        "accel_long", "accel_lat", "front_load", "rear_load",
     )
 
     def __init__(self, params: CarParams):
@@ -62,6 +63,10 @@ class Car:
         self.yaw_rate = 0.0        # rad/s, with yaw inertia on; otherwise what steering commands
         self.front_use = 0.0       # steering demand / front grip: above 1 the car understeers
         self.rear_slip = 0.0       # 0..1, how far the rear end is sliding
+        self.accel_long = 0.0      # smoothed forward acceleration (what the suspension feels)
+        self.accel_lat = 0.0       # smoothed sideways (cornering) acceleration
+        self.front_load = 1.0      # share of the static load on each end (1 = at rest)
+        self.rear_load = 1.0
 
     def add_damage(self, amount: float) -> None:
         if amount > 0.0:
@@ -80,7 +85,12 @@ class Car:
                 self.next_checkpoint, self.crossed_start, self.laps,
                 self.lap_start_time, tuple(self.lap_times),
                 self.checkpoints_passed, self.finished, self.finish_time,
-                self.damage, self.retired, self.yaw_rate)
+                self.damage, self.retired, self.yaw_rate, self.accel_long, self.accel_lat)
+
+    def _load_grip(self, load: float) -> float:
+        """Grip of one end of the car for its share of the load (1 = static).
+        Tyres are load sensitive: twice the load gives less than twice the grip."""
+        return max(0.0, load) ** self.params.load_sensitivity
 
     def step(self, steering: float, throttle: float, brake: float, on_grass: bool) -> None:
         """Advance one tick.  Inputs must already be clamped."""
@@ -101,7 +111,7 @@ class Car:
         two_grip = p.front_limit > 0.0
         if two_grip:
             # Front tyres: steering can only turn the car as far as they can hold.
-            front = p.grip * p.front_limit * (1.0 + 0.15 * p.balance)
+            front = p.grip * p.front_limit * (1.0 + 0.15 * p.balance) * self._load_grip(self.front_load)
             front *= math.sqrt(max(0.0, 1.0 - (p.brake_circle * brake) ** 2))
             if on_grass:
                 front *= tuning.GRASS_GRIP
@@ -152,7 +162,10 @@ class Car:
             # Rear tyres: power eats their grip; braking unloads them.
             used = (p.throttle_circle * throttle) ** 2
             grip = p.grip * (1.0 - 0.15 * p.balance) * math.sqrt(max(0.0, 1.0 - used))
-            grip *= 1.0 - p.brake_transfer * brake
+            if p.weight_transfer > 0.0:
+                grip *= self._load_grip(self.rear_load)      # braking unloads the rear through the load itself
+            else:
+                grip *= 1.0 - p.brake_transfer * brake
         elif p.brake_circle or p.throttle_circle:
             used = (p.brake_circle * brake) ** 2 + (p.throttle_circle * throttle) ** 2
             grip = p.grip * math.sqrt(max(0.0, 1.0 - used))
@@ -184,6 +197,18 @@ class Car:
         self.x += vx * dt
         self.y += vy * dt
 
+        if p.weight_transfer > 0.0 or p.lateral_transfer > 0.0:
+            # Load transfer: the suspension follows the car's accelerations with a lag.
+            a_long = max(-80.0, min(80.0, (vf - self.forward_speed) / dt))
+            a_lat = vf * omega
+            k = min(1.0, dt / p.suspension_lag) if p.suspension_lag > 0.0 else 1.0
+            self.accel_long += (a_long - self.accel_long) * k
+            self.accel_lat += (a_lat - self.accel_lat) * k
+            shift = p.weight_transfer * self.accel_long / p.grip           # + = load to the rear
+            shift = max(-0.6, min(0.6, shift))
+            side = 1.0 - p.lateral_transfer * min(1.0, (self.accel_lat / p.grip) ** 2)
+            self.front_load = (1.0 - shift) * side
+            self.rear_load = (1.0 + shift) * side
         self.forward_speed = vf
         self.slip = abs(vl)
         self.rear_slip = min(1.0, abs(vl) / 6.0)

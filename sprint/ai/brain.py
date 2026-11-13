@@ -56,8 +56,10 @@ _INPUTS_V4 = _INPUTS_V3 + ["line offset now", "line offset 12 ahead", "line offs
 # how fast it is turning, how far the front is past its limit (understeer),
 # how far the rear is sliding (oversteer), and the car's setup balance.
 _INPUTS_V5 = _INPUTS_V4 + ["yaw rate", "front grip use", "rear slip", "car balance"]
-INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4, 5: _INPUTS_V5}
-INPUT_VERSION = 5
+# Version 6: weight transfer, the load on each end of the car (1 = at rest).
+_INPUTS_V6 = _INPUTS_V5 + ["front load", "rear load"]
+INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4, 5: _INPUTS_V5, 6: _INPUTS_V6}
+INPUT_VERSION = 6
 
 # Distances ahead (units) scanned for the corner that limits speed, and the
 # braking the car is assumed to use to reach it (a fraction of full braking).
@@ -208,6 +210,10 @@ def observe(world, i: int) -> list[float]:
     obs.append(min(2.0, car.front_use))
     obs.append(car.rear_slip)
     obs.append(p.balance)
+
+    # ---- input version 6: weight transfer ----
+    obs.append(car.front_load - 1.0)
+    obs.append(car.rear_load - 1.0)
     return obs
 
 

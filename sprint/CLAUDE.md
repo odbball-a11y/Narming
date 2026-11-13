@@ -353,6 +353,24 @@ podium): `record_result(..., finished=)`.
   slower (barely quicker than scripted); the friction circle alone changes little
   without retraining. Scripted laps never change.
 
+- Two-grip physics (`CarParams.front_limit`, `yaw_lag`, `balance`,
+  `brake_transfer`; 0 = off): the front has its own grip limit (steering demand
+  above it is cut: understeer; braking eats it through the friction circle), the
+  rear is `grip` (throttle eats it: power oversteer; braking unloads it), and the
+  yaw rate follows steering with a lag that grows while the rear slides.
+  `car.yaw_rate`, `front_use`, `rear_slip`; inputs version 5 (yaw rate, front
+  grip use, rear slip, balance). Balance is a bred trait (`cartraits.balance_of`,
+  -2 very stable .. +2 very loose; no star cost; `inherit` takes it from a parent
+  with a 25% chance of a step), shown in `describe` and on the certificate.
+  Training test (30 gens from the graduate, inputs v4, solo share 0.5): current
+  physics was at pace 0.92 by gen 3; with front_limit 1.0 + yaw_lag 0.08 it took
+  ~30 gens to reach 0.92 (started 1.045), and races were cautious for a while.
+- Weight transfer (`weight_transfer`, `lateral_transfer`, `load_sensitivity`,
+  `suspension_lag`; needs the two-grip model; 0 = off): smoothed forward and
+  sideways acceleration move load (`car.front_load`, `rear_load`) between the
+  ends, grip goes as load^0.9, cornering at the limit costs `lateral_transfer`;
+  replaces `brake_transfer`. Inputs version 6 (front load, rear load).
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

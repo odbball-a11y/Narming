@@ -112,6 +112,26 @@ class CarParams:
     # Share of the rear grip lost under full braking (weight moves forward).
     brake_transfer: float = 0.25
 
+    # --- weight transfer (needs the two-grip model; 0 = off) ---
+
+    # Share of the axle load moved from one end to the other per "g" of
+    # forward acceleration (g here = the car's own cornering grip, `grip`).
+    # Braking loads the front (sharper turn-in, light rear: lift-off and
+    # trail-braking oversteer); accelerating loads the rear (power
+    # understeer, better traction).  About centre-of-gravity height / wheelbase.
+    weight_transfer: float = 0.0
+
+    # Grip lost to sideways load transfer at the cornering limit (the outside
+    # tyres take the load but give less grip per unit of load).
+    lateral_transfer: float = 0.0
+
+    # Tyres give a little less grip per unit of load as load rises.
+    load_sensitivity: float = 0.9
+
+    # Seconds the suspension takes to move the load (the transfer lags the
+    # acceleration that causes it).
+    suspension_lag: float = 0.08
+
     # Maximum turn rate (rad/s) at low speed with full steering lock.
     # Higher: darts into hairpins, twitchy.  Lower: wide turning circle.
     steer_rate_low: float = 3.0
@@ -342,9 +362,10 @@ COOLDOWN = 1.5
 
 
 CLASSIC_PHYSICS = {"scrub": 0.0, "brake_circle": 0.0, "throttle_circle": 0.0,   # the physics before tyre scrub
-                   "front_limit": 0.0, "yaw_lag": 0.0}
+                   "front_limit": 0.0, "yaw_lag": 0.0, "weight_transfer": 0.0, "lateral_transfer": 0.0}
 # Options left out of the physics fingerprint while at these values, so recordings still match.
-_NEWER_PHYSICS = dict(CLASSIC_PHYSICS, balance=0.0, brake_transfer=0.25)
+_NEWER_PHYSICS = dict(CLASSIC_PHYSICS, balance=0.0, brake_transfer=0.25, load_sensitivity=0.9,
+                      suspension_lag=0.08)
 
 
 def _fingerprint_params():
