@@ -931,18 +931,83 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
 
 # --------------------------------------------------------------------- CLI
 
+def track_knowledge(racer_dir) -> dict:
+    """Generations of training each track has had (all-track courses count
+    for every track): how much the racer's notes for it have been worked on."""
+    _, spent = specialty(racer_dir)
+    shared = spent.get("all", 0)
+    return {t: shared + spent.get(t, 0) for t in TRACK_NAMES}
+
+
+def notes_of(racer_dir) -> dict:
+    """{track: (corners, 3) notes or None} from the racer's current brain."""
+    from sim.track import Track
+    from .brain import notes_for
+    f = brain_file(racer_dir)
+    if f is None:
+        return {t: None for t in TRACK_NAMES}
+    vector = brain(racer_dir)
+    arch = arch_for_vector(vector, graduate()["arch"])
+    return {t: notes_for(vector, arch, Track.load(t)) for t in TRACK_NAMES}
+
+
+def house_notes(rival_id: str, generations: int, tracks: list | None = None, workers: int = 0,
+                population: int = 40, on_generation=None) -> dict:
+    """Teach a house rival the tracks without changing how it drives: a camp
+    in which only its track notes evolve (its network is frozen), on all the
+    graduate's tracks or `tracks`.  The camp is a run in training/ that carries
+    on each time this is called, so the rival's notes keep evolving.  The
+    best driver's notes are written back to the rival.  Returns its card."""
+    card_path = RIVALS_DIR / f"{rival_id}.json"
+    card = _read(card_path)
+    grad = graduate()
+    arch = with_notes(card.get("arch") or grad["arch"])
+    run = f"house-{rival_id}-notes"
+    evolve.train(run=run, generations=generations, population=population, seed=len(rival_id),
+                 tracks=list(tracks or grad["tracks"]), exam_tracks=list(grad["tracks"]), arch=arch,
+                 races_per_track=grad["races_per_track"], race_bonuses=False,
+                 start_file=str(RIVALS_DIR / f"{rival_id}.npz"), race_seconds=dict(grad["race_seconds"]),
+                 race_weights=sliders_to_weights(card.get("aggression", 0.5), card.get("caution", 0.5)),
+                 partners=[{"name": "Scripted car", "kind": "scripted"}, {"name": "Itself", "kind": "self"}],
+                 name=card.get("name"), workers=workers, car=card.get("traits"), solo_share=SOLO_SHARE,
+                 notes_only=True, on_generation=on_generation, log=lambda m: None)
+    run_dir = evolve.RUNS_DIR / run
+    best = evolve.load_generation(run_dir, evolve.list_generations(run_dir)[-1])["pop"][:1]
+    np.savez_compressed(RIVALS_DIR / f"{rival_id}.npz", pop=best.astype(np.float32))
+    card["arch"] = arch
+    card["notes_generations"] = card.get("notes_generations", 0) + generations
+    _write(card_path, card)
+    return card
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m ai.stable")
     sub = ap.add_subparsers(dest="command", required=True)
     t = sub.add_parser("train", help="train a racer's latest version")
     t.add_argument("racer_dir")
     t.add_argument("--workers", type=int, default=max(1, min(3, (os.cpu_count() or 2) - 1)))
+    h = sub.add_parser("house-notes", help="teach a house rival the tracks (only its track notes evolve)")
+    h.add_argument("rival", help='name or id, e.g. "Careful Keith"')
+    h.add_argument("--generations", type=int, default=20)
+    h.add_argument("--tracks", nargs="*", default=None)
+    h.add_argument("--workers", type=int, default=max(1, min(4, os.cpu_count() or 2)))
     b = sub.add_parser("breed", help="make a foal's litter and pick the best foal")
     b.add_argument("racer_dir")
     b.add_argument("--workers", type=int, default=max(1, min(3, (os.cpu_count() or 2) - 1)))
     args = ap.parse_args(argv)
     from . import migrate
     migrate.ensure()
+    if args.command == "house-notes":
+        rival = next((r for r in house_rivals() if args.rival.lower() in (r["id"], r["name"].lower())), None)
+        if rival is None:
+            print(f"no house rival called {args.rival!r}")
+            return 1
+
+        def show(entry):
+            print(f"gen {entry['gen']} best {entry['best']:.2f}", flush=True)
+        card = house_notes(rival["id"], args.generations, args.tracks, args.workers, on_generation=show)
+        print(f"{card['name']} now has {card['notes_generations']} generations of track notes", flush=True)
+        return 0
     if args.command == "breed":
         cert = breed(args.racer_dir, workers=args.workers)
         w = cert["winner"]

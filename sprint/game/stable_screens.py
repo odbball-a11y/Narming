@@ -17,7 +17,7 @@ from sim import cartraits, tuning as sim_tuning
 from sim.race import Race
 from sim.track import Track
 
-from .render import (C_CYAN, C_HUD_ACCENT, C_HUD_DIM, C_HUD_TEXT, C_PINK, WORLD_W, format_time,
+from .render import (C_CYAN, C_HUD_ACCENT, C_HUD_DIM, C_HUD_TEXT, C_PINK, WORLD_W, Camera, format_time,
                      make_car_sprite)
 from .screens import ACCEPT, DOWN, LEFT, RIGHT, UP, RaceScreen, Screen
 
@@ -830,11 +830,72 @@ class TrainingScreen(Screen):
     def __init__(self, app, racer_dir):
         super().__init__(app)
         self.racer_dir = racer_dir
+        self.knowledge = stable.track_knowledge(racer_dir)
+        self.notes = stable.notes_of(racer_dir)
+        self.tracks = list(championship.TRACK_ORDER)
+        # show the track it knows best first
+        self.track_i = max(range(len(self.tracks)), key=lambda i: self.knowledge.get(self.tracks[i], 0))
+        self.maps = {}
 
     def handle_event(self, event) -> None:
         from .screens import BACK
-        if event.type == pygame.KEYDOWN and event.key in BACK + ACCEPT:
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in LEFT + RIGHT:
+            self.track_i = (self.track_i + (1 if event.key in RIGHT else -1)) % len(self.tracks)
+        elif event.key in BACK + ACCEPT:
             self.app.show(RacerScreen(self.app, self.racer_dir))
+
+    def draw_knowledge(self, screen) -> None:
+        """Right column: how much each track has been trained, and the chosen
+        track's map with every corner coloured by the racer's notes."""
+        ui = self.app.ui
+        ui.panel(screen, 104, 11, 53, 76)
+        ui.text(screen, "small", "TRACK KNOWLEDGE", C_HUD_ACCENT, 107, 12.5)
+        y = 16.5
+        for i, t in enumerate(self.tracks):
+            gens = self.knowledge.get(t, 0)
+            colour = C_HUD_ACCENT if i == self.track_i else C_HUD_TEXT
+            ui.text(screen, "small", stable.TRACK_NAMES[t], colour, 107, y)
+            bar(ui, screen, 124, y + 0.3, 22, min(1.0, gens / 40.0), C_CYAN)
+            ui.text(screen, "small", str(gens), C_HUD_DIM, 148, y)
+            y += 3.4
+        key = self.tracks[self.track_i]
+        track = Track.load(key)
+        size = (int(48 * ui.unit), int(27 * ui.unit))
+        if key not in self.maps:
+            self.maps[key] = self.app.track_thumbnail(track, size)
+        x0, y0 = ui.px(106.5, 37.5)
+        screen.blit(self.maps[key], (int(x0), int(y0)))
+        ui.text(screen, "small", f"<  {stable.TRACK_NAMES[key].upper()}  >", C_HUD_ACCENT, 130.5, 37.2, "midbottom")
+        notes = self.notes.get(key)
+        corners = track.corners()
+        cam = Camera(size)
+        for c, apex in enumerate(corners["apex"]):
+            px, py = cam.to_screen(*track.center[apex])
+            speed = notes[c, 0] if notes is not None else 0.0
+            if speed > 0.05:
+                colour = (60, 220, 110)                       # takes it faster than it looks
+            elif speed < -0.05:
+                colour = (240, 70, 80)                        # treats it with respect
+            else:
+                colour = (200, 200, 210)
+            radius = max(2, int(ui.unit * (0.9 + 1.2 * min(1.0, abs(speed)))))
+            pygame.draw.circle(screen, colour, (int(x0 + px), int(y0 + py)), radius)
+            pygame.draw.circle(screen, (0, 0, 0), (int(x0 + px), int(y0 + py)), radius, 1)
+        y = 66.0
+        if notes is None:
+            ui.text(screen, "small", "No notes for this track yet.", C_HUD_DIM, 107, y)
+        else:
+            faster = sum(1 for c in range(len(notes)) if notes[c, 0] > 0.05)
+            slower = sum(1 for c in range(len(notes)) if notes[c, 0] < -0.05)
+            ui.text(screen, "small", f"{len(notes)} corners: {faster} faster, {slower} slower than they look",
+                    C_HUD_TEXT, 107, y)
+            early = sum(1 for c in range(len(notes)) if notes[c, 2] > 0.05)
+            ui.text(screen, "small", f"power on early out of {early}", C_HUD_DIM, 107, y + 3.2)
+        ui.text(screen, "small", "green: carries more speed", (60, 220, 110), 107, y + 8)
+        ui.text(screen, "small", "red: slower than it looks", (240, 70, 80), 107, y + 11)
+        ui.text(screen, "small", "Left/Right: track", C_HUD_DIM, 107, y + 15)
 
     def draw(self, screen) -> None:
         ui = self.app.ui
@@ -846,33 +907,34 @@ class TrainingScreen(Screen):
         if left is not None:
             ui.text(screen, "small", "lifetime training", C_HUD_DIM, 6, 13)
             bar(ui, screen, 32, 13.2, 40, min(1.0, used / stable.TRAINING_BUDGET), C_CYAN)
-            ui.text(screen, "small", f"{used} of {stable.TRAINING_BUDGET} generations"
-                    + ("  (fully trained)" if left == 0 else f"  ({left} left)"), C_HUD_DIM, 76, 13)
+            ui.text(screen, "small", f"{used} of {stable.TRAINING_BUDGET}"
+                    + ("  (fully trained)" if left == 0 else f"  ({left} left)"), C_HUD_DIM, 75, 13)
         history = stable.history(self.racer_dir)
         y = 19.0
         for k, v in enumerate(racer["versions"], start=1):
             done = [h for h in history if h["version"] == k]
-            ui.panel(screen, 3, y, 154, 14)
+            ui.panel(screen, 3, y, 98, 14)
             title = "FIRST COURSE" if k == 1 else f"UPSKILL {k - 1}"
             if "certificate" in racer and k == 1:
                 title = "BORN IN THE BREEDING CAMP"
             ui.text(screen, "mid", title, C_HUD_ACCENT, 6, y + 1)
-            ui.text(screen, "small", f"{len(done)} of {v['generations']} generations", C_HUD_TEXT, 50, y + 1.8)
+            ui.text(screen, "small", f"{len(done)} of {v['generations']} gens", C_HUD_TEXT, 50, y + 1.8)
             focus = v.get("focus")
-            ui.text(screen, "small", ("trained on " + stable.TRACK_NAMES[focus]) if focus else "trained on all tracks",
-                    C_CYAN, 92, y + 1.8)
+            ui.text(screen, "small", stable.TRACK_NAMES[focus] if focus else "all tracks",
+                    C_CYAN, 75, y + 1.8)
             ui.text(screen, "small", f"aggression {v['aggression']:.1f}   caution {v['caution']:.1f}", C_HUD_DIM,
                     6, y + 5.6)
-            ui.text(screen, "small", ("against " + ", ".join(p["name"] for p in v["partners"]))[:80], C_HUD_DIM,
+            ui.text(screen, "small", ("against " + ", ".join(p["name"] for p in v["partners"]))[:60], C_HUD_DIM,
                     6, y + 9)
             if done:
                 e = stable.exam_average(done[-1]["exam"])
                 pace = stable.pace_text(stable.pace(done[-1]["exam"]))
-                ui.text(screen, "small", f"at the end: pace {pace}   place {e['race_place']:.1f}   passes "
-                        f"{e['race_overtakes']:.1f}   damage {e['race_damage'] * 100:.0f}%", C_HUD_TEXT, 60, y + 5.6)
+                ui.text(screen, "small", f"end: pace {pace}  place {e['race_place']:.1f}  "
+                        f"damage {e['race_damage'] * 100:.0f}%", C_HUD_TEXT, 45, y + 5.6)
             y += 15.5
             if y > 78:
                 break
+        self.draw_knowledge(screen)
         ui.text(screen, "mid", "BACK", C_HUD_ACCENT, 8, 84, shadow=True)
 
 
