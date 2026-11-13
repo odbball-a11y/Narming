@@ -327,6 +327,21 @@ podium): `record_result(..., finished=)`.
   generations cut to four drivers; the stable it replaces is kept aside). The 8 h
   run is in `saves/dynasty-final.zip`; findings in `dynasty_report/ANALYSIS.md`.
 
+- Corner inputs (input version 4, `brain._INPUTS_V4`): `Track.ideal()` solves a
+  minimum-curvature line once per track (bounded least squares on a coarse grid);
+  drivers see the ideal line's lateral offset now / 12 / 30 units ahead, a speed
+  margin (speed against what the next corners allow, including planned braking),
+  the safe speed and distance of the limiting corner, and grip use. `lines.py`
+  measures lap time and slide share. `stable.SOLO_SHARE` = 0.5 (the Lab default
+  `evolve.SOLO_SHARE` stays 0.2).
+  Experiment (30 generations from the graduate, one seed, standard car): slide
+  share of a lap (sideways speed above 3 u/s) was 25.7% before, 30.6% with the new
+  inputs at solo share 0.5 and 27.1% at 0.2; laps were a little quicker at 0.2
+  (Speedway 12.46 -> 12.20 v 12.58). The scripted driver never slides and is
+  ~17% slower, so in this physics sliding is not penalised: the grip model removes
+  sideways speed for free, and evolution uses that. Fixing it needs a slide cost
+  in the physics (tyre scrub) or in the score.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 
@@ -447,7 +462,7 @@ AI training. The renderer draws smoke, tow streaks and the HUD damage bar.
 neuroevolution in two phases (the user chose generations over PPO, and asked
 for "learn to drive first, then learn to race").
 
-- `brain.py`: `observe(world, i)` gives 39 inputs (`INPUT_NAMES`): speeds,
+- `brain.py`: `observe(world, i)` gives 46 inputs (`INPUT_NAMES`; version 4 adds the ideal line and corner speed, below): speeds,
   offset, heading error, six curvatures ahead, half-width, straight length
   ahead, damage, tow received, tow given, two cars ahead / one behind (gap,
   side, closing speed), nearest car alongside left / right; then (input
