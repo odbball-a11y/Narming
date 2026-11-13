@@ -103,3 +103,14 @@
 - ` 3.67h` season 18: **Fury Thunderbolt** (racer) wins the title. Fury Thunderbolt 30 | Careful Keith 28 | Vortex Brick 25 | Comet Velvet 21
 - ` 3.67h` breeding **Storm Slipstream**: Mischief Brick x Zigzag Slipstream (fastest)
 - ` 3.71h`   born Storm Slipstream: gen 2, speed 5  accel 1  handling 3  brakes 3  medium, aggression 0.49, caution 0.35 (2.7 min)
+- ` 3.79h` schooled Storm Slipstream (8 generations, 4.6 min)
+- ` 3.94h` between races **Storm Slipstream** takes a Esses specialist course (20 generations, 9.2 min) with Scripted car, Itself (its own best so far), Mischief Brick; now Esses specialist
+- ` 3.94h` season 19: **Vortex Brick** (racer) wins the title. Vortex Brick 34 | Storm Slipstream 33 | Careful Keith 32 | Fury Thunderbolt 31
+- ` 3.94h` breeding **Xena Brick**: Mischief Brick x Storm Thunderbolt (learner)
+- ` 3.99h`   born Xena Brick: gen 2, speed 3  accel 3  handling 2  brakes 4  light, aggression 0.68, caution 0.33 (2.7 min)
+- ` 4.07h` schooled Xena Brick (8 generations, 4.6 min)
+- ` 4.15h` between races **Xena Brick** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Barnaby Brick; now all-rounder
+- ` 4.16h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 4.16h` season 20: **Careful Keith** (house) wins the title. Careful Keith 36 | Storm Slipstream 35 | Fury Thunderbolt 29 | Xena Brick 27
+- ` 4.16h` breeding **Comet Brick**: Zephyr Brick x Kestrel Velvet (fastest)
+- ` 4.20h`   born Comet Brick: gen 2, speed 2  accel 2  handling 4  brakes 4  heavy, aggression 0.46, caution 0.45 (2.6 min)
