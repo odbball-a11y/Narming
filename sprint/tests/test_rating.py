@@ -87,8 +87,8 @@ def test_every_championship_race_rates_everyone_scripted_cars_included(dirs):
     assert all(r["races"] == 1 for r in table.values())
     winner = next(r for r in record["results"] if r["place"] == 1)
     assert winner["rating"][1] > winner["rating"][0]
-    # Rated by racing alone: the four ratings stay centred on the standard.
-    assert sum(r["rating"] for r in table.values()) / 4 == pytest.approx(1000, abs=1)
+    # Rated by racing alone: the six ratings stay centred on the standard.
+    assert sum(r["rating"] for r in table.values()) / len(table) == pytest.approx(1000, abs=1)
 
 
 def test_scripted_cars_are_the_same_car_every_race(dirs):
