@@ -31,6 +31,7 @@ import sim.scripted  # noqa: F401  (registers "scripted")
 from sim.race import Race
 from sim.track import Track
 
+from . import jsonio
 from . import livery as liveries
 from . import rating
 from . import records
@@ -56,20 +57,18 @@ def seasons_dir(root) -> Path:
 
 def _write(p: Path, data) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    jsonio.write_json(p, data)
 
 
 def active(root) -> dict | None:
     """The season under way, or None."""
     p = path(root)
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    return jsonio.read_json(p) if p.exists() else None
 
 
 def past_seasons(root) -> list[dict]:
     d = seasons_dir(root)
-    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(d.glob("season_*.json"))] if d.exists() else []
+    return [jsonio.read_json(p) for p in sorted(d.glob("season_*.json"))] if d.exists() else []
 
 
 def abandon(root) -> None:
@@ -265,7 +264,7 @@ def past_champions(root) -> list[dict]:
     out = []
     for f in sorted(seasons_dir(root).glob("season_*.json"), reverse=True):
         try:
-            ch = json.loads(f.read_text(encoding="utf-8"))
+            ch = jsonio.read_json(f)
             e = ch["entrants"][ch["champion"]]
             top = standings(ch)[0]
         except (OSError, ValueError, KeyError, IndexError):

@@ -35,6 +35,7 @@ import numpy as np
 from sim import cartraits
 from sim.driver import register_driver, unregister_drivers
 
+from . import jsonio
 from . import evolve
 from . import livery as liveries
 from . import rating
@@ -83,14 +84,11 @@ def sliders_to_weights(aggression: float, caution: float) -> dict:
 # ------------------------------------------------------------------ files
 
 def _read(path: Path) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return jsonio.read_json(path)
 
 
 def _write(path: Path, data) -> None:
-    path = Path(path)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    tmp.replace(path)
+    jsonio.write_json(path, data)
 
 
 # A scripted car's flying lap on each track, to compare AI pace across tracks.

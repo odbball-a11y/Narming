@@ -34,6 +34,7 @@ from sim.driver import Controls, create_driver
 from sim.track import Track
 from sim.world import World
 
+from . import jsonio
 from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver, Population,
                     fit_genomes, genome_size, n_weights, notes_for, notes_mask, observe, random_weights,
                     to_controls, with_notes)
@@ -548,7 +549,7 @@ def load_generation(run_dir: Path, gen: int) -> dict:
 
 
 def load_config(run_dir: Path) -> dict:
-    return json.loads((Path(run_dir) / "config.json").read_text(encoding="utf-8"))
+    return jsonio.read_json(Path(run_dir) / "config.json")
 
 
 def load_history(run_dir: Path) -> list[dict]:
@@ -556,7 +557,7 @@ def load_history(run_dir: Path) -> list[dict]:
     if not path.exists():
         return []
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return jsonio.read_json(path)
     except ValueError:
         return []      # caught mid-write by the trainer; try again next time
 
@@ -576,9 +577,7 @@ def list_runs() -> list[str]:
 
 
 def _write_json(path: Path, data) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    tmp.replace(path)
+    jsonio.write_json(path, data)
 
 
 def _archive_old_run(run_dir: Path) -> Path:

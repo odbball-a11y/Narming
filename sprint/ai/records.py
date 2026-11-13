@@ -6,6 +6,7 @@ championship, and who set it.  Saved in `<root>/records.json`, keyed by track:
 from __future__ import annotations
 
 import json
+from . import jsonio
 from pathlib import Path
 
 
@@ -18,7 +19,7 @@ PHYSICS = 3     # records set under other physics (1 = classic, 2 = scrub only) 
 
 def load(root) -> dict:
     try:
-        data = json.loads(path(root).read_text(encoding="utf-8"))
+        data = jsonio.read_json(path(root))
     except (OSError, ValueError):
         return {}
     if data.get("_physics", 1) != PHYSICS:
@@ -45,7 +46,5 @@ def update(root, track: str, lap: float | None, entrant: dict, season: int) -> b
                       "season": season}
     p = path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(records, _physics=PHYSICS), indent=1), encoding="utf-8")
-    tmp.replace(p)
+    jsonio.write_json(p, dict(records, _physics=PHYSICS))
     return True

@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from . import jsonio
 from .vendor import trueskill
 
 ENV = trueskill.TrueSkill(draw_probability=0.10)
@@ -41,15 +42,13 @@ def path(root) -> Path:
 
 def load(root) -> dict:
     p = path(root)
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    return jsonio.read_json(p) if p.exists() else {}
 
 
 def _save(root, data: dict) -> None:
     p = path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    jsonio.write_json(p, data)
 
 
 def key(entrant: dict) -> str:
