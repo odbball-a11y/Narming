@@ -35,7 +35,8 @@ from sim.track import Track
 from sim.world import World
 
 from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver, Population,
-                    n_weights, observe, random_weights, to_controls)
+                    fit_genomes, genome_size, n_weights, notes_for, notes_mask, observe, random_weights,
+                    to_controls, with_notes)
 
 PROJECT = Path(__file__).resolve().parent.parent
 RUNS_DIR = PROJECT / "training"
@@ -163,6 +164,8 @@ class PackRun:
         for car in self.world.cars:
             car.damage = damage
         self.brains = Population(weights, arch)
+        for i, car in enumerate(self.world.cars):          # each driver's own track notes
+            car.notes = notes_for(weights[i], arch, self.track)
         self.progress = _Progress(self.world, range(self.count))
         self.ticks = int((seconds or SOLO_SECONDS.get(track_name, DEFAULT_SECONDS)) * tuning.TICK_RATE)
         self.world.end_tick = self.ticks
@@ -296,6 +299,11 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         stats.append(RaceStats(world))
     brains = {k + 1: Brain(r, arch, batch=count)
               for k, r in enumerate(scenario["rivals"]) if not isinstance(r, str)}
+    for n, world in enumerate(worlds):                     # everyone races with their own track notes
+        world.cars[0].notes = notes_for(weights[n], arch, track)
+        for k, r in enumerate(scenario["rivals"]):
+            if not isinstance(r, str):
+                world.cars[k + 1].notes = notes_for(r, arch, track)
     progress = [_Progress(w, [0]) for w in worlds]
     seconds = scenario.get("seconds") or RACE_SECONDS.get(track.key, DEFAULT_SECONDS)
     ticks = int(seconds * tuning.TICK_RATE)
@@ -455,7 +463,8 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
 
 # ---------------------------------------------------------------- breeding
 
-def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: int) -> np.ndarray:
+def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: int,
+          frozen: np.ndarray | None = None) -> np.ndarray:
     """Next generation from a population sorted best first.
 
     The best `elites` go through unchanged.  Every other child is a copy of
@@ -473,6 +482,8 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
             child[mask] = other[mask]
         sigma = rng.choice([0.02, 0.05, 0.1, 0.2])
         touched = rng.random(n) < rng.choice([0.05, 0.2, 1.0])
+        if frozen is not None:                    # e.g. notes of tracks not trained now, or the network itself
+            touched &= ~frozen
         child += rng.normal(0.0, sigma, n) * touched
         children.append(child)
     return np.array(children)
@@ -665,7 +676,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           root=None, start_file: str | None = None, race_weights: dict | None = None,
           race_seconds: dict | None = None, partners: list | None = None, car=None,
           driving_school: bool = False, exam_tracks: list | None = None,
-          solo_share: float | None = None) -> Path:
+          solo_share: float | None = None, notes: bool = False, notes_only: bool = False) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -723,10 +734,12 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             race_bonuses = style in (None, "balanced")   # personalities have their own terms
         config = {"format": FORMAT, "population": population, "elites": elites, "seed": seed,
                   "tracks": tracks, "phase2_from": phase2_from,
-                  "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
+                  "phase2_start": phase2_from,
+                  "arch": with_notes(arch or dict(DEFAULT_ARCH)) if (notes or notes_only) else (arch or dict(DEFAULT_ARCH)),
                   "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
                   "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
                   "partners": partners, "car": car, "exam_tracks": exam_tracks, "solo_share": solo_share,
+                  "notes_only": bool(notes_only),
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
@@ -735,19 +748,27 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
     done = list_generations(run_dir)
     history = [h for h in history if h["gen"] in done]
     start_gen = (done[-1] + 1) if done else 1
+    # Which parts of a driver's vector may change: notes only for the tracks
+    # trained here, and nothing of the network itself in a notes-only camp.
+    frozen = notes_mask(arch, tracks)
+    if config.get("notes_only"):
+        frozen[:n_weights(arch)] = True
+    if not frozen.any():
+        frozen = None
     if done:
         last = load_generation(run_dir, done[-1])
-        pop = breed(last["pop"], np.random.default_rng([seed, done[-1]]), size, config["elites"])
+        pop = breed(fit_genomes(last["pop"], arch), np.random.default_rng([seed, done[-1]]), size,
+                    config["elites"], frozen)
     elif config.get("parent"):
         # Training camp: the parent's whole generation, best first, bred on.
         if "file" in config["parent"]:
             src_pop = load_pop_file(config["parent"]["file"])
         else:
             src_pop = load_generation(RUNS_DIR / config["parent"]["run"], config["parent"]["gen"])["pop"]
-        pop = breed(src_pop, np.random.default_rng([seed, 0]), size, config["elites"])
+        pop = breed(fit_genomes(src_pop, arch), np.random.default_rng([seed, 0]), size, config["elites"], frozen)
     else:
-        pop = random_weights(np.random.default_rng([seed, 0]), size, arch)
-    assert pop.shape[1] == n_weights(arch)
+        pop = fit_genomes(random_weights(np.random.default_rng([seed, 0]), size, arch), arch)
+    assert pop.shape[1] == genome_size(arch)
     champions: dict[int, np.ndarray] = {}
 
     def champion_of(rival) -> np.ndarray:
@@ -808,7 +829,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             _write_json(run_dir / "history.json", history)
             if on_generation:
                 on_generation(entry)
-            pop = breed(pop, np.random.default_rng([seed, gen]), size, config["elites"])
+            pop = breed(pop, np.random.default_rng([seed, gen]), size, config["elites"], frozen)
     finally:
         if pool:
             pool.shutdown()

@@ -38,7 +38,8 @@ from sim.driver import register_driver, unregister_drivers
 from . import evolve
 from . import livery as liveries
 from . import rating
-from .brain import NeuralDriver, layer_sizes, unpack
+from .brain import (NOTE_FIELDS, NeuralDriver, arch_for_vector, fit_genomes, layer_sizes, n_weights, unpack,
+                    with_notes)
 
 HOUSE_DIR = evolve.PROJECT / "house"
 RIVALS_DIR = HOUSE_DIR / "rivals"
@@ -499,7 +500,7 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
                  seed=index, tracks=tracks, exam_tracks=list(grad["tracks"]), arch=grad["arch"],
                  races_per_track=races,
                  race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
-                 race_weights=sliders_to_weights(v["aggression"], v["caution"]), solo_share=SOLO_SHARE,
+                 race_weights=sliders_to_weights(v["aggression"], v["caution"]), solo_share=SOLO_SHARE, notes=True,
                  partners=v["partners"], name=racer["name"], workers=workers, car=traits_of(racer_dir),
                  on_generation=on_generation, log=lambda m: None)
 
@@ -515,7 +516,7 @@ def champion(racer_dir, label: str | None = None) -> NeuralDriver:
         raise ValueError(f"{racer['name']} has not been trained yet")
     with np.load(f) as data:
         weights = data["pop"][0].astype(np.float64)
-    driver = NeuralDriver(weights, graduate()["arch"], label or racer["name"])
+    driver = NeuralDriver(weights, arch_for_vector(weights, graduate()["arch"]), label or racer["name"])
     driver.racer_dir = str(racer_dir)
     driver.car_params = cartraits.params_for(traits_of(racer_dir))
     driver.livery = livery_of(racer_dir)
@@ -626,7 +627,7 @@ def publish(racer_dir) -> Path:
     np.savez_compressed(RIVALS_DIR / f"{racer['id']}.npz", pop=best)
     card = {"name": racer["name"], "aggression": racer["aggression"], "caution": racer["caution"],
             "traits": traits_of(racer_dir), "livery": livery_of(racer_dir),
-            "arch": graduate()["arch"], "created": racer["created"],
+            "arch": arch_for_vector(best, graduate()["arch"]), "created": racer["created"],
             "generations": sum(v["generations"] for v in racer["versions"]),
             "exam": latest_exam(racer_dir)}
     _write(RIVALS_DIR / f"{racer['id']}.json", card)
@@ -681,12 +682,18 @@ def crossover(a: np.ndarray, b: np.ndarray, arch: dict, rng: np.random.Generator
     only makes sense because all racers descend from the same graduate, so
     the parents' neurons line up.  A few small mutations follow.
     """
+    a, b = fit_genomes(a, arch), fit_genomes(b, arch)
     child = np.empty_like(a)
     la, lb, lc = unpack(a, arch), unpack(b, arch), unpack(child, arch)
     for (wa, ba), (wb, bb), (wc, bc) in zip(la, lb, lc):
         pick = rng.random(len(ba)) < 0.5
         wc[:] = np.where(pick[:, None], wa, wb)
         bc[:] = np.where(pick, ba, bb)
+    k = n_weights(arch)
+    if len(child) > k:                    # track notes: each corner's notes from one parent
+        na, nb = a[k:].reshape(-1, NOTE_FIELDS), b[k:].reshape(-1, NOTE_FIELDS)
+        pick = rng.random(len(na)) < 0.5
+        child[k:] = np.where(pick[:, None], na, nb).ravel()
     mask = rng.random(len(child)) < 0.2
     return child + rng.normal(0.0, 0.02, len(child)) * mask
 
@@ -826,7 +833,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     info = racer["breeding"]
     rng = np.random.default_rng(info["seed"])
     grad = graduate()
-    arch = grad["arch"]
+    arch = with_notes(grad["arch"])           # foals carry track notes, mixed from their parents
     tracks = grad["tracks"]
     sire_w, dam_w = brain(root / info["sire"]), brain(root / info["dam"])
     litter_dir = foal_dir / "litter"
@@ -870,7 +877,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
                      elites=2, seed=info["seed"] % 100000 + i, tracks=tracks, arch=arch, races_per_track=1,
                      race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                      race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
-                     solo_share=SOLO_SHARE, workers=workers, log=lambda m: None, car=traits)
+                     solo_share=SOLO_SHARE, notes=True, workers=workers, log=lambda m: None, car=traits)
         hist = evolve.load_history(litter_dir / run)
         paces_by_gen = [pace(h["exam"]) for h in hist]
         valid = [p for p in paces_by_gen if p]

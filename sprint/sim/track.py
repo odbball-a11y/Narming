@@ -230,6 +230,63 @@ class Track:
             _IDEAL_CACHE[key] = hit
         return hit
 
+    # ---------------------------------------------------------- corners
+
+    CORNER_CURVATURE = 0.02     # a corner's apex bends tighter than this (1/radius) on the ideal line
+    CORNER_SPACING = 25.0       # apexes closer than this are one corner (a chicane, an S)
+    CORNER_SMOOTH = 8.0         # curvature is averaged over this distance either side first
+
+    def corners(self) -> dict:
+        """The track's corners, found on the ideal line, for track notes.
+
+        Apexes are the peaks of the (smoothed) ideal line's curvature, at
+        least CORNER_SPACING apart; the lap is shared out between them, each
+        corner running from the straightest point after the previous apex to
+        the straightest point before the next.  {"count": n, "of": corner id
+        for every sample, "exit": True after the apex, "apex": [sample]}.
+        Solved once per track and kept."""
+        key = ("corners", self.key, self.n, round(float(self.length), 3))
+        hit = _IDEAL_CACHE.get(key)
+        if hit is not None:
+            return hit
+        n, ds = self.n, self.ds
+        curv = np.array(self.ideal()[1])
+        w = max(1, int(self.CORNER_SMOOTH / ds))
+        smooth = np.convolve(np.concatenate([curv[-w:], curv, curv[:w]]), np.ones(2 * w + 1) / (2 * w + 1), "valid")
+        peaks = [i for i in range(n) if smooth[i] > self.CORNER_CURVATURE
+                 and smooth[i] >= smooth[(i - 1) % n] and smooth[i] > smooth[(i + 1) % n]]
+        gap = int(self.CORNER_SPACING / ds)
+        apexes = []
+        for i in sorted(peaks, key=lambda i: -smooth[i]):        # strongest first; nearby weaker ones fold in
+            if all(min(abs(i - j), n - abs(i - j)) >= gap for j in apexes):
+                apexes.append(i)
+        apexes.sort()
+        of = [0] * n
+        exit_ = [False] * n
+        if len(apexes) >= 2:
+            for c, apex in enumerate(apexes):
+                nxt = apexes[(c + 1) % len(apexes)]
+                span = (nxt - apex) % n
+                # the boundary is the straightest point between this apex and the next
+                cut = min(range(1, span), key=lambda k: smooth[(apex + k) % n]) if span > 1 else 1
+                for k in range(span):
+                    idx = (apex + k) % n
+                    of[idx] = c if k < cut else (c + 1) % len(apexes)
+                    exit_[idx] = k < cut
+        elif apexes:
+            apex = apexes[0]
+            for k in range(n):
+                exit_[(apex + k) % n] = k < n // 2
+        hit = {"count": len(apexes), "of": of, "exit": exit_, "apex": apexes}
+        _IDEAL_CACHE[key] = hit
+        return hit
+
+    def fingerprint(self) -> str:
+        """Identifies the track's shape (track notes are only used on the track they were made for)."""
+        import hashlib
+        data = (self.control_points.tolist(), self.verge, len(self.checkpoints), self.racing_offset.tolist())
+        return hashlib.sha256(repr(data).encode()).hexdigest()[:16]
+
     def rolling_start(self, place: int) -> tuple[float, float, float]:
         """(x, y, heading) of the car `place` back in a single-file rolling
         start (0 = leading), on the centreline before the start line."""

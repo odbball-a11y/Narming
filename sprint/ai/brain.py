@@ -66,6 +66,19 @@ INPUT_VERSION = 6
 CORNER_SCAN = (6.0, 12.0, 20.0, 32.0, 48.0, 70.0, 100.0)
 BRAKE_PLAN = 0.6
 GRIP_PLAN = 0.9             # fraction of the tyres' grip used to work out safe corner speed
+
+# Track notes: per corner of every track, three numbers in -1..1 that evolve
+# with the brain (appended to its weight vector) and adjust what the driver
+# sees there, never the network itself:
+#   speed     the corner's safe speed is +-NOTE_SPEED of what it looks like
+#   line      the ideal line moves +-NOTE_LINE of the half-width (+ = right)
+#   throttle  after the apex the speed margin reads NOTE_THROTTLE lower
+#             (get on the power earlier) or higher (wait)
+NOTE_FIELDS = 3
+NOTE_SPEED = 0.25
+NOTE_LINE = 0.5
+NOTE_THROTTLE = 0.5
+_LAYOUT: list = []
 INPUT_NAMES = INPUT_VERSIONS[INPUT_VERSION]
 N_INPUTS = len(INPUT_NAMES)
 N_CONTROLS = 2          # steering; throttle (+) / brake (-)
@@ -181,13 +194,22 @@ def observe(world, i: int) -> list[float]:
     # ---- input version 3: the car it is driving (-1..1 each) ----
     obs.extend(car.params.traits)
 
-    # ---- input version 4: lines and corner speed ----
+    # ---- input version 4: lines and corner speed (adjusted by the driver's track notes) ----
     ideal_off, ideal_curv = track.ideal()
+    notes = car.notes
+    corner_of = track.corners()["of"] if notes is not None else None
     lat = car.lateral
-    obs.append(max(-2.0, min(2.0, (ideal_off[idx] - lat) / hw)))
+
+    def line_at(k):
+        off = ideal_off[k]
+        if notes is not None:
+            room = track._hw[k] - 1.0
+            off = max(-room, min(room, off + NOTE_LINE * notes[corner_of[k], 1] * track._hw[k]))
+        return off
+    obs.append(max(-2.0, min(2.0, (line_at(idx) - lat) / hw)))
     for d in (12.0, 30.0):
         k = (idx + int(d / ds)) % n
-        obs.append(max(-2.0, min(2.0, (ideal_off[k] - lat) / track._hw[k])))
+        obs.append(max(-2.0, min(2.0, (line_at(k) - lat) / track._hw[k])))
     p = car.params
     vf = max(0.0, (car.vx * ch + car.vy * sh))
     grip = p.grip * GRIP_PLAN
@@ -195,12 +217,18 @@ def observe(world, i: int) -> list[float]:
     allowed = 1e9
     slowest, where = 1e9, CORNER_SCAN[-1]
     for d in CORNER_SCAN:
-        kappa = ideal_curv[(idx + int(d / ds)) % n]
+        k = (idx + int(d / ds)) % n
+        kappa = ideal_curv[k]
         safe = math.sqrt(grip / kappa) if kappa > 1e-4 else 60.0
+        if notes is not None:
+            safe *= 1.0 + NOTE_SPEED * notes[corner_of[k], 0]
         if safe < slowest:
             slowest, where = safe, d
         allowed = min(allowed, math.sqrt(safe * safe + 2.0 * decel * d))
-    obs.append(max(-1.0, min(1.0, vf / allowed - 1.0)))                 # > 0: too fast for what is coming
+    margin = vf / allowed - 1.0                                         # > 0: too fast for what is coming
+    if notes is not None and track.corners()["exit"][idx]:
+        margin -= NOTE_THROTTLE * notes[corner_of[idx], 2]               # on the way out: when to get on the power
+    obs.append(max(-1.0, min(1.0, margin)))
     obs.append(min(1.5, slowest / 32.0))
     obs.append(where / CORNER_SCAN[-1])
     obs.append(min(2.0, vf * vf * ideal_curv[idx] / grip))              # share of the tyres' grip in use now
@@ -255,7 +283,77 @@ def upgrade(weights: np.ndarray, arch: dict) -> tuple[np.ndarray, dict]:
     for (wo, bo), (wn, bn) in zip(old_layers[1:], new_layers[1:]):
         wn[...] = wo
         bn[...] = bo
+    notes = weights[..., n_weights(arch):]          # track notes ride along unchanged
+    if notes.shape[-1]:
+        out = np.concatenate([out, notes], axis=-1)
     return out, new_arch
+
+
+def notes_layout() -> list:
+    """[[track key, corners, track fingerprint], ...] for every track, in a fixed order."""
+    if not _LAYOUT:
+        from sim.track import Track
+        for key in sorted(Track.available()):
+            track = Track.load(key)
+            _LAYOUT.append([key, track.corners()["count"], track.fingerprint()])
+    return [list(x) for x in _LAYOUT]
+
+
+def with_notes(arch: dict) -> dict:
+    """The arch with track notes for every track (kept if it has them already)."""
+    return arch if arch.get("notes") else dict(arch, notes=notes_layout())
+
+
+def arch_for_vector(weights, arch: dict) -> dict:
+    """The arch that fits a saved vector: with notes if it is longer than the network."""
+    return with_notes(arch) if np.shape(weights)[-1] > n_weights(arch) and not arch.get("notes") else arch
+
+
+def notes_size(arch: dict) -> int:
+    return sum(int(c) * NOTE_FIELDS for _, c, _ in arch.get("notes") or [])
+
+
+def genome_size(arch: dict) -> int:
+    """Network weights plus track notes: the length of one driver's vector."""
+    return n_weights(arch) + notes_size(arch)
+
+
+def fit_genomes(pop: np.ndarray, arch: dict) -> np.ndarray:
+    """Vectors made for a brain without notes get zero notes (they drive as before)."""
+    pop = np.asarray(pop, dtype=np.float64)
+    size = genome_size(arch)
+    if pop.shape[-1] < size:
+        pad = np.zeros(pop.shape[:-1] + (size - pop.shape[-1],))
+        return np.concatenate([pop, pad], axis=-1)
+    return pop[..., :size]
+
+
+def notes_for(weights: np.ndarray, arch: dict, track) -> np.ndarray | None:
+    """One driver's notes for `track` as (corners, 3), or None (no notes, or
+    the track has changed since they were made)."""
+    k = n_weights(arch)
+    for key, count, print_ in arch.get("notes") or []:
+        size = int(count) * NOTE_FIELDS
+        if key == track.key:
+            if print_ != track.fingerprint() or len(weights) < k + size or count != track.corners()["count"]:
+                return None
+            return np.clip(np.asarray(weights[k:k + size], dtype=np.float64).reshape(int(count), NOTE_FIELDS),
+                           -1.0, 1.0)
+        k += size
+    return None
+
+
+def notes_mask(arch: dict, tracks) -> np.ndarray:
+    """True for the parts of a vector that are notes of tracks NOT in `tracks`
+    (kept as they are while those tracks are not being trained)."""
+    mask = np.zeros(genome_size(arch), dtype=bool)
+    k = n_weights(arch)
+    for key, count, _ in arch.get("notes") or []:
+        size = int(count) * NOTE_FIELDS
+        if key not in tracks:
+            mask[k:k + size] = True
+        k += size
+    return mask
 
 
 def n_weights(arch: dict) -> int:
@@ -354,6 +452,8 @@ class NeuralDriver(Driver):
     def reset(self, world, car_index: int) -> None:
         self.brain = Brain(self.weights, self.arch)
         self.held = Controls()
+        if world is not None:
+            world.cars[car_index].notes = notes_for(self.weights, self.arch, world.track)
 
     def act(self, world, car_index: int) -> Controls:
         if world.tick % DECISION_TICKS == 0:
