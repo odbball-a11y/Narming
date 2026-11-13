@@ -54,3 +54,11 @@
 - ` 1.94h` season 10: **Zephyr Brick** (racer) wins the title. Zephyr Brick 38 | Flash Velvet 32 | Mischief Brick 29 | Careful Keith 23
 - ` 1.94h` breeding **Zigzag Slipstream**: Sally Slipstream x Vera Velvet (learner)
 - ` 1.98h`   born Zigzag Slipstream: gen 1, speed 5  accel 2  handling 3  brakes 2  medium, aggression 0.39, caution 0.4 (2.7 min)
+- ` 2.05h` schooled Zigzag Slipstream (8 generations, 4.4 min)
+- ` 2.14h` between races **Zigzag Slipstream** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Tilly Thunderbolt; now all-rounder
+- ` 2.14h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 2.14h` season 11: **Flash Velvet** (racer) wins the title. Flash Velvet 32 | Zephyr Brick 31 | Zigzag Slipstream 26 | Careful Keith 25
+- ` 2.14h` breeding **Kestrel Velvet**: Gus Granite x Vera Velvet (fastest)
+- ` 2.19h`   born Kestrel Velvet: gen 1, speed 3  accel 3  handling 3  brakes 3  heavy, aggression 0.43, caution 0.4 (2.7 min)
+- ` 2.21h` dynasty running until hour 8.0
+- ` 2.21h` training Kestrel Velvet ...
