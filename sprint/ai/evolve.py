@@ -774,9 +774,11 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
     def champion_of(rival) -> np.ndarray:
         if rival not in champions:
             if isinstance(rival, str):            # "p:<i>": a chosen training partner
-                champions[rival] = load_pop_file(config["partners"][int(rival[2:])]["file"])[0]
-                if len(champions[rival]) != n_weights(arch):
+                vector = load_pop_file(config["partners"][int(rival[2:])]["file"])[0]
+                if len(vector) < n_weights(arch) or (len(vector) > n_weights(arch) and not arch.get("notes")
+                                                     and len(vector) != n_weights(arch)):
                     raise ValueError("training partner has a different network shape")
+                champions[rival] = fit_genomes(vector, arch)      # its notes come too, or none
             else:
                 champions[rival] = load_generation(run_dir, rival)["pop"][0]
         return champions[rival]
