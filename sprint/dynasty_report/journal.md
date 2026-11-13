@@ -114,3 +114,13 @@
 - ` 4.16h` season 20: **Careful Keith** (house) wins the title. Careful Keith 36 | Storm Slipstream 35 | Fury Thunderbolt 29 | Xena Brick 27
 - ` 4.16h` breeding **Comet Brick**: Zephyr Brick x Kestrel Velvet (fastest)
 - ` 4.20h`   born Comet Brick: gen 2, speed 2  accel 2  handling 4  brakes 4  heavy, aggression 0.46, caution 0.45 (2.6 min)
+- ` 4.27h` schooled Comet Brick (8 generations, 4.4 min)
+- ` 4.47h` between races **Comet Brick** takes a Technical specialist course (20 generations, 11.8 min) with Scripted car, Itself (its own best so far), Zephyr Brick; now Technical specialist
+- ` 4.47h` season 21: **Storm Slipstream** (racer) wins the title. Storm Slipstream 35 | Comet Brick 33 | Careful Keith 32 | Xena Brick 19
+- ` 4.56h` between races **Xena Brick** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Vortex Brick; now all-rounder
+- ` 4.56h` season 22: **Comet Brick** (racer) wins the title. Comet Brick 35 | Xena Brick 28 | Careful Keith 25 | Comet Velvet 24
+- ` 4.56h`   news: Comet Velvet retires to stud after 20 races.
+- ` 4.56h`   news: Flash Velvet has died. Remembered in the hall of fame.
+- ` 4.56h` breeding **Kestrel Brick**: Zephyr Brick x Comet Velvet (fastest)
+- ` 4.60h`   born Kestrel Brick: gen 3, speed 3  accel 5  handling 1  brakes 3  heavy, aggression 0.61, caution 0.47 (2.6 min)
+- ` 4.68h` schooled Kestrel Brick (8 generations, 4.4 min)
