@@ -282,7 +282,7 @@
   "id": "ace-thunderbolt",
   "name": "Ace Thunderbolt",
   "gen": 3,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Fury Thunderbolt",
    "Zigzag Slipstream"
@@ -294,20 +294,20 @@
   "braking": 1,
   "aggression": 0.45,
   "caution": 0.33,
-  "rating": 1001,
+  "rating": 1024,
   "peak": 1338,
-  "rated_races": 15,
-  "races": 15,
-  "wins": 4,
-  "podiums": 10,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 5,
+  "podiums": 14,
   "titles": 1,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 1010.7688497863594,
-   "speedway": 887.4575863129122,
-   "esses": 863.6088533545354,
-   "technical": 992.9852527995902,
-   "grandprix": 936.0020581114759
+   "oval": 1120.9667892309135,
+   "speedway": 888.0364798051337,
+   "esses": 871.6920574995696,
+   "technical": 1079.7983812757398,
+   "grandprix": 885.404915806613
   },
   "pace": 0.8903
  },
@@ -327,20 +327,20 @@
   "braking": 2,
   "aggression": 0.51,
   "caution": 0.45,
-  "rating": 1051,
+  "rating": 1013,
   "peak": 1086,
-  "rated_races": 5,
-  "races": 5,
-  "wins": 1,
-  "podiums": 4,
+  "rated_races": 15,
+  "races": 15,
+  "wins": 3,
+  "podiums": 8,
   "titles": 0,
   "specialty": "oval",
   "tracks": {
-   "oval": 628.3826533078598,
-   "speedway": 964.1434551582746,
-   "esses": 1143.9882692966853,
-   "technical": 1326.2369110478323,
-   "grandprix": 941.4004058940178
+   "oval": 408.1385615259685,
+   "speedway": 1193.7351101684428,
+   "esses": 1000.8642942324232,
+   "technical": 1040.4861321994943,
+   "grandprix": 956.474206455499
   },
   "pace": 0.9242
  },
@@ -411,6 +411,39 @@
   "pace": 0.954
  },
  {
+  "id": "flash-brick",
+  "name": "Flash Brick",
+  "gen": 3,
+  "status": "racing",
+  "parents": [
+   "Comet Brick",
+   "Comet Velvet"
+  ],
+  "weight": "heavy",
+  "top_speed": 2,
+  "accel": 2,
+  "handling": 4,
+  "braking": 4,
+  "aggression": 0.52,
+  "caution": 0.43,
+  "rating": 998,
+  "peak": 1099,
+  "rated_races": 10,
+  "races": 10,
+  "wins": 2,
+  "podiums": 6,
+  "titles": 1,
+  "specialty": "all-rounder",
+  "tracks": {
+   "oval": 712.9719086175963,
+   "speedway": 1191.755049194828,
+   "esses": 610.0915126793118,
+   "technical": 1160.5106046329624,
+   "grandprix": 886.0925126225328
+  },
+  "pace": 0.9201
+ },
+ {
   "id": "fury-thunderbolt",
   "name": "Fury Thunderbolt",
   "gen": 2,
@@ -474,7 +507,7 @@
    "technical": 1034.596705771203,
    "grandprix": 912.2184879869237
   },
-  "pace": 0.938
+  "pace": 0.9345
  },
  {
   "id": "kestrel-velvet",
@@ -525,20 +558,20 @@
   "braking": 3,
   "aggression": 0.43,
   "caution": 0.62,
-  "rating": 1041,
+  "rating": 1036,
   "peak": 1104,
-  "rated_races": 10,
-  "races": 10,
+  "rated_races": 15,
+  "races": 15,
   "wins": 4,
-  "podiums": 7,
+  "podiums": 10,
   "titles": 2,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 972.4774105304894,
-   "speedway": 717.0556515095944,
-   "esses": 1394.1726491635382,
-   "technical": 612.1263396556111,
-   "grandprix": 1332.8571272361203
+   "oval": 966.7888760057838,
+   "speedway": 729.1692616604598,
+   "esses": 1234.151293058215,
+   "technical": 857.4657675801933,
+   "grandprix": 1105.3771106518209
   },
   "pace": 0.9041
  },
@@ -558,16 +591,22 @@
   "braking": 2,
   "aggression": 0.44,
   "caution": 0.39,
-  "rating": null,
-  "peak": null,
-  "rated_races": 0,
-  "races": 0,
-  "wins": 0,
-  "podiums": 0,
-  "titles": 0,
+  "rating": 1080,
+  "peak": 1342,
+  "rated_races": 15,
+  "races": 15,
+  "wins": 3,
+  "podiums": 7,
+  "titles": 1,
   "specialty": "all-rounder",
-  "tracks": {},
-  "pace": 0.9085
+  "tracks": {
+   "oval": 1101.9492726393812,
+   "speedway": 916.0207574189656,
+   "esses": 644.0954079307464,
+   "technical": 1261.2588869943581,
+   "grandprix": 969.9025980738168
+  },
+  "pace": 0.9212
  },
  {
   "id": "storm-slipstream",

@@ -156,3 +156,18 @@
 - ` 5.62h` season 27: **Careful Keith** (house) wins the title. Careful Keith 34 | Orbit Slipstream 20 | Cinder Brick 18 | Rocket Velvet 14
 - ` 5.62h` breeding **Flash Brick**: Comet Brick x Comet Velvet (learner)
 - ` 5.66h`   born Flash Brick: gen 3, speed 2  accel 2  handling 4  brakes 4  heavy, aggression 0.52, caution 0.43 (2.6 min)
+- ` 5.73h` schooled Flash Brick (8 generations, 4.4 min)
+- ` 5.82h` between races **Flash Brick** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Flash Velvet; now all-rounder
+- ` 5.82h` season 28: **Flash Brick** (racer) wins the title. Flash Brick 30 | Careful Keith 28 | Cinder Brick 21 | Rocket Velvet 17
+- ` 5.90h` between races **Rocket Velvet** takes an all-rounder course (10 generations, 5.1 min) with Scripted car, Itself (its own best so far), Orbit Slipstream; now all-rounder
+- ` 5.91h` season 29: **Rocket Velvet** (racer) wins the title. Rocket Velvet 36 | Careful Keith 32 | Ace Thunderbolt 32 | Flash Brick 22
+- ` 5.91h`   news: Ace Thunderbolt retires to stud after 20 races.
+- ` 6.07h` between races **Kestrel Brick** takes a Esses specialist course (20 generations, 9.5 min) with Scripted car, Itself (its own best so far), Nora Nimble; now all-rounder
+- ` 6.07h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 6.07h` season 30: **Careful Keith** (house) wins the title. Careful Keith 34 | Kestrel Brick 32 | Flash Brick 27 | Cinder Brick 22
+- ` 6.07h`   news: Cinder Brick retires to stud after 20 races.
+- ` 6.07h`   news: Kestrel Brick retires to stud after 20 races.
+- ` 6.07h`   news: Comet Velvet has died. Remembered in the hall of fame.
+- ` 6.07h` breeding **Zigzag Brick**: Ace Thunderbolt x Kestrel Brick (fastest)
+- ` 6.11h`   born Zigzag Brick: gen 4, speed 3  accel 5  handling 1  brakes 3  medium, aggression 0.56, caution 0.35 (2.7 min)
+- ` 6.19h` schooled Zigzag Brick (8 generations, 4.4 min)
