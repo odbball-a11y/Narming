@@ -257,3 +257,17 @@ RuntimeError: nobody can race
 - ` 7.24h` dynasty running until hour 8.0
 - ` 7.24h` nobody is racing; breeding the next foals first
 - ` 7.24h` breeding **Indigo Slipstream**: Storm Slipstream x Zigzag Brick (fastest)
+- ` 7.29h`   born Indigo Slipstream: gen 5, speed 3  accel 2  handling 3  brakes 4  medium, aggression 0.37, caution 0.23 (3.0 min)
+- ` 7.37h` schooled Indigo Slipstream (8 generations, 5.0 min)
+- ` 7.47h` between races **Indigo Slipstream** takes an all-rounder course (10 generations, 5.8 min) with Scripted car, Itself (its own best so far), Vera Velvet; now all-rounder
+- ` 7.47h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 7.47h` season 37: **Dangerous Dave** (house) wins the title. Dangerous Dave 48 | Indigo Slipstream 33 | Careful Keith 25 | Scripted 1 24
+- ` 7.47h`   news: Ace Thunderbolt has died. Remembered in the hall of fame.
+- ` 7.47h` breeding **Echo Brick**: Xena Brick x Zigzag Brick (learner)
+- ` 7.52h`   born Echo Brick: gen 5, speed 3  accel 4  handling 1  brakes 4  light, aggression 0.64, caution 0.32 (3.0 min)
+- ` 7.60h` schooled Echo Brick (8 generations, 5.0 min)
+- ` 7.75h` between races **Echo Brick** takes a Speedway specialist course (20 generations, 8.8 min) with Scripted car, Itself (its own best so far), Zigzag Brick; now Speedway specialist
+- ` 7.75h` season 38: **Dangerous Dave** (house) wins the title. Dangerous Dave 44 | Echo Brick 34 | Careful Keith 28 | Indigo Slipstream 24
+- ` 7.75h`   news: Cinder Brick has died. Remembered in the hall of fame.
+- ` 7.75h`   news: Kestrel Brick has died. Remembered in the hall of fame.
+- ` 7.75h` breeding **Nova Brick**: Vortex Brick x Zigzag Brick (fastest)

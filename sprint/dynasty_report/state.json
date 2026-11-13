@@ -282,7 +282,7 @@
   "id": "ace-thunderbolt",
   "name": "Ace Thunderbolt",
   "gen": 3,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Fury Thunderbolt",
    "Zigzag Slipstream"
@@ -444,6 +444,33 @@
   "pace": 0.9121
  },
  {
+  "id": "echo-brick",
+  "name": "Echo Brick",
+  "gen": 5,
+  "status": "racing",
+  "parents": [
+   "Xena Brick",
+   "Zigzag Brick"
+  ],
+  "weight": "light",
+  "top_speed": 3,
+  "accel": 4,
+  "handling": 1,
+  "braking": 4,
+  "aggression": 0.64,
+  "caution": 0.32,
+  "rating": null,
+  "peak": null,
+  "rated_races": 0,
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "titles": 0,
+  "specialty": "speedway",
+  "tracks": {},
+  "pace": 0.9261
+ },
+ {
   "id": "flash-brick",
   "name": "Flash Brick",
   "gen": 3,
@@ -508,6 +535,39 @@
    "grandprix": 817.1938636704562
   },
   "pace": 0.8709
+ },
+ {
+  "id": "indigo-slipstream",
+  "name": "Indigo Slipstream",
+  "gen": 5,
+  "status": "racing",
+  "parents": [
+   "Storm Slipstream",
+   "Zigzag Brick"
+  ],
+  "weight": "medium",
+  "top_speed": 3,
+  "accel": 2,
+  "handling": 3,
+  "braking": 4,
+  "aggression": 0.37,
+  "caution": 0.23,
+  "rating": 1076,
+  "peak": 1359,
+  "rated_races": 5,
+  "races": 5,
+  "wins": 1,
+  "podiums": 4,
+  "titles": 0,
+  "specialty": "all-rounder",
+  "tracks": {
+   "oval": 1265.8480635755054,
+   "speedway": 1106.0280272486839,
+   "esses": 1176.9636637776093,
+   "technical": 727.807806675952,
+   "grandprix": 874.072457616659
+  },
+  "pace": 0.9587
  },
  {
   "id": "kestrel-brick",
