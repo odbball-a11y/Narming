@@ -22,5 +22,6 @@
   "grandprix": 72.0
  },
  "races_per_track": 1,
- "source": "run 'graduate5' generation 300: from the Speedway graduate, driving school then racing school on all five tracks in a random car each generation, 3-lap rolling-start races"
+ "source": "run 'graduate6' generation 175: the five-track graduate retrained under the full physics (tyre scrub, friction circle, understeer, yaw inertia, weight transfer): driving school then racing school, a random car and balance each generation, scored assertively (aggression 0.8, caution 0.1) from generation 69",
+ "physics": 3
 }

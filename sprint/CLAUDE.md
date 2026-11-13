@@ -371,6 +371,21 @@ podium): `record_result(..., finished=)`.
   ends, grip goes as load^0.9, cornering at the limit costs `lateral_transfer`;
   replaces `brake_transfer`. Inputs version 6 (front load, rear load).
 
+- Full physics on by default (physics 3): scrub 8, friction circle 0.8/0.6,
+  front grip 1.2 x rear (so full throttle can power-oversteer; with 1.0 the car only
+  ever understeered), yaw lag 0.08 s, weight transfer 0.2, lateral transfer 0.1.
+  `CLASSIC_PHYSICS` turns it all off. Track records are tagged by physics.
+  Graduate retrained ("graduate6", 200 gens from the old graduate, `car="random"`
+  incl. balance): driving school finished by gen 18; racing school at first hung
+  back (place ~3.9 of 4 from last, 0.2 passes), so from gen 69 the run was scored
+  with `sliders_to_weights(0.8, 0.1)` (damage 1.18, permanent overtake 0.28),
+  after which passes rose to ~2 per exam race. Head to head, 8 races per track, 3
+  laps, under the new physics: gen 175 avg place 1.70 / 18 wins of 40, gen 200
+  2.10 / 14, gen 150 2.60 / 8, old graduate 3.60 / 0. Gen 175 is
+  `house/graduate.npz` now. Contact is rough on Technical and Grand Prix (44-60%
+  damage in all-AI races). `evolve.train(start_file=..., driving_school=True)`
+  now really starts in driving school (it used to force racing school).
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 
