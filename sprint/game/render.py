@@ -36,7 +36,7 @@ C_HUD_DIM = (150, 140, 200)
 C_HUD_ACCENT = (255, 214, 10)
 CAR_COLOURS = [(236, 52, 60), (48, 140, 255), (255, 214, 10), (60, 220, 110)]
 CAR_NAMES = ["RED", "BLUE", "YELLOW", "GREEN"]
-PLACES = ["1ST", "2ND", "3RD", "4TH"]
+PLACES = ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH", "7TH", "8TH"]
 C_PANEL = (20, 14, 44)
 C_PINK = (255, 64, 160)
 C_CYAN = (64, 220, 255)
@@ -528,50 +528,58 @@ class RaceRenderer:
         self.draw_effects(screen, world, poses)
 
     def draw_hud(self, screen: pygame.Surface, race, banner: str = "", liveries=None) -> None:
-        """Top strip: one panel per car (in its slot's place) with position,
-        lap, current / last / best lap time and speed."""
+        """Top strip: a timing screen.  One row per car in race order (1st,
+        2nd, ... down the left column, then the right), each with its colour,
+        name, lap, the lap it is on (or its finishing time), last lap, best
+        lap and damage.  The race's fastest lap so far is shown in pink."""
         ui = self.ui
         world = race.world
         strip = ui.rect(0, 0, WORLD_W, HUD_H)
         pygame.draw.rect(screen, C_HUD_BG, strip)
         pygame.draw.line(screen, C_HUD_ACCENT, strip.bottomleft, strip.bottomright, max(1, int(ui.unit * 0.3)))
         order = world.standings()
-        panel_w = WORLD_W / 4.0
-        for i, car in enumerate(world.cars):
-            slot = world.slots[i] % 4
-            look = liveries[i] if liveries else {"colour": liv.SLOT_COLOURS[slot], "number": slot + 1}
+        per_column = max(2, (len(order) + 1) // 2)
+        row_h = (HUD_H - 1.0) / per_column
+        col_w = WORLD_W / 2.0
+        laps = [c.best_lap for c in world.cars if c.best_lap]
+        fastest = min(laps) if laps else None
+        for place, i in enumerate(order):
+            car = world.cars[i]
+            slot = world.slots[i]
+            look = liveries[i] if liveries else {"colour": liv.SLOT_COLOURS[slot % 4], "number": slot + 1}
             colour = liv.rgb(look["colour"])
-            x0 = slot * panel_w
-            pygame.draw.rect(screen, colour, ui.rect(x0 + 0.6, 0.9, 0.9, HUD_H - 2.0))
-            place = order.index(i)
-            ui.text(screen, "big", PLACES[place], colour, x0 + 2.4, 0.9)
-            label = race.drivers[i].label.upper()
-            if car.draft > 0.08 and not car.finished:
-                ui.text(screen, "small", "DRAFT >>>"[:6 + (world.tick // 12) % 4], C_CYAN, x0 + 2.4, 5.4)
-            else:
-                ui.text(screen, "small", label[:14], C_HUD_DIM, x0 + 2.4, 5.4)
-            ui.text(screen, "small", f"#{look['number']} SPD {int(round(car.speed * 6)):3d}", C_HUD_TEXT,
-                    x0 + 2.4, 7.8)
+            x0 = (place // per_column) * col_w + 1.0
+            y = 0.5 + (place % per_column) * row_h
+            ty = y + (row_h - 2.7) / 2.0                      # small text centred in the row
+            if place % 2:
+                pygame.draw.rect(screen, (30, 26, 52), ui.rect(x0 - 0.6, y, col_w - 0.8, row_h))
+            ui.text(screen, "small", PLACES[place] if place < len(PLACES) else f"{place + 1}TH", colour, x0, ty)
+            pygame.draw.rect(screen, colour, ui.rect(x0 + 6.0, y + 0.4, 1.2, row_h - 0.8))
+            name = race.drivers[i].label.upper()[:15]
+            towed = car.draft > 0.08 and not car.finished           # in a tow: the name turns cyan
+            ui.text(screen, "small", name, C_CYAN if towed else C_HUD_TEXT, x0 + 8.4, ty)
             lap_now = min(car.laps + 1, world.laps)
-            ui.text(screen, "small", f"LAP {lap_now}/{world.laps}", C_HUD_ACCENT, x0 + 14.5, 0.9)
+            ui.text(screen, "small", "FIN" if car.finished else f"L{lap_now}/{world.laps}", C_HUD_ACCENT,
+                    x0 + 30.0, ty)
             if car.finished:
-                ui.text(screen, "mid", format_time(car.finish_time), C_CYAN, x0 + 14.5, 3.1)
+                ui.text(screen, "small", format_time(car.finish_time), C_CYAN, x0 + 37.0, ty)
             else:
-                ui.text(screen, "mid", format_time(max(0.0, world.time - car.lap_start_time)),
-                        C_HUD_TEXT, x0 + 14.5, 3.1)
+                ui.text(screen, "small", format_time(max(0.0, world.time - car.lap_start_time)), C_HUD_TEXT,
+                        x0 + 37.0, ty)
+            ui.text(screen, "small", "last", C_HUD_DIM, x0 + 47.0, ty)
+            ui.text(screen, "small", format_time(car.last_lap), C_HUD_TEXT, x0 + 51.5, ty)
+            ui.text(screen, "small", "best", C_HUD_DIM, x0 + 60.0, ty)
+            best_colour = C_PINK if car.best_lap and car.best_lap == fastest else C_HUD_ACCENT
+            ui.text(screen, "small", format_time(car.best_lap), best_colour, x0 + 64.5, ty)
             # Damage bar: green to red as the car is wrecked.
-            ui.text(screen, "small", "DMG", C_HUD_DIM, x0 + 14.5, 7.8)
-            bar = ui.rect(x0 + 19.3, 8.0, 6.4, 1.5)
+            bar = ui.rect(x0 + 73.0, y + row_h / 2.0 - 0.6, 5.0, 1.2)
             pygame.draw.rect(screen, (50, 44, 80), bar)
             if car.damage > 0.0:
                 d = car.damage
                 fill = pygame.Rect(bar.left, bar.top, max(1, int(bar.width * d)), bar.height)
                 pygame.draw.rect(screen, (int(90 + 165 * min(1.0, d * 2)), int(220 - 180 * d), 60), fill)
             pygame.draw.rect(screen, C_HUD_DIM, bar, 1)
-            ui.text(screen, "small", "LAST", C_HUD_DIM, x0 + 27.5, 0.9)
-            ui.text(screen, "small", format_time(car.last_lap), C_HUD_TEXT, x0 + 27.5, 3.0)
-            ui.text(screen, "small", "BEST", C_HUD_DIM, x0 + 27.5, 5.6)
-            ui.text(screen, "small", format_time(car.best_lap), C_HUD_ACCENT, x0 + 27.5, 7.7)
+        pygame.draw.line(screen, C_HUD_DIM, ui.px(col_w, 0.6), ui.px(col_w, HUD_H - 0.6), 1)
         if banner:
             ui.text(screen, "small", banner, C_HUD_TEXT, WORLD_W / 2, WORLD_H - 0.8, "midbottom", shadow=True)
 

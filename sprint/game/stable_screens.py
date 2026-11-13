@@ -1258,7 +1258,7 @@ class ChampionshipSetupScreen(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         ui.text(screen, "big", "ENTER A CHAMPIONSHIP", C_HUD_ACCENT, 6, 4, shadow=True)
-        ui.text(screen, "small", "Five races, one per track. Enter up to three of your racers; the best-rated house rival joins.", C_HUD_DIM, 6, 11)
+        ui.text(screen, "small", "Five races, one per track, six cars. Enter up to five of your racers; the best-rated house rival always races.", C_HUD_DIM, 6, 11)
         y = 17.0
         for i, row in enumerate(self.rows()):
             selected = i == self.row
@@ -1309,6 +1309,7 @@ def draw_table(ui, screen, ch, x, y, width, rows, with_arrows=True, elo=None) ->
     for hx, head in ((2, "POS"), (20, "RACER"), (width - 24, "PTS"), (width - 12, "RATING")):
         ui.text(screen, "small", head, C_HUD_DIM, x + hx, y)
     y += 3.6
+    step = 6.2 if len(rows) <= 4 else 4.3
     for row in rows:
         e = ch["entrants"][row["entrant"]]
         mine = e["kind"] == "racer"
@@ -1324,9 +1325,9 @@ def draw_table(ui, screen, ch, x, y, width, rows, with_arrows=True, elo=None) ->
             value, change = elo[row["entrant"]]
             ui.text(screen, "mid", f"{value:.0f}", C_HUD_TEXT, x + width - 12, y)
             if change is not None:
-                ui.text(screen, "small", f"{change:+.0f}", C_CYAN if change >= 0 else C_PINK,
-                        x + width - 12, y + 3.7)
-        y += 6.2
+                cx, cy = (x + width - 12, y + 3.7) if step > 5 else (x + width - 4.5, y + 0.8)
+                ui.text(screen, "small", f"{change:+.0f}", C_CYAN if change >= 0 else C_PINK, cx, cy)
+        y += step
     return y
 
 
@@ -1457,7 +1458,9 @@ class StandingsScreen(Screen):
         ui.text(screen, "big", f"RACE {self.k + 1} OF {total}: {stable.TRACK_NAMES[rec['track']].upper()}",
                 C_HUD_ACCENT, 6, 3, shadow=True)
         # The race
-        ui.panel(screen, 3, 12, 68, 40)
+        many = len(rec["results"]) > 4             # six cars: tighter rows, taller panels
+        top_h = 46 if many else 40
+        ui.panel(screen, 3, 12, 68, top_h)
         ui.text(screen, "small", "RESULT", C_HUD_ACCENT, 6, 13.5)
         for hx, head in ((2, "POS"), (15, "RACER"), (55, "PTS")):
             ui.text(screen, "small", head, C_HUD_DIM, 3 + hx, 17.5)
@@ -1469,56 +1472,61 @@ class StandingsScreen(Screen):
             draw_chip(ui, screen, e["livery"], 11, y + 0.2, 5)
             ui.text(screen, "mid", e["name"].upper()[:15], colour, 18, y)
             when = format_time(res["time"]) if res["finished"] else "did not finish"
-            ui.text(screen, "small", f"started {res['grid']}   {when}", C_HUD_DIM, 18, y + 4)
+            ui.text(screen, "small", f"started {res['grid']}   {when}", C_HUD_DIM, 18, y + (3.3 if many else 4))
             pts = f"+{res['points']}" + (" *" if res["fastest"] else "")
             ui.text(screen, "mid", pts, C_HUD_ACCENT if res["points"] else C_HUD_DIM, 58, y)
-            y += 6.4
+            y += 5.0 if many else 6.4
         quick = next((r for r in rec["results"] if r["fastest"]), None)
         if quick:
             e = ch["entrants"][quick["entrant"]]
             line = f"FASTEST LAP  {e['name'].upper()}  {format_time(quick['best_lap'])}"
-            draw_chip(ui, screen, e["livery"], 6, 45.8, 3.6)
-            ui.text(screen, "small", line, C_HUD_ACCENT, 11, 46.4)
+            fy = 51.6 if many else 45.8
+            draw_chip(ui, screen, e["livery"], 6, fy, 3.6)
+            ui.text(screen, "small", line, C_HUD_ACCENT, 11, fy + 0.6)
             if quick.get("track_record"):
-                ui.text(screen, "small", "NEW TRACK RECORD", C_PINK, 11, 49.6)
+                ui.text(screen, "small", "NEW TRACK RECORD", C_PINK, 11, fy + 3.8)
             else:
                 best = records.load(self.app.stable_root).get(rec["track"])
                 if best:
                     ui.text(screen, "small", f"record {format_time(best['time'])} {best['name']}",
-                            C_HUD_DIM, 11, 49.6)
+                            C_HUD_DIM, 11, fy + 3.8)
         # The table
-        ui.panel(screen, 74, 12, 83, 40)
+        ui.panel(screen, 74, 12, 83, top_h)
         ui.text(screen, "small", "CHAMPIONSHIP TABLE", C_HUD_ACCENT, 77, 13.5)
         elo = {r["entrant"]: (r["rating"][1], r["rating"][1] - r["rating"][0]) for r in rec["results"]
                if "rating" in r}
         draw_table(ui, screen, ch, 75, 17.5, 81, self.table, elo=elo)
         # What next
-        y = 57.0
+        y = 63.0 if many else 57.0
+        low = y - 2.0                                # top of the bottom panel
         if self.done:
             champ = ch["entrants"][ch["champion"]]
-            ui.panel(screen, 3, 55, 154, 28, border=C_HUD_ACCENT)
-            draw_chip(ui, screen, champ["livery"], 8, 58, 12)
-            ui.text(screen, "big", f"CHAMPION: {champ['name'].upper()}", C_HUD_ACCENT, 24, 58, shadow=True)
+            ui.panel(screen, 3, low, 154, 88 - low, border=C_HUD_ACCENT)
+            draw_chip(ui, screen, champ["livery"], 8, low + 3, 12)
+            ui.text(screen, "big", f"CHAMPION: {champ['name'].upper()}", C_HUD_ACCENT, 24, low + 3, shadow=True)
             draw_stars(ui, screen, championship.titles_of(self.app.stable_root, champ),
-                       26 + text_width(ui, "big", f"CHAMPION: {champ['name'].upper()}"), 58.6, 4.0, 6)
-            ny = 66.0
-            for line in ch.get("news", [])[1:6]:
+                       26 + text_width(ui, "big", f"CHAMPION: {champ['name'].upper()}"), low + 3.6, 4.0, 6)
+            ny = low + 10.5
+            for line in ch.get("news", [])[1:5 if many else 6]:
                 ui.text(screen, "small", line, C_HUD_TEXT, 24, ny)
                 ny += 3.4
-            ui.text(screen, "mid", "CONTINUE", C_HUD_ACCENT, 128, 75, shadow=True)
+            ui.text(screen, "mid", "CONTINUE", C_HUD_ACCENT, 128, 81 if many else 75, shadow=True)
         else:
             nxt = championship.next_race(ch)
-            ui.panel(screen, 3, 55, 154, 28)
+            ui.panel(screen, 3, low, 154, 88 - low)
             ui.text(screen, "mid", f"NEXT: RACE {nxt['number']}  {stable.TRACK_NAMES[nxt['track']].upper()}",
                     C_HUD_ACCENT, 8, y)
-            ui.text(screen, "small", "Starting order (leader of the table starts last):", C_HUD_DIM, 8, y + 6)
+            ui.text(screen, "small", "Starting order (leader of the table starts last):", C_HUD_DIM, 8, y + 5)
+            per_row = 3 if many else 4
             for slot, e in enumerate(nxt["grid"], start=1):
                 ent = ch["entrants"][e]
-                draw_chip(ui, screen, ent["livery"], 8 + (slot - 1) * 36, y + 11, 6)
-                ui.text(screen, "small", f"{slot}. {ent['name'][:11]}", C_HUD_TEXT, 15.5 + (slot - 1) * 36, y + 12)
+                cx = 8 + ((slot - 1) % per_row) * 36
+                cy = y + 9 + ((slot - 1) // per_row) * 5
+                draw_chip(ui, screen, ent["livery"], cx, cy, 6)
+                ui.text(screen, "small", f"{slot}. {ent['name'][:14]}", C_HUD_TEXT, cx + 7.5, cy + 1)
             for line in ch.get("news", [])[:2]:
-                ui.text(screen, "small", line, C_PINK, 8, y + 18)
-            ui.text(screen, "mid", "CONTINUE", C_HUD_ACCENT, 128, 75, shadow=True)
+                ui.text(screen, "small", line, C_PINK, 8, y + (20 if many else 18))
+            ui.text(screen, "mid", "CONTINUE", C_HUD_ACCENT, 128, 81 if many else 75, shadow=True)
 
 
 class RatingsScreen(Screen):

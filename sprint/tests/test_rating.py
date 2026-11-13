@@ -83,7 +83,7 @@ def test_every_championship_race_rates_everyone_scripted_cars_included(dirs):
     record = championship.finish_race(root, ch, race_)
     assert all(len(r["rating"]) == 2 and r["sigma"] > 0 for r in record["results"])
     table = {r["name"]: r for r in rating.table(root)}
-    assert set(table) == {"Zoe", "Careful Keith", "Dangerous Dave", "Scripted 1"}      # scripted car included
+    assert set(table) == {"Zoe", "Careful Keith", "Dangerous Dave", "Scripted 1", "Scripted 2", "Scripted 3"}  # scripted included
     assert all(r["races"] == 1 for r in table.values())
     winner = next(r for r in record["results"] if r["place"] == 1)
     assert winner["rating"][1] > winner["rating"][0]
@@ -120,7 +120,7 @@ def test_ratings_screen(app):
     app.current.row = app.current.rows().index("ratings")
     press(app, pygame.K_RETURN)
     screen = app.current
-    assert isinstance(screen, RatingsScreen) and len(screen.rows) == 4
+    assert isinstance(screen, RatingsScreen) and len(screen.rows) == 6
     press(app, pygame.K_DOWN, pygame.K_UP)
     press(app, pygame.K_ESCAPE)
     assert isinstance(app.current, StableScreen)

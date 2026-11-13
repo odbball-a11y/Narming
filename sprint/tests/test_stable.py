@@ -186,7 +186,8 @@ def test_create_a_racer_through_the_screens_then_race_it(app):
     press(app, pygame.K_RETURN)                                  # WATCH THE RACE
     view = app.current
     assert isinstance(view, RaceScreen) and view.race.rolling and view.on_continue
-    assert {d.label for d in view.race.drivers} == {"Zippy Zoe", "Careful Keith", "Dangerous Dave", "Scripted 1"}
+    assert {d.label for d in view.race.drivers} == {"Zippy Zoe", "Careful Keith", "Dangerous Dave",
+                                                    "Scripted 1", "Scripted 2", "Scripted 3"}
     while not view.over:
         view.tick()
     assert stable.load(card.racer_dir)["career"]["races"] == 1   # career recorded

@@ -238,9 +238,9 @@ a careful racer that still overtakes.
   championship screens use them. Replays store liveries and each car's own
   `car_params` (a replay of a trait car now reproduces; it did not before).
 - Championship (`ai/championship.py`): saved as `stable/championship.json`
-  (finished seasons in `stable/seasons/`). `start(root, [racer dirs])` (1-2
-  of yours, then house rivals, then scripted cars with fixed liveries, 4
-  cars, tracks `TRACK_ORDER`); `standings` (points, wins, places; `moved`),
+  (finished seasons in `stable/seasons/`). `start(root, [racer dirs])` (see the
+  six-car note below; then house rivals, then scripted cars with fixed liveries,
+  tracks `TRACK_ORDER`); `standings` (points, wins, places; `moved`),
   `grid` (race 1 seeded draw, then reverse standings, leader last),
   `build_race`, `finish_race` (points `POINTS` 10-7-5-3-2-1 + 1 fastest lap
   among finishers; DNF 0; calls `stable.record_race(defer_retire=True)` so
@@ -389,8 +389,19 @@ podium): `record_result(..., finished=)`.
   damage in all-AI races). `evolve.train(start_file=..., driving_school=True)`
   now really starts in driving school (it used to force racing school).
 
-Still to build: 6-8 cars per race (new HUD, more grid slots, slower
-training), wet/dry weather (not wanted for now), PPO as a rival method.
+- Six-car championships (`championship.FIELD` = 6, `MAX_OWN` = 5: up to five
+  of yours, the best-rated house rival always races, then the other rival, then
+  scripted cars). Rolling single-file starts handle any number of cars.
+  The race HUD is now a timing screen (`RaceRenderer.draw_hud`): rows in race
+  order (1st-3rd left, 4th-6th right), each with colour, name (cyan while in a
+  tow), lap, current lap time (or finishing time), last, best (pink = the race's
+  fastest) and a damage bar; `PLACES` goes to 8th. The results overlay, the
+  championship table and the standings screen tighten their rows for six.
+  AI training races are still four cars (three rivals); not yet trained in
+  six-car fields.
+
+Still to build: six-car training races (slower training), wet/dry weather (not
+wanted for now), PPO as a rival method.
 
 Verify changes the way the rest was verified: pytest, `headless.py` on both
 tracks, a short `train.py` run, and `render_frames.py` then look at the PNGs.

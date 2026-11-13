@@ -40,8 +40,8 @@ from sim.driver import create_driver
 
 POINTS = [10, 7, 5, 3, 2, 1, 0, 0]
 FASTEST_LAP_POINT = 1
-MAX_OWN = 3            # a race holds four cars; the highest-rated house rival always has one
-FIELD = 4
+MAX_OWN = 5            # six cars a race; the highest-rated house rival always has a place
+FIELD = 6
 RACE_LAPS = 5          # every championship race, on every track
 TRACK_ORDER = ["oval", "speedway", "esses", "technical", "grandprix"]
 
@@ -92,7 +92,7 @@ def house_field(root) -> list[dict]:
 
 
 def start(root, racer_dirs) -> dict:
-    """Begin a season with up to three of your racers; the field is filled
+    """Begin a season with up to MAX_OWN of your racers; the field is filled
     with the highest-rated house rivals, then scripted cars."""
     root = Path(root)
     if active(root):

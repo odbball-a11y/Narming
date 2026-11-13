@@ -111,7 +111,8 @@ def test_a_season_has_five_races_the_right_points_and_a_reverse_grid(dirs):
     with pytest.raises(ValueError):
         championship.start(root, [zoe])                                # one at a time
     first_grid = championship.grid(ch, 0)
-    assert sorted(first_grid) == [0, 1, 2, 3] and first_grid == championship.grid(ch, 0)   # drawn, but fixed
+    assert len(ch["entrants"]) == championship.FIELD == 6
+    assert sorted(first_grid) == list(range(6)) and first_grid == championship.grid(ch, 0)   # drawn, but fixed
     for k in range(5):
         nxt = championship.next_race(ch)
         assert nxt["number"] == k + 1 and nxt["track"] == championship.TRACK_ORDER[k]
@@ -130,8 +131,8 @@ def test_a_season_has_five_races_the_right_points_and_a_reverse_grid(dirs):
     assert championship.active(root) is None and ch["done"]            # filed away
     assert (championship.seasons_dir(root) / "season_001.json").exists()
     table = championship.standings(ch)
-    assert [r["position"] for r in table] == [1, 2, 3, 4]
-    assert table[0]["points"] >= table[1]["points"] >= table[2]["points"] >= table[3]["points"]
+    assert [r["position"] for r in table] == [1, 2, 3, 4, 5, 6]
+    assert all(a["points"] >= b["points"] for a, b in zip(table, table[1:]))
     assert ch["champion"] == table[0]["entrant"] and "champion" in ch["news"][0]
     assert stable.load(zoe)["career"]["races"] == 5                    # careers counted, once per race
     assert stable.clock(root) == 5
@@ -220,9 +221,8 @@ def test_play_a_season_through_the_screens(app):
     press(app, pygame.K_RETURN)                                        # tick Ann
     press(app, pygame.K_DOWN, pygame.K_RETURN)                         # and Ben
     press(app, pygame.K_DOWN, pygame.K_RETURN)                         # and Cal
-    press(app, pygame.K_DOWN, pygame.K_RETURN)                         # a fourth is refused
-    assert len(setup.chosen) == 3 and "At most" in setup.message
-    assert [f["kind"] for f in setup.field()] == ["yours", "yours", "yours", "house rival"]
+    assert len(setup.chosen) == 3
+    assert [f["kind"] for f in setup.field()] == ["yours"] * 3 + ["house rival"] * 2 + ["scripted"]
     setup.row = setup.rows().index("start")
     press(app, pygame.K_RETURN)
     hub = app.current
@@ -487,9 +487,9 @@ def test_the_training_history_screen_lists_every_round(app):
 def test_all_your_cars_can_enter_and_the_best_rated_house_rival_stays(dirs):
     from ai import rating
     root = stable.STABLE_DIR
-    cars = [instant_racer(root, n) for n in ("Ann", "Ben", "Cal", "Dee")]
+    cars = [instant_racer(root, n) for n in ("Ann", "Ben", "Cal", "Dee", "Eve", "Fay")]
     with pytest.raises(ValueError):
-        championship.start(root, cars)                                 # four of yours leave no room
+        championship.start(root, cars)                                 # six of yours leave no room
     rivals = stable.house_rivals()
     assert len(rivals) >= 2
     low, high = rivals[0], rivals[1]
@@ -499,9 +499,9 @@ def test_all_your_cars_can_enter_and_the_best_rated_house_rival_stays(dirs):
                       [{"entrant": 0, "place": 1, "finished": True}, {"entrant": 1, "place": 2, "finished": True}],
                       "oval")
     assert championship.house_field(root)[0]["id"] == high["id"]
-    ch = championship.start(root, cars[:3])
-    assert [e["kind"] for e in ch["entrants"]] == ["racer", "racer", "racer", "house"]
-    assert ch["entrants"][3]["id"] == high["id"]
+    ch = championship.start(root, cars[:5])
+    assert [e["kind"] for e in ch["entrants"]] == ["racer"] * 5 + ["house"]
+    assert ch["entrants"][5]["id"] == high["id"]
 
 
 def test_records_from_older_physics_are_kept_aside(tmp_path):

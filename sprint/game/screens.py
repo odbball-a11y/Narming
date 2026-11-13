@@ -542,7 +542,9 @@ class RaceScreen(Screen):
                         (126, "DAMAGE")):
             ui.text(screen, "small", head, C_HUD_DIM, x, y)
         y += 3.6
-        for row in self.race.results():
+        results = self.race.results()
+        step = 5.2 if len(results) <= 4 else 3.9
+        for row in results:
             look = self.liveries[row["car"]]
             colour = liv.rgb(look["colour"])
             ui.text(screen, "mid", PLACES[row["place"] - 1], colour, 26, y)
@@ -553,7 +555,7 @@ class RaceScreen(Screen):
             ui.text(screen, "mid", format_time(row["best_lap"]), C_HUD_ACCENT, 108, y)
             damage = self.race.world.cars[row["car"]].damage
             ui.text(screen, "mid", f"{damage * 100:.0f}%", C_PINK if damage > 0.5 else C_HUD_TEXT, 126, y)
-            y += 5.2
+            y += step
         if self.is_replay:
             same = self.race.final_hash == self.recording.final_hash
             if same:
@@ -561,10 +563,10 @@ class RaceScreen(Screen):
             else:
                 why = "; ".join(self.problems) or "unknown reason"
                 note, colour = f"Replay differs from the recording ({why}).", C_PINK
-            ui.text(screen, "small", note, colour, 80, 51.5, "center")
+            ui.text(screen, "small", note, colour, 80, max(51.5, y + 0.6), "center")
         elif self.message:
-            ui.text(screen, "small", self.message, C_CYAN, 80, 51.5, "center")
-        draw_list(ui, screen, self.result_items(), self.menu_index, 62, 56, 6.2, "mid")
+            ui.text(screen, "small", self.message, C_CYAN, 80, max(51.5, y + 0.6), "center")
+        draw_list(ui, screen, self.result_items(), self.menu_index, 62, max(56.0, y + 4.6), 6.2, "mid")
 
 
 # ----------------------------------------------------------------- AI lab
