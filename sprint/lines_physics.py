@@ -16,8 +16,10 @@ import sim.scripted
 migrate.ensure()
 pop = load_pop_file("house/graduate.npz")
 arch = dict(brain.DEFAULT_ARCH)
-VARIANTS = {"classic": dict(scrub=0.0, brake_circle=0.0, throttle_circle=0.0),
-            "new default": {}}
+VARIANTS = {"current (scrub + circle)": {},
+            "+ understeer + yaw lag": dict(front_limit=1.0, yaw_lag=0.08),
+            "+ weight transfer": dict(front_limit=1.0, yaw_lag=0.08, weight_transfer=0.25, lateral_transfer=0.1),
+            "+ transfer 0.15": dict(front_limit=1.0, yaw_lag=0.08, weight_transfer=0.15, lateral_transfer=0.1)}
 def run(kind, track, change):
     params = replace(tuning.car_params(0), **change)
     w = World(Track.load(track), 1, laps=3, params=[params], ghost=True)
