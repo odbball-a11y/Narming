@@ -15,7 +15,34 @@
    16
   ],
   "memory": 4,
-  "inputs": 6
+  "inputs": 6,
+  "notes": [
+   [
+    "esses",
+    9,
+    "4e911b9a5559e957"
+   ],
+   [
+    "grandprix",
+    9,
+    "cc67893c5a62f5e1"
+   ],
+   [
+    "oval",
+    4,
+    "013dc500ef767b91"
+   ],
+   [
+    "speedway",
+    5,
+    "6a236c863f55517b"
+   ],
+   [
+    "technical",
+    7,
+    "49d3b277bcb65c92"
+   ]
+  ]
  },
  "created": "2026-11-12",
  "generations": 60,
@@ -111,5 +138,6 @@
   "trim": "stripe",
   "trim_colour": "white",
   "number": 13
- }
+ },
+ "notes_generations": 20
 }
