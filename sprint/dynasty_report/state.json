@@ -294,22 +294,55 @@
   "braking": 1,
   "aggression": 0.45,
   "caution": 0.33,
-  "rating": 996,
+  "rating": 1001,
   "peak": 1338,
-  "rated_races": 5,
-  "races": 5,
-  "wins": 2,
-  "podiums": 3,
+  "rated_races": 15,
+  "races": 15,
+  "wins": 4,
+  "podiums": 10,
   "titles": 1,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 1222.0054164881517,
-   "speedway": 634.7574311174076,
-   "esses": 919.4526838088244,
-   "technical": 1326.204546629364,
-   "grandprix": 676.300638589014
+   "oval": 1010.7688497863594,
+   "speedway": 887.4575863129122,
+   "esses": 863.6088533545354,
+   "technical": 992.9852527995902,
+   "grandprix": 936.0020581114759
   },
   "pace": 0.8903
+ },
+ {
+  "id": "cinder-brick",
+  "name": "Cinder Brick",
+  "gen": 3,
+  "status": "racing",
+  "parents": [
+   "Comet Brick",
+   "Comet Velvet"
+  ],
+  "weight": "heavy",
+  "top_speed": 3,
+  "accel": 3,
+  "handling": 4,
+  "braking": 2,
+  "aggression": 0.51,
+  "caution": 0.45,
+  "rating": 1051,
+  "peak": 1086,
+  "rated_races": 5,
+  "races": 5,
+  "wins": 1,
+  "podiums": 4,
+  "titles": 0,
+  "specialty": "oval",
+  "tracks": {
+   "oval": 628.3826533078598,
+   "speedway": 964.1434551582746,
+   "esses": 1143.9882692966853,
+   "technical": 1326.2369110478323,
+   "grandprix": 941.4004058940178
+  },
+  "pace": 0.9242
  },
  {
   "id": "comet-brick",
@@ -426,20 +459,20 @@
   "braking": 3,
   "aggression": 0.61,
   "caution": 0.47,
-  "rating": 1049,
+  "rating": 1039,
   "peak": 1124,
-  "rated_races": 10,
-  "races": 10,
+  "rated_races": 15,
+  "races": 15,
   "wins": 1,
-  "podiums": 8,
+  "podiums": 11,
   "titles": 0,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 902.5389313898994,
-   "speedway": 846.6847582537315,
-   "esses": 1136.4825320772818,
-   "technical": 987.3219946459404,
-   "grandprix": 934.845032417495
+   "oval": 872.8458537979441,
+   "speedway": 861.5111233630641,
+   "esses": 1051.6329545686285,
+   "technical": 1034.596705771203,
+   "grandprix": 912.2184879869237
   },
   "pace": 0.938
  },
@@ -492,6 +525,39 @@
   "braking": 3,
   "aggression": 0.43,
   "caution": 0.62,
+  "rating": 1041,
+  "peak": 1104,
+  "rated_races": 10,
+  "races": 10,
+  "wins": 4,
+  "podiums": 7,
+  "titles": 2,
+  "specialty": "all-rounder",
+  "tracks": {
+   "oval": 972.4774105304894,
+   "speedway": 717.0556515095944,
+   "esses": 1394.1726491635382,
+   "technical": 612.1263396556111,
+   "grandprix": 1332.8571272361203
+  },
+  "pace": 0.9041
+ },
+ {
+  "id": "rocket-velvet",
+  "name": "Rocket Velvet",
+  "gen": 3,
+  "status": "racing",
+  "parents": [
+   "Comet Velvet",
+   "Fury Thunderbolt"
+  ],
+  "weight": "light",
+  "top_speed": 5,
+  "accel": 3,
+  "handling": 2,
+  "braking": 2,
+  "aggression": 0.44,
+  "caution": 0.39,
   "rating": null,
   "peak": null,
   "rated_races": 0,
@@ -501,7 +567,7 @@
   "titles": 0,
   "specialty": "all-rounder",
   "tracks": {},
-  "pace": 0.9041
+  "pace": 0.9085
  },
  {
   "id": "storm-slipstream",
@@ -639,7 +705,7 @@
   "id": "zigzag-slipstream",
   "name": "Zigzag Slipstream",
   "gen": 1,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Sally Slipstream",
    "Vera Velvet"

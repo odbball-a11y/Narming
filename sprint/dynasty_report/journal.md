@@ -146,3 +146,13 @@
 - ` 5.18h`   news: Zigzag Slipstream has died. Remembered in the hall of fame.
 - ` 5.18h` breeding **Cinder Brick**: Comet Brick x Comet Velvet (learner)
 - ` 5.23h`   born Cinder Brick: gen 3, speed 3  accel 3  handling 4  brakes 2  heavy, aggression 0.51, caution 0.45 (2.7 min)
+- ` 5.30h` schooled Cinder Brick (8 generations, 4.4 min)
+- ` 5.41h` between races **Cinder Brick** takes a Oval specialist course (20 generations, 6.5 min) with Scripted car, Itself (its own best so far), Barnaby Brick; now Oval specialist
+- ` 5.41h` season 26: **Orbit Slipstream** (racer) wins the title. Orbit Slipstream 37 | Cinder Brick 32 | Ace Thunderbolt 32 | Careful Keith 29
+- ` 5.41h` breeding **Rocket Velvet**: Comet Velvet x Fury Thunderbolt (fastest)
+- ` 5.45h`   born Rocket Velvet: gen 3, speed 5  accel 3  handling 2  brakes 2  light, aggression 0.44, caution 0.39 (2.7 min)
+- ` 5.53h` schooled Rocket Velvet (8 generations, 4.4 min)
+- ` 5.61h` between races **Rocket Velvet** takes an all-rounder course (10 generations, 5.3 min) with Scripted car, Itself (its own best so far), Fury Thunderbolt; now all-rounder
+- ` 5.62h` season 27: **Careful Keith** (house) wins the title. Careful Keith 34 | Orbit Slipstream 20 | Cinder Brick 18 | Rocket Velvet 14
+- ` 5.62h` breeding **Flash Brick**: Comet Brick x Comet Velvet (learner)
+- ` 5.66h`   born Flash Brick: gen 3, speed 2  accel 2  handling 4  brakes 4  heavy, aggression 0.52, caution 0.43 (2.6 min)
