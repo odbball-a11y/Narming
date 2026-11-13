@@ -400,6 +400,30 @@ podium): `record_result(..., finished=)`.
   AI training races are still four cars (three rivals); not yet trained in
   six-car fields.
 
+- Track notes (user choices: per corner, speed + line + throttle, inherited,
+  house rivals get notes that keep evolving). `Track.corners()` finds apexes as
+  peaks of the smoothed ideal-line curvature at least 25 units apart and shares
+  the lap between them (Oval 4, Speedway 5, Technical 7, Esses 9, Grand Prix 9).
+  A driver's vector = network weights + notes for every track
+  (`arch["notes"]` = [[track, corners, fingerprint], ...]; `with_notes`,
+  `genome_size`, `fit_genomes` pads older vectors with zero notes). Notes never
+  touch the network: `observe` reads `car.notes` (set by `NeuralDriver.reset`,
+  `PackRun`, `test_race`) and scales the corner's safe speed (+-25%), shifts its
+  ideal line (+-half the half-width) and, after the apex, moves the speed-margin
+  input (when to get on the power). Zero notes drive exactly as before (tested).
+  `evolve.train(notes=True)`; `breed(frozen=)` keeps notes of tracks not being
+  trained (and, with `notes_only`, the whole network) unchanged. Stable training
+  and foal camps use notes; `crossover` takes each corner's notes from one
+  parent. `stable.house_notes(id, gens)` / `python -m ai.stable house-notes
+  "Careful Keith" --generations 20` is a notes-only camp (run
+  `training/house-<id>-notes`, continues each call) written back into the rival.
+  Screens: TRAINING HISTORY shows track knowledge (generations per track) and a
+  map per track with corners coloured by the speed note.
+  Experiment (Speedway only, 30 gens from the graduate, same seed): head to head
+  over 16 five-lap races, with notes gen 30 / gen 25 averaged place 2.75 / 1.75
+  against 3.25 / 2.25 without, best laps 13.46 / 12.90 v 13.56 / 13.21; the
+  notes were still small (+-0.1) after 30 gens. One seed.
+
 Still to build: six-car training races (slower training), wet/dry weather (not
 wanted for now), PPO as a rival method.
 
