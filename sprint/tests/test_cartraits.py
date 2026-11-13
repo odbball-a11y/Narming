@@ -182,15 +182,16 @@ def test_exam_on_several_tracks_in_a_chosen_car():
     assert set(report) == {"oval", "speedway"}
 
 
-def test_tyre_scrub_and_friction_circle_default_to_off_and_cost_slides_only():
+def test_tyre_scrub_and_friction_circle_are_on_and_cost_slides_only():
     import math
     from dataclasses import replace
     from sim import tuning
     from sim.driver import Controls
     from sim.track import Track
     from sim.world import World
-    base = tuning.car_params(0)
-    assert base.scrub == 0.0 and base.brake_circle == 0.0 and base.throttle_circle == 0.0
+    new = tuning.car_params(0)
+    assert (new.scrub, new.brake_circle, new.throttle_circle) == (8.0, 0.8, 0.6)
+    base = replace(new, **tuning.CLASSIC_PHYSICS)            # the classic physics is still one switch away
 
     def one_tick(params, sideways):
         """Forward speed after one tick of a car moving at 25 u/s with `sideways` u/s of slide."""

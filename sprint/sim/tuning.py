@@ -78,15 +78,17 @@ class CarParams:
 
     # Tyre scrub: a car that keeps sliding sideways loses forward speed in
     # proportion (deceleration = scrub x the sideways speed grip could not
-    # remove).  0 = a slide is free (the original model).  A clean line never
+    # remove).  0 = a slide is free (the original model, "classic" physics).  A clean line never
     # slides, so it never pays this.
-    scrub: float = 0.0
+    scrub: float = 8.0
 
     # Friction circle: braking and throttle use up the tyres' grip budget, so
     # cornering grip = grip x sqrt(1 - (brake_circle x brake)^2 - (throttle_circle x throttle)^2).
-    # Both 0 = the original linear throttle/brake grip losses above.
-    brake_circle: float = 0.0
-    throttle_circle: float = 0.0
+    # Both 0 = the original linear throttle/brake grip losses above (classic).
+    # 0.8 / 0.6: braking while turning costs a lot of grip (0.6 x at full brake);
+    # full throttle costs about what the linear loss did.
+    brake_circle: float = 0.8
+    throttle_circle: float = 0.6
 
     # Maximum turn rate (rad/s) at low speed with full steering lock.
     # Higher: darts into hairpins, twitchy.  Lower: wide turning circle.
@@ -317,7 +319,8 @@ FINISH_GRACE = 30.0
 COOLDOWN = 1.5
 
 
-_NEWER_PHYSICS = {"scrub": 0.0, "brake_circle": 0.0, "throttle_circle": 0.0}
+CLASSIC_PHYSICS = {"scrub": 0.0, "brake_circle": 0.0, "throttle_circle": 0.0}   # the physics before tyre scrub
+_NEWER_PHYSICS = CLASSIC_PHYSICS
 
 
 def _fingerprint_params():

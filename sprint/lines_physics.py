@@ -16,9 +16,8 @@ import sim.scripted
 migrate.ensure()
 pop = load_pop_file("house/graduate.npz")
 arch = dict(brain.DEFAULT_ARCH)
-VARIANTS = {"old": {}, "scrub 4": dict(scrub=4.0), "scrub 8": dict(scrub=8.0), "scrub 16": dict(scrub=16.0),
-            "hard circle": dict(brake_circle=0.9, throttle_circle=0.7),
-            "scrub 8 + hard circle": dict(scrub=8.0, brake_circle=0.9, throttle_circle=0.7)}
+VARIANTS = {"classic": dict(scrub=0.0, brake_circle=0.0, throttle_circle=0.0),
+            "new default": {}}
 def run(kind, track, change):
     params = replace(tuning.car_params(0), **change)
     w = World(Track.load(track), 1, laps=3, params=[params], ghost=True)
@@ -31,7 +30,7 @@ def run(kind, track, change):
     return w.cars[0].best_lap, slide / max(1, ticks), w.cars[0].damage
 tracks = Track.available()
 print(f"{'physics':18s} {'AI lap vs old-physics scripted':>32s} {'AI slide%':>10s} {'AI damage%':>10s}   scripted lap vs old")
-base_s = {t: run("scripted", t, {})[0] for t in tracks}
+base_s = {t: run("scripted", t, dict(scrub=0.0, brake_circle=0.0, throttle_circle=0.0))[0] for t in tracks}
 for name, change in VARIANTS.items():
     ai = {t: run("ai", t, change) for t in tracks}
     sc = {t: run("scripted", t, change) for t in tracks}

@@ -108,7 +108,7 @@ class Recording:
             if i < len(self.liveries):
                 driver.livery = self.liveries[i]
             if i < len(self.car_params) and self.car_params[i]:
-                own = dict(self.car_params[i])
+                own = dict(tuning.CLASSIC_PHYSICS, **self.car_params[i])    # recordings from before tyre scrub have none
                 own["traits"] = tuple(own.get("traits", ()))
                 driver.car_params = tuning.CarParams(**own)
             entries.append((slot, driver))

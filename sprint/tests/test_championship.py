@@ -502,3 +502,13 @@ def test_all_your_cars_can_enter_and_the_best_rated_house_rival_stays(dirs):
     ch = championship.start(root, cars[:3])
     assert [e["kind"] for e in ch["entrants"]] == ["racer", "racer", "racer", "house"]
     assert ch["entrants"][3]["id"] == high["id"]
+
+
+def test_records_from_older_physics_are_kept_aside(tmp_path):
+    import json
+    from ai import records
+    (tmp_path / "records.json").write_text(json.dumps({"oval": {"time": 9.0, "name": "Old", "livery": None, "season": 1}}))
+    assert records.load(tmp_path) == {}                            # classic records cannot be beaten by new physics
+    assert records.update(tmp_path, "oval", 11.0, {"name": "New", "livery": None}, 2)
+    assert records.load(tmp_path)["oval"]["name"] == "New"
+    assert json.loads((tmp_path / "records.classic.json").read_text())["oval"]["name"] == "Old"
