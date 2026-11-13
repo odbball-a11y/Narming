@@ -92,3 +92,14 @@
 - ` 3.13h`   news: Tilly Thunderbolt has died. Remembered in the hall of fame.
 - ` 3.13h` breeding **Vortex Brick**: Zephyr Brick x Kestrel Velvet (fastest)
 - ` 3.17h`   born Vortex Brick: gen 2, speed 3  accel 3  handling 3  brakes 3  heavy, aggression 0.53, caution 0.4 (2.7 min)
+- ` 3.25h` schooled Vortex Brick (8 generations, 4.5 min)
+- ` 3.46h` between races **Vortex Brick** takes a Grand Prix specialist course (20 generations, 12.6 min) with Scripted car, Itself (its own best so far), Tilly Thunderbolt; now Grand Prix specialist
+- ` 3.46h` season 17: **Vortex Brick** (racer) wins the title. Vortex Brick 36 | Zigzag Slipstream 32 | Comet Velvet 31 | Careful Keith 28
+- ` 3.46h`   news: Zigzag Slipstream retires to stud after 20 races.
+- ` 3.46h` breeding **Fury Thunderbolt**: Zephyr Brick x Storm Thunderbolt (learner)
+- ` 3.50h`   born Fury Thunderbolt: gen 2, speed 5  accel 4  handling 2  brakes 1  light, aggression 0.49, caution 0.45 (2.7 min)
+- ` 3.58h` schooled Fury Thunderbolt (8 generations, 4.4 min)
+- ` 3.67h` between races **Fury Thunderbolt** takes an all-rounder course (10 generations, 5.3 min) with Scripted car, Itself (its own best so far), Mischief Brick; now all-rounder
+- ` 3.67h` season 18: **Fury Thunderbolt** (racer) wins the title. Fury Thunderbolt 30 | Careful Keith 28 | Vortex Brick 25 | Comet Velvet 21
+- ` 3.67h` breeding **Storm Slipstream**: Mischief Brick x Zigzag Slipstream (fastest)
+- ` 3.71h`   born Storm Slipstream: gen 2, speed 5  accel 1  handling 3  brakes 3  medium, aggression 0.49, caution 0.35 (2.7 min)
