@@ -47,8 +47,19 @@ _INPUTS_V1 = (
 _INPUTS_V2 = _INPUTS_V1 + [f"curvature {int(d)} ahead" for d in FAR_AHEAD] + [
     "room to barrier left", "room to barrier right", "race place", "race left"]
 _INPUTS_V3 = _INPUTS_V2 + ["car top speed", "car acceleration", "car handling", "car braking", "car weight"]
-INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3}
-INPUT_VERSION = 3
+# Version 4: how to take corners.  Where the ideal (minimum-curvature) line
+# is, how fast the next corners can be taken and how far off that speed the
+# car is, and how hard the tyres are working now.
+_INPUTS_V4 = _INPUTS_V3 + ["line offset now", "line offset 12 ahead", "line offset 30 ahead",
+                           "speed margin", "safe speed ahead", "corner distance", "grip use"]
+INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4}
+INPUT_VERSION = 4
+
+# Distances ahead (units) scanned for the corner that limits speed, and the
+# braking the car is assumed to use to reach it (a fraction of full braking).
+CORNER_SCAN = (6.0, 12.0, 20.0, 32.0, 48.0, 70.0, 100.0)
+BRAKE_PLAN = 0.6
+GRIP_PLAN = 0.9             # fraction of the tyres' grip used to work out safe corner speed
 INPUT_NAMES = INPUT_VERSIONS[INPUT_VERSION]
 N_INPUTS = len(INPUT_NAMES)
 N_CONTROLS = 2          # steering; throttle (+) / brake (-)
@@ -163,6 +174,30 @@ def observe(world, i: int) -> list[float]:
 
     # ---- input version 3: the car it is driving (-1..1 each) ----
     obs.extend(car.params.traits)
+
+    # ---- input version 4: lines and corner speed ----
+    ideal_off, ideal_curv = track.ideal()
+    lat = car.lateral
+    obs.append(max(-2.0, min(2.0, (ideal_off[idx] - lat) / hw)))
+    for d in (12.0, 30.0):
+        k = (idx + int(d / ds)) % n
+        obs.append(max(-2.0, min(2.0, (ideal_off[k] - lat) / track._hw[k])))
+    p = car.params
+    vf = max(0.0, (car.vx * ch + car.vy * sh))
+    grip = p.grip * GRIP_PLAN
+    decel = p.brake_decel * BRAKE_PLAN
+    allowed = 1e9
+    slowest, where = 1e9, CORNER_SCAN[-1]
+    for d in CORNER_SCAN:
+        kappa = ideal_curv[(idx + int(d / ds)) % n]
+        safe = math.sqrt(grip / kappa) if kappa > 1e-4 else 60.0
+        if safe < slowest:
+            slowest, where = safe, d
+        allowed = min(allowed, math.sqrt(safe * safe + 2.0 * decel * d))
+    obs.append(max(-1.0, min(1.0, vf / allowed - 1.0)))                 # > 0: too fast for what is coming
+    obs.append(min(1.5, slowest / 32.0))
+    obs.append(where / CORNER_SCAN[-1])
+    obs.append(min(2.0, vf * vf * ideal_curv[idx] / grip))              # share of the tyres' grip in use now
     return obs
 
 

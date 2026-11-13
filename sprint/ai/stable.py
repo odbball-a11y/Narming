@@ -47,6 +47,7 @@ STABLE_DIR = evolve.PROJECT / "stable"
 WORKSHOP_DIR = evolve.PROJECT / "workshop"
 
 POPULATION = 80
+SOLO_SHARE = 0.5      # how much of a racer's training score is pure pace (the rest is racing); the Lab default is 0.2
 GENERATION_CHOICES = [10, 20, 30, 40, 50]
 TRAINING_BUDGET = 50    # training generations a racer gets in its whole life (not in the workshop)
 CAREER_RACES = 20       # races before a racer retires to stud
@@ -498,7 +499,7 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
                  seed=index, tracks=tracks, exam_tracks=list(grad["tracks"]), arch=grad["arch"],
                  races_per_track=races,
                  race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
-                 race_weights=sliders_to_weights(v["aggression"], v["caution"]),
+                 race_weights=sliders_to_weights(v["aggression"], v["caution"]), solo_share=SOLO_SHARE,
                  partners=v["partners"], name=racer["name"], workers=workers, car=traits_of(racer_dir),
                  on_generation=on_generation, log=lambda m: None)
 
@@ -846,7 +847,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:
         score, _ = evolve.score_population(foals, arch, tracks, trial, 0.0, pool, chunks=max(1, workers),
-                                           weights=sliders_to_weights(0.0, 0.0),
+                                           weights=sliders_to_weights(0.0, 0.0), solo_share=SOLO_SHARE,
                                            setup={"slot": 0, "damage": 0.0, "car": traits})
     finally:
         if pool:
@@ -869,7 +870,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
                      elites=2, seed=info["seed"] % 100000 + i, tracks=tracks, arch=arch, races_per_track=1,
                      race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                      race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
-                     workers=workers, log=lambda m: None, car=traits)
+                     solo_share=SOLO_SHARE, workers=workers, log=lambda m: None, car=traits)
         hist = evolve.load_history(litter_dir / run)
         paces_by_gen = [pace(h["exam"]) for h in hist]
         valid = [p for p in paces_by_gen if p]

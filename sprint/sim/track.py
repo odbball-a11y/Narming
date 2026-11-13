@@ -66,6 +66,9 @@ def _resample_closed(dense: np.ndarray, target_ds: float):
     return np.stack(cols, axis=1), length
 
 
+_IDEAL_CACHE: dict = {}
+
+
 class Track:
     """Immutable track geometry plus the queries drivers and physics need."""
 
@@ -168,6 +171,64 @@ class Track:
             x = self._px[idx] - self._ty[idx] * lat
             y = self._py[idx] + self._tx[idx] * lat
             self.grid.append((x, y, self._heading[idx]))
+
+    # ------------------------------------------------------- the ideal line
+
+    IDEAL_MARGIN = 1.6          # the ideal line keeps this far from the track edge
+    IDEAL_STEP = 2.0            # solved on a coarse grid of this spacing
+
+    def _solve_ideal(self) -> np.ndarray:
+        """Lateral offsets (one per sample) of the minimum-curvature line: the
+        smoothest path inside the track, which is out-in-out through bends.
+        A small bounded least-squares problem on a coarse grid; independent
+        of any car, so every driver can be told where it is."""
+        stride = max(1, int(round(self.IDEAL_STEP / self.ds)))
+        idx = np.arange(0, self.n, stride)
+        m = len(idx)
+        c, nrm = self.center[idx], self.normal[idx]
+        bound = np.maximum(self.half_width[idx] - self.IDEAL_MARGIN, 0.3)
+        prev, nxt = np.roll(np.arange(m), 1), np.roll(np.arange(m), -1)
+        # second difference of p_i = c_i + n_i o_i, as rows (x then y) in o
+        a = np.zeros((2 * m, m))
+        for dim in range(2):
+            rows = np.arange(m) + dim * m
+            a[rows, prev] += nrm[prev, dim]
+            a[rows, np.arange(m)] += -2.0 * nrm[:, dim]
+            a[rows, nxt] += nrm[nxt, dim]
+        b = np.concatenate([c[prev, 0] - 2.0 * c[:, 0] + c[nxt, 0], c[prev, 1] - 2.0 * c[:, 1] + c[nxt, 1]])
+        o = np.zeros(m)
+        fixed = np.zeros(m, dtype=bool)
+        for _ in range(12):                         # active set: pin offsets that hit the edge
+            free = ~fixed
+            rhs = -b - a[:, fixed] @ o[fixed]
+            o[free] = np.linalg.lstsq(a[:, free], rhs, rcond=None)[0] if free.any() else 0.0
+            hit = free & (np.abs(o) > bound)
+            if not hit.any():
+                break
+            o[hit] = np.sign(o[hit]) * bound[hit]
+            fixed |= hit
+        o = np.clip(o, -bound, bound)
+        grid = np.append(idx, self.n).astype(float)
+        return np.interp(np.arange(self.n), grid, np.append(o, o[0]))
+
+    def ideal(self):
+        """(offsets, |curvature|) of the ideal line, per sample (lists);
+        solved once per track and kept."""
+        key = (self.key, self.n, round(float(self.length), 3))
+        hit = _IDEAL_CACHE.get(key)
+        if hit is None:
+            off = self._solve_ideal()
+            pos = self.center + self.normal * off[:, None]
+            ahead, behind = np.roll(pos, -1, axis=0), np.roll(pos, 1, axis=0)
+            tangent = ahead - behind
+            heading = np.arctan2(tangent[:, 1], tangent[:, 0])
+            dh = (np.roll(heading, -1) - np.roll(heading, 1) + np.pi) % (2 * np.pi) - np.pi
+            curv = np.abs(dh / (2.0 * self.ds))
+            padded = np.concatenate([curv[-5:], curv, curv[:5]])
+            curv = np.convolve(padded, np.ones(11) / 11.0, mode="valid")
+            hit = (off.tolist(), curv.tolist())
+            _IDEAL_CACHE[key] = hit
+        return hit
 
     def rolling_start(self, place: int) -> tuple[float, float, float]:
         """(x, y, heading) of the car `place` back in a single-file rolling

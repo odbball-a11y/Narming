@@ -409,7 +409,8 @@ def solo_setup(gen: int) -> dict:
 
 def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=None,
                      bonus: float = 0.0, pool=None, chunks: int = 1,
-                     weights: dict | None = None, setup: dict | None = None) -> tuple[np.ndarray, dict]:
+                     weights: dict | None = None, setup: dict | None = None,
+                     solo_share: float | None = None) -> tuple[np.ndarray, dict]:
     """Fitness for every driver (higher is better) and per-driver averages.
 
     No scenarios: driving school (solo only).  With scenarios: racing school,
@@ -448,7 +449,8 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
         k += len(pieces)
     race /= len(scenarios)
     averages = {key: value / len(scenarios) for key, value in totals.items()}
-    return SOLO_SHARE * solo + (1.0 - SOLO_SHARE) * race, averages
+    share = SOLO_SHARE if solo_share is None else solo_share
+    return share * solo + (1.0 - share) * race, averages
 
 
 # ---------------------------------------------------------------- breeding
@@ -662,7 +664,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           name: str | None = None, workers: int = 0, on_generation=None, log=print,
           root=None, start_file: str | None = None, race_weights: dict | None = None,
           race_seconds: dict | None = None, partners: list | None = None, car=None,
-          driving_school: bool = False, exam_tracks: list | None = None) -> Path:
+          driving_school: bool = False, exam_tracks: list | None = None,
+          solo_share: float | None = None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -722,7 +725,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "phase2_start": phase2_from, "arch": arch or dict(DEFAULT_ARCH),
                   "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
                   "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
-                  "partners": partners, "car": car, "exam_tracks": exam_tracks,
+                  "partners": partners, "car": car, "exam_tracks": exam_tracks, "solo_share": solo_share,
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
@@ -777,6 +780,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             fitness, averages = score_population(pop, arch, tracks, resolved, bonus, pool,
                                                  chunks=max(1, workers),
                                                  weights=config.get("race_weights"),
+                                                 solo_share=config.get("solo_share"),
                                                  setup=dict(solo_setup(gen), car=car_for(config, gen)))
             order = np.argsort(-fitness, kind="stable")
             fitness = fitness[order]
