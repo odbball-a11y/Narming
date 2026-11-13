@@ -16,6 +16,7 @@ python headless.py [--track T] [--cars N] [--laps N] [--record F] [--replay F] [
 python train.py [--run NAME] [--generations N] [--hidden 24 16] [--memory 4] [--races 2]
                 [--no-race-bonuses] [--race-laps L] [--racing-from GEN] [--population N] [--workers N]
 python train.py --run dave --from speedway --style aggressive --name "Dangerous Dave"   # training camp
+python train.py --run long --from graduate --car random --generations 1000   # from the shipped graduate
 python compare.py RUN[:GEN] RUN[:GEN] ... [--track T] [--races N] [--laps N]
 python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest

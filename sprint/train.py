@@ -52,7 +52,9 @@ def main() -> int:
                     help="racing-school races per driver per track (new runs; default 2, or the --from run's)")
     ap.add_argument("--from", dest="start_from", metavar="RUN[:GEN]",
                     help="training camp: start a new run from another run's drivers (its latest "
-                         "generation unless GEN is given), straight into racing school")
+                         "generation unless GEN is given), straight into racing school.  "
+                         "--from graduate starts from the shipped graduate (house/graduate.npz) "
+                         "with its tracks, network and race lengths")
     ap.add_argument("--driving-school", action="store_true",
                     help="with --from: start in driving school (solo laps) and move on to racing school "
                          "once the champion laps every track cleanly, instead of racing straight away")
@@ -97,13 +99,24 @@ def main() -> int:
         arch = {"hidden": args.hidden or DEFAULT_ARCH["hidden"],
                 "memory": DEFAULT_ARCH["memory"] if args.memory is None else args.memory,
                 "inputs": DEFAULT_ARCH["inputs"]}
+    start_file = race_seconds = None
+    if args.start_from == "graduate":           # the shipped graduate is a file, not a run
+        from ai import stable
+        grad = stable.graduate()
+        start_file = str(stable.GRADUATE.with_suffix(".npz"))
+        args.start_from = None
+        arch = arch or grad["arch"]
+        args.tracks = args.tracks or list(grad["tracks"])
+        args.races = args.races or grad["races_per_track"]
+        if args.race_laps is None:
+            race_seconds = dict(grad["race_seconds"])
     try:
         evolve.train(run=args.run, generations=args.generations, population=args.population,
                      seed=args.seed, tracks=args.tracks, phase2_from=args.racing_from, arch=arch,
                      races_per_track=args.races, race_bonuses=False if args.no_race_bonuses else None,
                      race_laps=args.race_laps, start_from=args.start_from, style=args.style,
                      name=args.name, car=None if args.car == "standard" else "random",
-                     driving_school=args.driving_school,
+                     driving_school=args.driving_school, start_file=start_file, race_seconds=race_seconds,
                      workers=args.workers, on_generation=report,
                      log=lambda m: print(m, flush=True))
         config = evolve.load_config(run_dir)
