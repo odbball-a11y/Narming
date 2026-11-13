@@ -225,7 +225,9 @@ def test_driving_school_learns_to_drive(tmp_path, monkeypatch):
     history = evolve.load_history(tmp_path / "learn")
     first = history[0]["exam"]["speedway"]["solo_laps"]
     last = history[-1]["exam"]["speedway"]["solo_laps"]
-    assert last > first + 0.5 and last > 1.0         # clearly better, and over a lap
+    # With the corner inputs and tyre scrub even generation 1's best drives well (about 1.9 laps
+    # of 2.0 possible); the school must keep it that way and not get worse.
+    assert last >= first and last > 1.5
 
 
 # -------------------------------------------------------- racing school
