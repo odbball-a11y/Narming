@@ -78,7 +78,7 @@ def ensure(project: Path = PROJECT) -> int:
         changed += _upgrade_card(grad_card, house / "graduate.npz")
     for card in sorted((house / "rivals").glob("*.json")) if (house / "rivals").exists() else []:
         changed += _upgrade_card(card, card.with_suffix(".npz"))
-    for root in ("training", "stable", "workshop"):
+    for root in ("training", "stable", "workshop", "dynasty"):
         base = project / root
         if not base.exists():
             continue

@@ -17,6 +17,8 @@ python train.py [--run NAME] [--generations N] [--hidden 24 16] [--memory 4] [--
                 [--no-race-bonuses] [--race-laps L] [--racing-from GEN] [--population N] [--workers N]
 python train.py --run dave --from speedway --style aggressive --name "Dangerous Dave"   # training camp
 python train.py --run long --from graduate --car random --generations 1000   # from the shipped graduate
+python train.py --run vb --racer "Vortex Brick" --tracks speedway --races 3 --minutes 60   # an existing racer, one car, one track, an hour
+python train.py --list                            # racers and house rivals you can name (--racer / --car NAME)
 python compare.py RUN[:GEN] RUN[:GEN] ... [--track T] [--races N] [--laps N]
 python render_frames.py --out DIR [--track T]     # PNG of every screen, no window
 python -m pytest
