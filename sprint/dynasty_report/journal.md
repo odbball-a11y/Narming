@@ -73,3 +73,22 @@
 - ` 2.68h` between races **Kestrel Velvet** takes a Grand Prix specialist course (20 generations, 12.4 min) with Scripted car, Itself (its own best so far), Mischief Brick; now Grand Prix specialist
 - ` 2.69h` season 14: **Flash Velvet** (racer) wins the title. Flash Velvet 37 | Storm Thunderbolt 33 | Kestrel Velvet 29 | Careful Keith 23
 - ` 2.69h`   news: Flash Velvet retires to stud after 20 races.
+- ` 2.80h` between races **Mischief Brick** takes a Oval specialist course (20 generations, 6.6 min) with Scripted car, Itself (its own best so far), Zigzag Slipstream; now all-rounder
+- ` 2.80h` season 15: **Storm Thunderbolt** (racer) wins the title. Storm Thunderbolt 34 | Careful Keith 33 | Kestrel Velvet 28 | Mischief Brick 24
+- ` 2.80h`   news: Kestrel Velvet retires to stud after 20 races.
+- ` 2.80h`   news: Mischief Brick retires to stud after 20 races.
+- ` 2.80h`   news: Barnaby Brick has died. Remembered in the hall of fame.
+- ` 2.80h`   news: Gus Granite has died. Remembered in the hall of fame.
+- ` 2.80h`   news: Nora Nimble has died. Remembered in the hall of fame.
+- ` 2.80h` breeding **Comet Velvet**: Mischief Brick x Vera Velvet (learner)
+- ` 2.84h`   born Comet Velvet: gen 2, speed 3  accel 3  handling 2  brakes 4  heavy, aggression 0.48, caution 0.52 (2.7 min)
+- ` 2.91h` schooled Comet Velvet (8 generations, 4.4 min)
+- ` 3.13h` between races **Comet Velvet** takes a Grand Prix specialist course (20 generations, 12.7 min) with Scripted car, Itself (its own best so far), Zephyr Brick; now Grand Prix specialist
+- ` 3.13h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 3.13h` season 16: **Zephyr Brick** (racer) wins the title. Zephyr Brick 45 | Storm Thunderbolt 28 | Careful Keith 27 | Comet Velvet 27
+- ` 3.13h`   news: Storm Thunderbolt retires to stud after 20 races.
+- ` 3.13h`   news: Zephyr Brick retires to stud after 20 races.
+- ` 3.13h`   news: Sally Slipstream has died. Remembered in the hall of fame.
+- ` 3.13h`   news: Tilly Thunderbolt has died. Remembered in the hall of fame.
+- ` 3.13h` breeding **Vortex Brick**: Zephyr Brick x Kestrel Velvet (fastest)
+- ` 3.17h`   born Vortex Brick: gen 2, speed 3  accel 3  handling 3  brakes 3  heavy, aggression 0.53, caution 0.4 (2.7 min)
