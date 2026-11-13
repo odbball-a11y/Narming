@@ -33,7 +33,7 @@
   "id": "flash-velvet",
   "name": "Flash Velvet",
   "gen": 1,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Barnaby Brick",
    "Vera Velvet"
@@ -96,7 +96,7 @@
   "id": "mischief-brick",
   "name": "Mischief Brick",
   "gen": 1,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Barnaby Brick",
    "Gus Granite"
@@ -249,7 +249,7 @@
   "id": "zephyr-brick",
   "name": "Zephyr Brick",
   "gen": 1,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Barnaby Brick",
    "Sally Slipstream"
@@ -279,10 +279,43 @@
   "pace": 0.9111
  },
  {
+  "id": "ace-thunderbolt",
+  "name": "Ace Thunderbolt",
+  "gen": 3,
+  "status": "racing",
+  "parents": [
+   "Fury Thunderbolt",
+   "Zigzag Slipstream"
+  ],
+  "weight": "medium",
+  "top_speed": 5,
+  "accel": 4,
+  "handling": 2,
+  "braking": 1,
+  "aggression": 0.45,
+  "caution": 0.33,
+  "rating": 996,
+  "peak": 1338,
+  "rated_races": 5,
+  "races": 5,
+  "wins": 2,
+  "podiums": 3,
+  "titles": 1,
+  "specialty": "all-rounder",
+  "tracks": {
+   "oval": 1222.0054164881517,
+   "speedway": 634.7574311174076,
+   "esses": 919.4526838088244,
+   "technical": 1326.204546629364,
+   "grandprix": 676.300638589014
+  },
+  "pace": 0.8903
+ },
+ {
   "id": "comet-brick",
   "name": "Comet Brick",
   "gen": 2,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Zephyr Brick",
    "Kestrel Velvet"
@@ -294,20 +327,20 @@
   "braking": 4,
   "aggression": 0.46,
   "caution": 0.45,
-  "rating": 996,
+  "rating": 1041,
   "peak": 1348,
-  "rated_races": 5,
-  "races": 5,
-  "wins": 2,
-  "podiums": 3,
-  "titles": 0,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 8,
+  "podiums": 13,
+  "titles": 2,
   "specialty": "technical",
   "tracks": {
-   "oval": 1303.0050933180937,
-   "speedway": 701.9123617279853,
-   "esses": 539.1011446674497,
-   "technical": 1358.677569012176,
-   "grandprix": 816.9623048685453
+   "oval": 668.4000352446218,
+   "speedway": 1024.6208305541084,
+   "esses": 864.8507226246413,
+   "technical": 983.2277764509194,
+   "grandprix": 1163.957452525806
   },
   "pace": 0.9184
  },
@@ -315,7 +348,7 @@
   "id": "comet-velvet",
   "name": "Comet Velvet",
   "gen": 2,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Mischief Brick",
    "Vera Velvet"
@@ -327,20 +360,20 @@
   "braking": 4,
   "aggression": 0.48,
   "caution": 0.52,
-  "rating": 1013,
+  "rating": 1018,
   "peak": 1088,
-  "rated_races": 15,
-  "races": 15,
+  "rated_races": 20,
+  "races": 20,
   "wins": 2,
-  "podiums": 9,
+  "podiums": 13,
   "titles": 0,
   "specialty": "grandprix",
   "tracks": {
-   "oval": 895.3411472801347,
-   "speedway": 863.3637394936109,
-   "esses": 835.4063687738551,
-   "technical": 938.3591907155118,
-   "grandprix": 1045.6021050199054
+   "oval": 850.5232624078283,
+   "speedway": 842.7648672022839,
+   "esses": 865.8239680191798,
+   "technical": 1027.5510216511252,
+   "grandprix": 991.5581215787101
   },
   "pace": 0.954
  },
@@ -348,7 +381,7 @@
   "id": "fury-thunderbolt",
   "name": "Fury Thunderbolt",
   "gen": 2,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Zephyr Brick",
    "Storm Thunderbolt"
@@ -360,28 +393,61 @@
   "braking": 1,
   "aggression": 0.49,
   "caution": 0.45,
-  "rating": 1019,
+  "rating": 1013,
   "peak": 1114,
-  "rated_races": 15,
-  "races": 15,
-  "wins": 2,
-  "podiums": 11,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 4,
+  "podiums": 13,
   "titles": 1,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 700.1570820690006,
-   "speedway": 1033.498480979496,
-   "esses": 834.211335591091,
-   "technical": 1121.4212374805816,
-   "grandprix": 846.5843593251692
+   "oval": 815.8885213643648,
+   "speedway": 917.8908022935004,
+   "esses": 768.8827533971262,
+   "technical": 1217.3256060242911,
+   "grandprix": 817.1938636704562
   },
   "pace": 0.8709
+ },
+ {
+  "id": "kestrel-brick",
+  "name": "Kestrel Brick",
+  "gen": 3,
+  "status": "racing",
+  "parents": [
+   "Zephyr Brick",
+   "Comet Velvet"
+  ],
+  "weight": "heavy",
+  "top_speed": 3,
+  "accel": 5,
+  "handling": 1,
+  "braking": 3,
+  "aggression": 0.61,
+  "caution": 0.47,
+  "rating": 1049,
+  "peak": 1124,
+  "rated_races": 10,
+  "races": 10,
+  "wins": 1,
+  "podiums": 8,
+  "titles": 0,
+  "specialty": "all-rounder",
+  "tracks": {
+   "oval": 902.5389313898994,
+   "speedway": 846.6847582537315,
+   "esses": 1136.4825320772818,
+   "technical": 987.3219946459404,
+   "grandprix": 934.845032417495
+  },
+  "pace": 0.938
  },
  {
   "id": "kestrel-velvet",
   "name": "Kestrel Velvet",
   "gen": 1,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Gus Granite",
    "Vera Velvet"
@@ -409,6 +475,33 @@
    "grandprix": 1119.5353670779705
   },
   "pace": 0.9463
+ },
+ {
+  "id": "orbit-slipstream",
+  "name": "Orbit Slipstream",
+  "gen": 3,
+  "status": "racing",
+  "parents": [
+   "Comet Brick",
+   "Zigzag Slipstream"
+  ],
+  "weight": "heavy",
+  "top_speed": 4,
+  "accel": 1,
+  "handling": 4,
+  "braking": 3,
+  "aggression": 0.43,
+  "caution": 0.62,
+  "rating": null,
+  "peak": null,
+  "rated_races": 0,
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "titles": 0,
+  "specialty": "all-rounder",
+  "tracks": {},
+  "pace": 0.9041
  },
  {
   "id": "storm-slipstream",
@@ -447,7 +540,7 @@
   "id": "storm-thunderbolt",
   "name": "Storm Thunderbolt",
   "gen": 1,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Tilly Thunderbolt",
    "Vera Velvet"
@@ -525,20 +618,20 @@
   "braking": 4,
   "aggression": 0.68,
   "caution": 0.33,
-  "rating": 945,
-  "peak": 1082,
-  "rated_races": 10,
-  "races": 10,
-  "wins": 3,
-  "podiums": 4,
+  "rating": 1061,
+  "peak": 1118,
+  "rated_races": 15,
+  "races": 15,
+  "wins": 5,
+  "podiums": 7,
   "titles": 0,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 394.6762194459876,
-   "speedway": 1411.501822069043,
-   "esses": 639.9844933781967,
-   "technical": 1149.484655510229,
-   "grandprix": 519.104614757797
+   "oval": 969.3571687547255,
+   "speedway": 1128.1683318970863,
+   "esses": 491.9691004642398,
+   "technical": 1349.4102045634056,
+   "grandprix": 802.8651791389354
   },
   "pace": 0.9275
  },

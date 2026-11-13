@@ -1,6 +1,6 @@
-# Dynasty report (after 4.6 hours)
+# Dynasty report (after 5.2 hours)
 
-18 racers so far, 105 stable races, 21 seasons.
+21 racers so far, 120 stable races, 24 seasons.
 
 ## Top 10 by peak rating
 
@@ -10,12 +10,12 @@
 | Storm Thunderbolt | 1 | light | 5/4/2/1 | 0.59/0.29 | all-rounder | 1366 | 1 | 5 | 20 |
 | Storm Slipstream | 2 | medium | 5/1/3/3 | 0.49/0.35 | esses | 1361 | 1 | 3 | 15 |
 | Mischief Brick | 1 | heavy | 2/3/3/4 | 0.59/0.37 | all-rounder | 1358 | 0 | 4 | 20 |
-| Comet Brick | 2 | heavy | 2/2/4/4 | 0.46/0.45 | technical | 1348 | 0 | 2 | 5 |
+| Comet Brick | 2 | heavy | 2/2/4/4 | 0.46/0.45 | technical | 1348 | 2 | 8 | 20 |
 | Zephyr Brick | 1 | heavy | 2/4/3/3 | 0.55/0.42 | all-rounder | 1344 | 3 | 9 | 20 |
+| Ace Thunderbolt | 3 | medium | 5/4/2/1 | 0.45/0.33 | all-rounder | 1338 | 1 | 2 | 5 |
 | Barnaby Brick | 0 | heavy | 3/2/3/4 | 0.6/0.4 | all-rounder | 1328 | 2 | 5 | 20 |
 | Tilly Thunderbolt | 0 | light | 5/4/2/1 | 0.8/0.2 | all-rounder | 1257 | 0 | 3 | 20 |
 | Sally Slipstream | 0 | medium | 4/2/3/3 | 0.5/0.5 | all-rounder | 1255 | 1 | 4 | 20 |
-| Flash Velvet | 1 | heavy | 3/3/3/3 | 0.53/0.46 | all-rounder | 1182 | 2 | 6 | 20 |
 
 ## By generation
 
@@ -23,7 +23,8 @@
 |---|---|---|---|---|---|
 | 0 | 6 | 1241 | 1374 | 0.920 | 7 |
 | 1 | 6 | 1256 | 1366 | 0.928 | 7 |
-| 2 | 6 | 1187 | 1361 | 0.928 | 4 |
+| 2 | 6 | 1193 | 1361 | 0.928 | 6 |
+| 3 | 3 | 1231 | 1338 | 0.911 | 1 |
 
 ## Which car wins?
 
@@ -31,23 +32,23 @@ By car weight (racers with at least 5 rated races):
 
 | weight | racers | mean peak | titles | wins |
 |---|---|---|---|---|
-| light | 5 | 1188 | 2 | 17 |
-| medium | 4 | 1278 | 4 | 19 |
-| heavy | 9 | 1228 | 12 | 41 |
+| light | 5 | 1196 | 2 | 21 |
+| medium | 5 | 1290 | 5 | 21 |
+| heavy | 10 | 1217 | 14 | 48 |
 
 Mean stars of the top third by peak rating against the rest:
 
 | group | top speed | accel | handling | braking | aggression | caution |
 |---|---|---|---|---|---|---|
 | top third | 3.17 | 2.83 | 3.00 | 3.00 | 0.51 | 0.40 |
-| the rest | 3.58 | 2.92 | 2.75 | 2.75 | 0.54 | 0.41 |
+| the rest | 3.64 | 3.14 | 2.57 | 2.64 | 0.54 | 0.41 |
 
 Specialists against all-rounders (at least 5 rated races):
 
 | kind | racers | mean peak | titles | wins |
 |---|---|---|---|---|
-| all-rounder | 12 | 1241 | 14 | 58 |
-| specialist | 6 | 1202 | 4 | 19 |
+| all-rounder | 14 | 1242 | 15 | 65 |
+| specialist | 6 | 1202 | 6 | 25 |
 
 Best rating on each track (track kings):
 
@@ -56,7 +57,7 @@ Best rating on each track (track kings):
 | Oval | Flash Velvet | 1349 | all-rounder | heavy 3/3/3/3 |
 | Speedway | Zephyr Brick | 1593 | all-rounder | heavy 2/4/3/3 |
 | Esses | Tilly Thunderbolt | 1332 | all-rounder | light 5/4/2/1 |
-| Technical | Comet Brick | 1359 | technical | heavy 2/2/4/4 |
+| Technical | Xena Brick | 1349 | all-rounder | light 3/3/2/4 |
 | Grand Prix | Vortex Brick | 1236 | grandprix | heavy 3/3/3/3 |
 
 ## Champions
@@ -66,8 +67,10 @@ Best rating on each track (track kings):
 - Flash Velvet (gen 1, heavy): 2 title(s)
 - Gus Granite (gen 0, heavy): 2 title(s)
 - Vera Velvet (gen 0, medium): 2 title(s)
+- Comet Brick (gen 2, heavy): 2 title(s)
 - Vortex Brick (gen 2, heavy): 2 title(s)
 - Sally Slipstream (gen 0, medium): 1 title(s)
+- Ace Thunderbolt (gen 3, medium): 1 title(s)
 - Fury Thunderbolt (gen 2, light): 1 title(s)
 - Kestrel Velvet (gen 1, heavy): 1 title(s)
 - Storm Slipstream (gen 2, medium): 1 title(s)
@@ -75,7 +78,7 @@ Best rating on each track (track kings):
 
 ## Track records
 
-- oval: 9.92 s by Fury Thunderbolt (season 18)
+- oval: 9.85 s by Fury Thunderbolt (season 23)
 - speedway: 11.49 s by Fury Thunderbolt (season 20)
 - esses: 13.69 s by Fury Thunderbolt (season 20)
 - technical: 19.91 s by Fury Thunderbolt (season 18)

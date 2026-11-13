@@ -124,3 +124,25 @@
 - ` 4.56h` breeding **Kestrel Brick**: Zephyr Brick x Comet Velvet (fastest)
 - ` 4.60h`   born Kestrel Brick: gen 3, speed 3  accel 5  handling 1  brakes 3  heavy, aggression 0.61, caution 0.47 (2.6 min)
 - ` 4.68h` schooled Kestrel Brick (8 generations, 4.4 min)
+- ` 4.76h` between races **Kestrel Brick** takes an all-rounder course (10 generations, 5.1 min) with Scripted car, Itself (its own best so far), Comet Velvet; now all-rounder
+- ` 4.76h` season 23: **Comet Brick** (racer) wins the title. Comet Brick 35 | Careful Keith 33 | Fury Thunderbolt 28 | Kestrel Brick 26
+- ` 4.76h`   news: Fury Thunderbolt retires to stud after 20 races.
+- ` 4.76h`   news: Mischief Brick has died. Remembered in the hall of fame.
+- ` 4.76h`   news: Kestrel Velvet has died. Remembered in the hall of fame.
+- ` 4.76h` breeding **Ace Thunderbolt**: Fury Thunderbolt x Zigzag Slipstream (learner)
+- ` 4.81h`   born Ace Thunderbolt: gen 3, speed 5  accel 4  handling 2  brakes 1  medium, aggression 0.45, caution 0.33 (2.7 min)
+- ` 4.88h` schooled Ace Thunderbolt (8 generations, 4.6 min)
+- ` 4.97h` between races **Ace Thunderbolt** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Zephyr Brick; now all-rounder
+- ` 4.97h` season 24: **Ace Thunderbolt** (racer) wins the title. Ace Thunderbolt 34 | Kestrel Brick 33 | Comet Brick 32 | Careful Keith 31
+- ` 4.97h`   news: Comet Brick retires to stud after 20 races.
+- ` 4.97h`   news: Zephyr Brick has died. Remembered in the hall of fame.
+- ` 4.97h`   news: Storm Thunderbolt has died. Remembered in the hall of fame.
+- ` 4.97h` breeding **Orbit Slipstream**: Comet Brick x Zigzag Slipstream (fastest)
+- ` 5.02h`   born Orbit Slipstream: gen 3, speed 4  accel 1  handling 4  brakes 3  heavy, aggression 0.43, caution 0.62 (2.7 min)
+- ` 5.09h` schooled Orbit Slipstream (8 generations, 4.5 min)
+- ` 5.18h` between races **Orbit Slipstream** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Kestrel Velvet; now all-rounder
+- ` 5.18h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 5.18h` season 25: **Orbit Slipstream** (racer) wins the title. Orbit Slipstream 36 | Careful Keith 24 | Ace Thunderbolt 21 | Kestrel Brick 19
+- ` 5.18h`   news: Zigzag Slipstream has died. Remembered in the hall of fame.
+- ` 5.18h` breeding **Cinder Brick**: Comet Brick x Comet Velvet (learner)
+- ` 5.23h`   born Cinder Brick: gen 3, speed 3  accel 3  handling 4  brakes 2  heavy, aggression 0.51, caution 0.45 (2.7 min)
