@@ -38,3 +38,24 @@ def test_save_then_load_round_trips_and_keeps_the_old_stable(tmp_path, monkeypat
 def test_loading_a_missing_save_says_so(tmp_path):
     with pytest.raises(FileNotFoundError):
         snapshot.load("nope", tmp_path / "stable", save_dir=tmp_path)
+
+
+def test_a_locked_stable_gives_a_clear_message_and_changes_nothing(tmp_path, monkeypatch):
+    from pathlib import Path
+    monkeypatch.setattr(snapshot, "PROJECT", tmp_path)
+    make_stable(tmp_path / "dynasty" / "stable")
+    snapshot.save("demo", tmp_path / "dynasty" / "stable", out_dir=tmp_path / "saves")
+    target = tmp_path / "stable"
+    target.mkdir()
+    (target / "mine.txt").write_text("my own game")
+    real = Path.rename
+
+    def locked(self, other):
+        if self == target:
+            raise PermissionError("in use")
+        return real(self, other)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    with pytest.raises(PermissionError, match="Close the game"):
+        snapshot.load("demo", target, save_dir=tmp_path / "saves")
+    assert (target / "mine.txt").read_text() == "my own game" and not (tmp_path / "stable.loading").exists()

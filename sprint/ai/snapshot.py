@@ -100,7 +100,14 @@ def load(name: str, root: Path | str | None = None, save_dir: Path | None = None
         while aside.exists():
             n += 1
             aside = root.with_name(f"{root.name}.before-{name}-{n}")
-        root.rename(aside)
+        try:
+            root.rename(aside)
+        except PermissionError as exc:                  # Windows: a file in the stable is open somewhere
+            shutil.rmtree(staging, ignore_errors=True)
+            raise PermissionError(
+                f"Windows will not move {root} aside because something is using it. Close the game (and any "
+                f"File Explorer window or terminal sitting inside that folder) and try again. Nothing was changed."
+            ) from exc
     staging.rename(root)
     return root
 
