@@ -1,6 +1,6 @@
-# Dynasty report (after 7.7 hours)
+# Dynasty report (after 8.1 hours)
 
-29 racers so far, 185 stable races, 37 seasons.
+30 racers so far, 190 stable races, 38 seasons.
 
 ## Top 10 by peak rating
 
@@ -11,7 +11,7 @@
 | Sparks Velvet | 4 | heavy | 5/1/3/3 | 0.31/0.45 | all-rounder | 1368 | 0 | 2 | 20 |
 | Storm Thunderbolt | 1 | light | 5/4/2/1 | 0.59/0.29 | all-rounder | 1366 | 1 | 5 | 20 |
 | Storm Slipstream | 2 | medium | 5/1/3/3 | 0.49/0.35 | esses | 1361 | 2 | 5 | 20 |
-| Indigo Slipstream | 5 | medium | 3/2/3/4 | 0.37/0.23 | all-rounder | 1359 | 0 | 1 | 5 |
+| Indigo Slipstream | 5 | medium | 3/2/3/4 | 0.37/0.23 | all-rounder | 1359 | 0 | 1 | 10 |
 | Mischief Brick | 1 | heavy | 2/3/3/4 | 0.59/0.37 | all-rounder | 1358 | 0 | 4 | 20 |
 | Comet Brick | 2 | heavy | 2/2/4/4 | 0.46/0.45 | technical | 1348 | 2 | 8 | 20 |
 | Zephyr Brick | 1 | heavy | 2/4/3/3 | 0.55/0.42 | all-rounder | 1344 | 3 | 9 | 20 |
@@ -26,7 +26,7 @@
 | 2 | 6 | 1193 | 1361 | 0.928 | 7 |
 | 3 | 6 | 1188 | 1342 | 0.916 | 5 |
 | 4 | 3 | 1341 | 1442 | 0.929 | 3 |
-| 5 | 2 | 1359 | 1359 | 0.942 | 0 |
+| 5 | 3 | 1275 | 1359 | 0.949 | 0 |
 
 ## Which car wins?
 
@@ -34,7 +34,7 @@ By car weight (racers with at least 5 rated races):
 
 | weight | racers | mean peak | titles | wins |
 |---|---|---|---|---|
-| light | 6 | 1220 | 3 | 26 |
+| light | 7 | 1216 | 3 | 28 |
 | medium | 7 | 1289 | 7 | 30 |
 | heavy | 15 | 1220 | 19 | 73 |
 
@@ -43,14 +43,14 @@ Mean stars of the top third by peak rating against the rest:
 | group | top speed | accel | handling | braking | aggression | caution |
 |---|---|---|---|---|---|---|
 | top third | 3.33 | 2.44 | 3.11 | 3.11 | 0.47 | 0.40 |
-| the rest | 3.58 | 3.05 | 2.68 | 2.68 | 0.52 | 0.42 |
+| the rest | 3.55 | 3.10 | 2.60 | 2.75 | 0.53 | 0.42 |
 
 Specialists against all-rounders (at least 5 rated races):
 
 | kind | racers | mean peak | titles | wins |
 |---|---|---|---|---|
 | all-rounder | 20 | 1245 | 20 | 90 |
-| specialist | 8 | 1218 | 9 | 39 |
+| specialist | 9 | 1215 | 9 | 41 |
 
 Best rating on each track (track kings):
 

@@ -319,6 +319,14 @@ podium): `record_result(..., finished=)`.
   the field always gets the highest-rated house rival (`house_field` sorts
   rivals by rating), then the next, then scripted cars.
 
+- Dynasty (`dynasty.py`, output `dynasty/` git-ignored and `dynasty_report/`):
+  a self-running stable that races whole championships, trains between
+  championships (specialist 20 gens / all-rounder 10), breeds retired studs and
+  writes `REPORT.md` / `journal.md`; resumable (`python dynasty.py --hours 8`).
+  `ai/snapshot.py` saves and loads a whole stable as `saves/NAME.zip` (old
+  generations cut to four drivers; the stable it replaces is kept aside). The 8 h
+  run is in `saves/dynasty-final.zip`; findings in `dynasty_report/ANALYSIS.md`.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

@@ -315,7 +315,7 @@
   "id": "cinder-brick",
   "name": "Cinder Brick",
   "gen": 3,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Comet Brick",
    "Comet Velvet"
@@ -459,15 +459,21 @@
   "braking": 4,
   "aggression": 0.64,
   "caution": 0.32,
-  "rating": null,
-  "peak": null,
-  "rated_races": 0,
-  "races": 0,
-  "wins": 0,
-  "podiums": 0,
+  "rating": 1191,
+  "peak": 1191,
+  "rated_races": 5,
+  "races": 5,
+  "wins": 2,
+  "podiums": 3,
   "titles": 0,
   "specialty": "speedway",
-  "tracks": {},
+  "tracks": {
+   "oval": 592.6555033335762,
+   "speedway": 1436.113192699081,
+   "esses": 715.1524455634511,
+   "technical": 1358.8504953650558,
+   "grandprix": 1155.3587992581315
+  },
   "pace": 0.9261
  },
  {
@@ -552,20 +558,20 @@
   "braking": 4,
   "aggression": 0.37,
   "caution": 0.23,
-  "rating": 1076,
+  "rating": 1016,
   "peak": 1359,
-  "rated_races": 5,
-  "races": 5,
+  "rated_races": 10,
+  "races": 10,
   "wins": 1,
-  "podiums": 4,
+  "podiums": 7,
   "titles": 0,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 1265.8480635755054,
-   "speedway": 1106.0280272486839,
-   "esses": 1176.9636637776093,
-   "technical": 727.807806675952,
-   "grandprix": 874.072457616659
+   "oval": 1124.1297499825355,
+   "speedway": 1088.724352255999,
+   "esses": 1037.3967537355259,
+   "technical": 639.4747668653341,
+   "grandprix": 763.6530960882353
   },
   "pace": 0.9587
  },
@@ -573,7 +579,7 @@
   "id": "kestrel-brick",
   "name": "Kestrel Brick",
   "gen": 3,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Zephyr Brick",
    "Comet Velvet"
@@ -634,6 +640,33 @@
    "grandprix": 1119.5353670779705
   },
   "pace": 0.9463
+ },
+ {
+  "id": "nova-brick",
+  "name": "Nova Brick",
+  "gen": 5,
+  "status": "racing",
+  "parents": [
+   "Vortex Brick",
+   "Zigzag Brick"
+  ],
+  "weight": "medium",
+  "top_speed": 3,
+  "accel": 5,
+  "handling": 1,
+  "braking": 3,
+  "aggression": 0.57,
+  "caution": 0.38,
+  "rating": null,
+  "peak": null,
+  "rated_races": 0,
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "titles": 0,
+  "specialty": "esses",
+  "tracks": {},
+  "pace": 0.962
  },
  {
   "id": "orbit-slipstream",

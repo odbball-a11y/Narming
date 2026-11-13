@@ -416,3 +416,10 @@ See `CLAUDE.md` for the architecture, conventions and the Stage 2 plan.
 ## Stars and training budget
 
 Championship titles show as gold stars next to a racer's name. Every racer can train for 50 generations in its whole life (the card shows "training N of 50"); once used up it can only race. Races are limited separately (20 per career).
+
+## Saves and the dynasty
+
+`py -m ai.snapshot save NAME` saves your whole stable to `saves/NAME.zip`; `py -m ai.snapshot load NAME` puts it back
+(the stable it replaces is kept as `stable.before-NAME`). `py dynasty.py --hours 8` runs a stable by itself for hours
+(championships, training between them, breeding); `saves/dynasty-final.zip` is an 8-hour run to load and explore, and
+`dynasty_report/` says which cars won.

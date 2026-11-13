@@ -271,3 +271,9 @@ RuntimeError: nobody can race
 - ` 7.75h`   news: Cinder Brick has died. Remembered in the hall of fame.
 - ` 7.75h`   news: Kestrel Brick has died. Remembered in the hall of fame.
 - ` 7.75h` breeding **Nova Brick**: Vortex Brick x Zigzag Brick (fastest)
+- ` 7.80h`   born Nova Brick: gen 5, speed 3  accel 5  handling 1  brakes 3  medium, aggression 0.57, caution 0.38 (2.9 min)
+- ` 7.88h` schooled Nova Brick (8 generations, 5.1 min)
+- ` 8.06h` between races **Nova Brick** takes a Esses specialist course (20 generations, 10.7 min) with Scripted car, Itself (its own best so far), Sparks Velvet; now Esses specialist
+- ` 8.06h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 8.07h` saved dynasty-final.zip
+- ` 8.07h` dynasty finished
