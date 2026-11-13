@@ -62,3 +62,14 @@
 - ` 2.19h`   born Kestrel Velvet: gen 1, speed 3  accel 3  handling 3  brakes 3  heavy, aggression 0.43, caution 0.4 (2.7 min)
 - ` 2.21h` dynasty running until hour 8.0
 - ` 2.21h` training Kestrel Velvet ...
+- ` 2.27h` trained Kestrel Velvet in 3.9 min; 8% quicker than scripted
+- ` 2.27h` season 12: **Kestrel Velvet** (racer) wins the title. Kestrel Velvet 34 | Zigzag Slipstream 32 | Careful Keith 31 | Flash Velvet 30
+- ` 2.27h` breeding **Storm Thunderbolt**: Tilly Thunderbolt x Vera Velvet (fastest)
+- ` 2.32h`   born Storm Thunderbolt: gen 1, speed 5  accel 4  handling 2  brakes 1  light, aggression 0.59, caution 0.29 (2.7 min)
+- ` 2.39h` schooled Storm Thunderbolt (8 generations, 4.4 min)
+- ` 2.47h` between races **Storm Thunderbolt** takes an all-rounder course (10 generations, 5.1 min) with Scripted car, Itself (its own best so far), Kestrel Velvet; now all-rounder
+- ` 2.48h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 2.48h` season 13: **Careful Keith** (house) wins the title. Careful Keith 35 | Zigzag Slipstream 34 | Kestrel Velvet 30 | Storm Thunderbolt 28
+- ` 2.68h` between races **Kestrel Velvet** takes a Grand Prix specialist course (20 generations, 12.4 min) with Scripted car, Itself (its own best so far), Mischief Brick; now Grand Prix specialist
+- ` 2.69h` season 14: **Flash Velvet** (racer) wins the title. Flash Velvet 37 | Storm Thunderbolt 33 | Kestrel Velvet 29 | Careful Keith 23
+- ` 2.69h`   news: Flash Velvet retires to stud after 20 races.
