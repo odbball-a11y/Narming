@@ -982,6 +982,9 @@ class CertificateScreen(Screen):
                      f"{' (' + src[k][0].upper() + ')' if k in src else ''}" for k in cartraits.STARS]
             weight = cert["traits"]["weight"]
             parts.append(weight + (f" ({src['weight'][0].upper()})" if "weight" in src else ""))
+            if cartraits.balance_of(cert["traits"]):
+                parts.append(cartraits.BALANCE_NAMES[cartraits.balance_of(cert["traits"])]
+                             + (f" ({src['balance'][0].upper()})" if "balance" in src else ""))
             ui.text(screen, "small", "CAR  (S = from sire, D = from dam): " + "  ".join(parts), C_HUD_TEXT, 7, 25)
         t = cert["temperament"]
         ui.text(screen, "small", "TEMPERAMENT", C_HUD_ACCENT, 110, y)

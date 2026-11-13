@@ -26,6 +26,7 @@ class Car:
         "last_lap", "best_lap", "lap_times", "checkpoints_passed",
         "finished", "finish_time",
         "damage", "draft", "draft_source", "retired",
+        "yaw_rate", "front_use", "rear_slip",
     )
 
     def __init__(self, params: CarParams):
@@ -58,6 +59,9 @@ class Car:
         self.draft = 0.0           # 0..1 strength of the tow this tick
         self.draft_source = -1     # index of the car giving the tow, or -1
         self.retired = False       # retired cars are not simulated (AI training)
+        self.yaw_rate = 0.0        # rad/s, with yaw inertia on; otherwise what steering commands
+        self.front_use = 0.0       # steering demand / front grip: above 1 the car understeers
+        self.rear_slip = 0.0       # 0..1, how far the rear end is sliding
 
     def add_damage(self, amount: float) -> None:
         if amount > 0.0:
@@ -76,7 +80,7 @@ class Car:
                 self.next_checkpoint, self.crossed_start, self.laps,
                 self.lap_start_time, tuple(self.lap_times),
                 self.checkpoints_passed, self.finished, self.finish_time,
-                self.damage, self.retired)
+                self.damage, self.retired, self.yaw_rate)
 
     def step(self, steering: float, throttle: float, brake: float, on_grass: bool) -> None:
         """Advance one tick.  Inputs must already be clamped."""
@@ -93,7 +97,25 @@ class Car:
         blend = min(avf / p.top_speed, 1.0)
         rate = p.steer_rate_low + (p.steer_rate_high - p.steer_rate_low) * blend
         direction = 1.0 if vf >= 0.0 else -1.0  # steering reverses in reverse
-        self.heading += steering * rate * authority * direction * dt
+        omega = steering * rate * authority * direction
+        two_grip = p.front_limit > 0.0
+        if two_grip:
+            # Front tyres: steering can only turn the car as far as they can hold.
+            front = p.grip * p.front_limit * (1.0 + 0.15 * p.balance)
+            front *= math.sqrt(max(0.0, 1.0 - (p.brake_circle * brake) ** 2))
+            if on_grass:
+                front *= tuning.GRASS_GRIP
+            demand = avf * abs(omega)
+            self.front_use = demand / front if front > 0.0 else 0.0
+            if demand > front > 0.0:
+                omega *= front / demand
+        if p.yaw_lag > 0.0:
+            tau = p.yaw_lag * (1.0 + 2.0 * self.rear_slip)       # a sliding rear end stops damping the rotation
+            self.yaw_rate += (omega - self.yaw_rate) * min(1.0, dt / tau)
+            omega = self.yaw_rate
+        else:
+            self.yaw_rate = omega
+        self.heading += omega * dt
 
         # --- split velocity in the car's (new) frame -----------------------
         ch, sh = math.cos(self.heading), math.sin(self.heading)
@@ -126,7 +148,12 @@ class Car:
             vf = 0.0
 
         # --- lateral grip: remove sideways speed at a limited rate ---------
-        if p.brake_circle or p.throttle_circle:
+        if two_grip:
+            # Rear tyres: power eats their grip; braking unloads them.
+            used = (p.throttle_circle * throttle) ** 2
+            grip = p.grip * (1.0 - 0.15 * p.balance) * math.sqrt(max(0.0, 1.0 - used))
+            grip *= 1.0 - p.brake_transfer * brake
+        elif p.brake_circle or p.throttle_circle:
             used = (p.brake_circle * brake) ** 2 + (p.throttle_circle * throttle) ** 2
             grip = p.grip * math.sqrt(max(0.0, 1.0 - used))
         else:
@@ -159,5 +186,6 @@ class Car:
 
         self.forward_speed = vf
         self.slip = abs(vl)
+        self.rear_slip = min(1.0, abs(vl) / 6.0)
         self.speed = math.hypot(vx, vy)
         self.sliding = self.slip > p.slide_threshold

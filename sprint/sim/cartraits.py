@@ -23,6 +23,15 @@ STARS = ("top_speed", "accel", "handling", "braking")
 WEIGHTS = ("light", "medium", "heavy")
 LABELS = {"top_speed": "TOP SPEED", "accel": "ACCELERATION", "handling": "HANDLING", "braking": "BRAKING"}
 MIN_STARS, MAX_STARS = 1, 5
+# Balance costs no stars: -2 (very stable, understeers first) .. +2 (very loose,
+# oversteers first).  A car without the key is neutral.  It only matters with the
+# two-grip physics (`CarParams.front_limit`); it is bred, never chosen.
+BALANCES = (-2, -1, 0, 1, 2)
+BALANCE_NAMES = {-2: "very stable", -1: "stable", 0: "neutral", 1: "loose", 2: "very loose"}
+
+
+def balance_of(traits: dict | None) -> int:
+    return int((traits or {}).get("balance", 0))
 
 
 def default() -> dict:
@@ -64,6 +73,7 @@ def params_for(traits: dict | None, base: CarParams | None = None) -> CarParams:
         steer_rate_high=base.steer_rate_high * steer,
         brake_decel=base.brake_decel * scale("braking") * w_perf,
         mass=mass,
+        balance=balance_of(traits) / 2.0,
         traits=tuple([(int(traits[k]) - 3) / 2.0 for k in STARS]
                      + [{"light": -1.0, "medium": 0.0, "heavy": 1.0}[weight]]),
     )
@@ -88,6 +98,7 @@ def random_traits(rng) -> dict:
     """A random valid car (used to train drivers that can drive anything)."""
     stars = {k: int(rng.integers(MIN_STARS, MAX_STARS + 1)) for k in STARS}
     stars["weight"] = WEIGHTS[int(rng.integers(0, 3))]
+    stars["balance"] = BALANCES[int(rng.integers(0, len(BALANCES)))]
     return rebalance(stars, rng)
 
 
@@ -103,9 +114,17 @@ def inherit(sire: dict, dam: dict, rng) -> tuple[dict, dict]:
     for key in STARS:
         if rng.random() < 0.25:
             child[key] = min(MAX_STARS, max(MIN_STARS, int(child[key]) + (1 if rng.random() < 0.5 else -1)))
+    from_sire = rng.random() < 0.5                       # balance: from one parent, sometimes a step either way
+    child["balance"] = balance_of(sire if from_sire else dam)
+    source["balance"] = "sire" if from_sire else "dam"
+    if rng.random() < 0.25:
+        child["balance"] = max(BALANCES[0], min(BALANCES[-1], child["balance"] + (1 if rng.random() < 0.5 else -1)))
     return rebalance(child, rng), source
 
 
 def describe(traits: dict) -> str:
     short = {"top_speed": "speed", "accel": "accel", "handling": "handling", "braking": "brakes"}
-    return "  ".join(f"{short[k]} {traits[k]}" for k in STARS) + f"  {traits['weight']}"
+    text = "  ".join(f"{short[k]} {traits[k]}" for k in STARS) + f"  {traits['weight']}"
+    if balance_of(traits):
+        text += f"  {BALANCE_NAMES[balance_of(traits)]}"
+    return text

@@ -52,8 +52,12 @@ _INPUTS_V3 = _INPUTS_V2 + ["car top speed", "car acceleration", "car handling", 
 # car is, and how hard the tyres are working now.
 _INPUTS_V4 = _INPUTS_V3 + ["line offset now", "line offset 12 ahead", "line offset 30 ahead",
                            "speed margin", "safe speed ahead", "corner distance", "grip use"]
-INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4}
-INPUT_VERSION = 4
+# Version 5: the car's rotation and its tyres' balance (two-grip physics):
+# how fast it is turning, how far the front is past its limit (understeer),
+# how far the rear is sliding (oversteer), and the car's setup balance.
+_INPUTS_V5 = _INPUTS_V4 + ["yaw rate", "front grip use", "rear slip", "car balance"]
+INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4, 5: _INPUTS_V5}
+INPUT_VERSION = 5
 
 # Distances ahead (units) scanned for the corner that limits speed, and the
 # braking the car is assumed to use to reach it (a fraction of full braking).
@@ -198,6 +202,12 @@ def observe(world, i: int) -> list[float]:
     obs.append(min(1.5, slowest / 32.0))
     obs.append(where / CORNER_SCAN[-1])
     obs.append(min(2.0, vf * vf * ideal_curv[idx] / grip))              # share of the tyres' grip in use now
+
+    # ---- input version 5: rotation and tyre balance ----
+    obs.append(max(-2.0, min(2.0, car.yaw_rate / 3.0)))
+    obs.append(min(2.0, car.front_use))
+    obs.append(car.rear_slip)
+    obs.append(p.balance)
     return obs
 
 

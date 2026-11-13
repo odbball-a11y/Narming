@@ -90,6 +90,28 @@ class CarParams:
     brake_circle: float = 0.8
     throttle_circle: float = 0.6
 
+    # --- two-grip model: understeer, oversteer and yaw inertia (0 = off) ---
+
+    # Front tyres' lateral grip as a fraction of `grip`.  When steering asks
+    # for more sideways acceleration than this the car turns less than
+    # commanded and runs wide (understeer), and braking eats this grip (turn-in
+    # understeer).  The rear end is the `grip` above: throttle eats it (power
+    # oversteer) and braking unloads it (lift-off oversteer, see brake_transfer).
+    # 0 = steering always gets what it asks, as in the original model.
+    front_limit: float = 0.0
+
+    # Seconds the car takes to rotate to what steering asks (yaw inertia).
+    # While the rear is sliding the lag grows (a spin keeps spinning).
+    # 0 = rotation is instant.
+    yaw_lag: float = 0.0
+
+    # Car balance, -1 (stable: understeers first) .. +1 (loose: oversteers
+    # first).  Moves grip between the front and the rear by 15% each way.
+    balance: float = 0.0
+
+    # Share of the rear grip lost under full braking (weight moves forward).
+    brake_transfer: float = 0.25
+
     # Maximum turn rate (rad/s) at low speed with full steering lock.
     # Higher: darts into hairpins, twitchy.  Lower: wide turning circle.
     steer_rate_low: float = 3.0
@@ -319,8 +341,10 @@ FINISH_GRACE = 30.0
 COOLDOWN = 1.5
 
 
-CLASSIC_PHYSICS = {"scrub": 0.0, "brake_circle": 0.0, "throttle_circle": 0.0}   # the physics before tyre scrub
-_NEWER_PHYSICS = CLASSIC_PHYSICS
+CLASSIC_PHYSICS = {"scrub": 0.0, "brake_circle": 0.0, "throttle_circle": 0.0,   # the physics before tyre scrub
+                   "front_limit": 0.0, "yaw_lag": 0.0}
+# Options left out of the physics fingerprint while at these values, so recordings still match.
+_NEWER_PHYSICS = dict(CLASSIC_PHYSICS, balance=0.0, brake_transfer=0.25)
 
 
 def _fingerprint_params():

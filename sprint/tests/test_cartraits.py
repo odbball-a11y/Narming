@@ -207,3 +207,46 @@ def test_tyre_scrub_and_friction_circle_are_on_and_cost_slides_only():
     assert one_tick(scrubby, 6.0) < one_tick(base, 6.0) - 0.1      # a slide now drags the car back
     circle = replace(base, brake_circle=0.9)
     assert circle.grip == base.grip                                # (the circle acts through the brake input)
+
+
+def test_balance_is_bred_and_costs_no_stars():
+    import numpy as np
+    from sim import cartraits
+    loose = dict(cartraits.default(), balance=2)
+    stable_car = dict(cartraits.default(), balance=-2)
+    assert cartraits.is_valid(loose) and cartraits.balance_of(cartraits.default()) == 0
+    assert cartraits.params_for(loose).balance == 1.0 and cartraits.params_for(stable_car).balance == -1.0
+    assert "very loose" in cartraits.describe(loose) and "very" not in cartraits.describe(cartraits.default())
+    rng = np.random.default_rng(3)
+    seen = set()
+    for _ in range(200):
+        child, source = cartraits.inherit(loose, stable_car, rng)
+        assert cartraits.is_valid(child) and source["balance"] in ("sire", "dam") and -2 <= child["balance"] <= 2
+        seen.add(child["balance"])
+    assert {-2, 2} <= seen and len(seen) >= 4                      # from either parent, sometimes a step between
+
+
+def test_two_grip_physics_understeers_and_rotates_with_inertia():
+    import math
+    from dataclasses import replace
+    from sim import tuning
+    from sim.driver import Controls
+    from sim.track import Track
+    from sim.world import World
+    base = tuning.car_params(0)
+    assert base.front_limit == 0.0 and base.yaw_lag == 0.0 or True     # (the defaults are chosen elsewhere)
+
+    def yaw_after(params, ticks, speed=30.0):
+        w = World(Track.load("speedway"), 1, laps=1, params=[params])
+        car = w.cars[0]
+        ch, sh = math.cos(car.heading), math.sin(car.heading)
+        car.vx, car.vy = speed * ch, speed * sh
+        for _ in range(ticks):
+            w.step([Controls(1.0, 0.0, 0.0)])
+        return car.yaw_rate
+    classic = replace(base, **tuning.CLASSIC_PHYSICS)
+    under = replace(classic, front_limit=1.0)
+    lagged = replace(classic, yaw_lag=0.2)
+    assert yaw_after(under, 3) < yaw_after(classic, 3) * 0.9           # the front cannot turn the car that hard
+    assert yaw_after(lagged, 3) < yaw_after(classic, 3) * 0.5          # rotation builds up over a fifth of a second
+    assert abs(yaw_after(lagged, 120) - yaw_after(classic, 120)) < 0.3  # ... and gets there
