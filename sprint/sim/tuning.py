@@ -98,12 +98,12 @@ class CarParams:
     # understeer).  The rear end is the `grip` above: throttle eats it (power
     # oversteer) and braking unloads it (lift-off oversteer, see brake_transfer).
     # 0 = steering always gets what it asks, as in the original model.
-    front_limit: float = 0.0
+    front_limit: float = 1.2
 
     # Seconds the car takes to rotate to what steering asks (yaw inertia).
     # While the rear is sliding the lag grows (a spin keeps spinning).
     # 0 = rotation is instant.
-    yaw_lag: float = 0.0
+    yaw_lag: float = 0.08
 
     # Car balance, -1 (stable: understeers first) .. +1 (loose: oversteers
     # first).  Moves grip between the front and the rear by 15% each way.
@@ -119,11 +119,11 @@ class CarParams:
     # Braking loads the front (sharper turn-in, light rear: lift-off and
     # trail-braking oversteer); accelerating loads the rear (power
     # understeer, better traction).  About centre-of-gravity height / wheelbase.
-    weight_transfer: float = 0.0
+    weight_transfer: float = 0.2
 
     # Grip lost to sideways load transfer at the cornering limit (the outside
     # tyres take the load but give less grip per unit of load).
-    lateral_transfer: float = 0.0
+    lateral_transfer: float = 0.1
 
     # Tyres give a little less grip per unit of load as load rises.
     load_sensitivity: float = 0.9

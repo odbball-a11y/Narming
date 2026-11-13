@@ -46,16 +46,16 @@ def test_coasting_slows_down():
 
 def test_velocity_is_separate_from_heading_car_slides_then_recovers():
     world = make_world()
-    car = put_on_track(world, world.cars[0], 10.0, speed=30.0)
-    # Full lock at high speed: heading turns faster than grip can follow.
-    step_n(world, Controls(1.0, 1.0, 0.0), 26)
+    car = put_on_track(world, world.cars[0], 10.0, speed=25.0)
+    # Full lock and full throttle: power oversteer, the rear lets go.
+    step_n(world, Controls(1.0, 1.0, 0.0), 60)
     travel = math.atan2(car.vy, car.vx)
     drift = abs((car.heading - travel + math.pi) % (2 * math.pi) - math.pi)
     assert car.sliding
     assert car.slip > car.params.slide_threshold
     assert drift > 0.08                   # nose points inside the direction of travel
     # Lift and straighten: grip pulls the velocity back in line.
-    step_n(world, COAST, 30)
+    step_n(world, COAST, 40)
     assert car.surface == 0               # still on the tarmac, so this is tyre grip
     assert not car.sliding
     assert car.slip < 0.5

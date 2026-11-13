@@ -13,7 +13,7 @@ def path(root) -> Path:
     return Path(root) / "records.json"
 
 
-PHYSICS = 2     # records set under other physics (1 = classic, before tyre scrub) are kept aside, not beaten
+PHYSICS = 3     # records set under other physics (1 = classic, 2 = scrub only) are kept aside, not beaten
 
 
 def load(root) -> dict:
