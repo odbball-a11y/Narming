@@ -529,3 +529,23 @@ def test_a_long_stable_list_scrolls_to_keep_the_selection_on_screen(app):
     assert screen.row == 0 and screen.scroll == 0.0
     press(app, pygame.K_PAGEDOWN, pygame.K_PAGEDOWN)
     assert screen.row == 12 and screen.scroll > 0.0
+
+
+def test_every_training_partner_can_be_reached_on_the_create_screen(app):
+    from game.stable_screens import CreateScreen
+    root = stable.STABLE_DIR
+    racers = [instant_racer(root, f"Partner {k:02d}") for k in range(14)]
+    stable.retire(racers[0], "test")
+    screen = CreateScreen(app)
+    app.show(screen)
+    keys = [p["key"] for p in screen.partners]
+    assert len([k for k in keys if k.startswith("racer:")]) == 14          # none cut off
+    assert screen.partner_status(screen.partners[keys.index("racer:partner-00")]) == "  (at stud)"
+    app.draw()
+    assert screen.view == 0.0
+    screen.row = screen.rows().index("back")                               # the very bottom
+    app.draw()
+    assert screen.view > 0.0                                               # the column scrolled to show it
+    screen.row = screen.rows().index(keys[-1])                             # the last partner
+    press(app, pygame.K_RETURN)
+    assert keys[-1] in screen.chosen

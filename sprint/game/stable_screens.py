@@ -293,6 +293,18 @@ class CreateScreen(Screen):
     """Name, personality, training partners and length; then train.  With
     `racer_dir` it is an upskill of that racer instead."""
 
+    PARTNER_LINES = 8           # rows jumped by PgUp / PgDn
+    VIEW_TOP, VIEW_BOTTOM = 12.5, 86.0
+
+    def partner_status(self, partner: dict) -> str:
+        """' (stud)' or ' (legend)' for a partner racer no longer racing."""
+        if not partner.get("key", "").startswith("racer:"):
+            return ""
+        d = Path(self.app.stable_root) / partner["key"][6:]
+        if not (d / "racer.json").exists():
+            return ""
+        return {"stud": "  (at stud)", "dead": "  (legend)"}.get(stable.status(d), "")
+
     def __init__(self, app, racer_dir=None):
         super().__init__(app)
         self.racer_dir = racer_dir
@@ -310,9 +322,7 @@ class CreateScreen(Screen):
         self.partners = stable.partner_options(app.stable_root, exclude, include_house=app.workshop)
         if not racer:
             self.partners = [p for p in self.partners if p["kind"] != "self"]   # nothing of its own yet
-        basic = [p for p in self.partners if p["kind"] != "file"]
-        others = [p for p in self.partners if p["kind"] == "file"]
-        self.partners = basic + others[-8:]           # the 8 most recent racers fit on screen
+        self.view = 0.0                               # the left column scrolls with the selection
         self.chosen = {p["key"] for p in self.partners if p["kind"] in ("scripted", "self")}
         self.row = 1 if racer else 0
         self.message = ""
@@ -353,6 +363,9 @@ class CreateScreen(Screen):
             self.row = (self.row - 1) % len(rows)
         elif key in DOWN or (key == pygame.K_TAB):
             self.row = (self.row + 1) % len(rows)
+        elif key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+            jump = self.PARTNER_LINES if key == pygame.K_PAGEDOWN else -self.PARTNER_LINES
+            self.row = max(0, min(len(rows) - 1, self.row + jump))
         elif key in LEFT + RIGHT:
             step = 0.1 if key in RIGHT else -0.1
             if row == "aggression":
@@ -423,15 +436,15 @@ class CreateScreen(Screen):
         self.app.start_training(racer_dir)
         self.app.show(RacerScreen(self.app, racer_dir))
 
-    def draw(self, screen) -> None:
+    def draw_left(self, screen):
+        """Draw the rows; returns ((top, bottom) of the selected row, end of the list)."""
         ui = self.app.ui
-        ui.backdrop(screen)
         racer = stable.load(self.racer_dir) if self.racer_dir else None
-        title = f"UPSKILL {racer['name'].upper()}" if racer else "CREATE A RACER"
-        ui.text(screen, "big", title, C_HUD_ACCENT, 6, 4, shadow=True)
         rows = self.rows()
         y = 12.5
+        marks = (y, y + 5.0)
         for i, row in enumerate(rows):
+            start_y = y
             selected = i == self.row
             colour = C_HUD_ACCENT if selected else C_HUD_TEXT
             if selected:
@@ -498,10 +511,40 @@ class CreateScreen(Screen):
             else:
                 partner = next(p for p in self.partners if p["key"] == row)
                 tick = "[x]" if row in self.chosen else "[ ]"
-                ui.text(screen, "small", f"{tick}  {partner['name']}", colour, 9, y + 0.3)
+                label = partner["name"] + self.partner_status(partner)
+                ui.text(screen, "small", f"{tick}  {label}", colour, 9, y + 0.3)
                 y += 3.0
+            if selected:
+                marks = (start_y, max(y, start_y + 4.0))
+        return marks, y
+
+    def draw(self, screen) -> None:
+        """The left column is drawn onto a tall canvas and shown through a
+        window that follows the selected row, so long lists (partners) scroll."""
+        ui = self.app.ui
+        ui.backdrop(screen)
+        racer = stable.load(self.racer_dir) if self.racer_dir else None
+        title = f"UPSKILL {racer['name'].upper()}" if racer else "CREATE A RACER"
+        ui.text(screen, "big", title, C_HUD_ACCENT, 6, 4, shadow=True)
+        w, h = screen.get_size()
+        canvas = pygame.Surface((w, h * 4), pygame.SRCALPHA)
+        (sel_top, sel_bottom), end = self.draw_left(canvas)
+        top, bottom = self.VIEW_TOP, self.VIEW_BOTTOM
+        if sel_top - self.view < top:
+            self.view = sel_top - top
+        elif sel_bottom - self.view > bottom:
+            self.view = sel_bottom - bottom
+        self.view = max(0.0, min(self.view, max(0.0, end - bottom)))
+        y0 = ui.px(0, top + self.view)[1]
+        x1 = ui.px(98, 0)[0]
+        src = pygame.Rect(0, int(y0), int(x1), int((bottom - top) * ui.unit))
+        screen.blit(canvas, (0, int(ui.px(0, top)[1])), src)
+        if self.view > 0.01:
+            ui.text(screen, "small", "^ more above", C_HUD_DIM, 70, top - 3.0)
+        if end - self.view > bottom + 0.01:
+            ui.text(screen, "small", "v more below  (PgUp / PgDn)", C_HUD_DIM, 50, bottom + 0.3)
         if self.message:
-            ui.text(screen, "small", self.message, C_PINK, 7, 87.5, "bottomleft")
+            ui.text(screen, "small", self.message, C_PINK, 7, 89.5, "bottomleft")
 
         ui.panel(screen, 100, 13, 56, 74)
         lines = [
