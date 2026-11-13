@@ -117,6 +117,7 @@ class StableScreen(Screen):
     def __init__(self, app):
         super().__init__(app)
         self.row = 0
+        self.scroll = 0.0
         self.timer = 0.0
         self.reload()
 
@@ -151,6 +152,10 @@ class StableScreen(Screen):
         elif event.key in DOWN:
             self.row = (self.row + 1) % len(rows)
             self.app.audio.play("blip")
+        elif event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN, pygame.K_HOME, pygame.K_END):
+            step = {pygame.K_PAGEUP: -6, pygame.K_PAGEDOWN: 6, pygame.K_HOME: -len(rows), pygame.K_END: len(rows)}
+            self.row = max(0, min(len(rows) - 1, self.row + step[event.key]))
+            self.app.audio.play("blip")
         elif event.key in ACCEPT:
             self.app.audio.play("select")
             choice = rows[self.row]
@@ -173,68 +178,92 @@ class StableScreen(Screen):
             else:
                 self.app.show(RacerScreen(self.app, choice))
 
+    LIST_TOP = 15.0
+    LIST_BOTTOM = 81.0
+
+    def row_height(self, row) -> float:
+        return {"new": 5.5, "breed": 7.0, "championship": 7.0, "ratings": 6.0, "hall": 5.0,
+                "back": 5.0}.get(row, 8.0)
+
+    def draw_row(self, screen, row, selected: bool, y: float) -> None:
+        ui = self.app.ui
+        colour = C_HUD_ACCENT if selected else C_HUD_TEXT
+        if selected:
+            ui.text(screen, "mid", ">", C_PINK, 4, y)
+        if row == "new":
+            ui.text(screen, "mid", "+ CREATE A RACER", colour, 7, y, shadow=True)
+        elif row == "breed":
+            ok = len(self.breedable()) >= 2
+            ui.text(screen, "mid", "+ BREED TWO RACERS", colour if ok else C_HUD_DIM, 7, y, shadow=ok)
+            if not ok:
+                need = ("needs two trained racers" if self.app.workshop
+                        else "needs two racers at stud")
+                ui.text(screen, "small", need, C_HUD_DIM, 60, y + 0.8)
+        elif row == "championship":
+            ch = championship.active(self.app.stable_root)
+            if ch:
+                label, ok = f"> CONTINUE CHAMPIONSHIP  (race {len(ch['races']) + 1} of {len(ch['tracks'])})", True
+            else:
+                ok = bool(championship.eligible(self.app.stable_root))
+                label = "+ ENTER A CHAMPIONSHIP"
+            ui.text(screen, "mid", label, colour if ok else C_HUD_DIM, 7, y, shadow=ok)
+            if not ok:
+                ui.text(screen, "small", "needs a trained racer that is still racing", C_HUD_DIM, 60, y + 4.2)
+        elif row == "ratings":
+            ui.text(screen, "mid", "RATINGS", colour, 7, y, shadow=True)
+        elif row == "back":
+            ui.text(screen, "mid", "BACK", colour, 7, y + 1, shadow=True)
+        elif row == "hall":
+            ui.text(screen, "mid", "HALL OF FAME", colour, 7, y + 1, shadow=True)
+        else:
+            racer = stable.load(row)
+            draw_chip(ui, screen, stable.livery_of(row), 7, y + 0.3, 5.5)
+            ui.text(screen, "mid", racer["name"].upper(), colour, 14, y, shadow=True)
+            draw_stars(ui, screen, racer["career"].get("titles", 0), 15.5 + text_width(ui, "mid", racer["name"].upper()),
+                       y + 0.6, 2.4, 4)
+            text, tint = status_text(self.app, row)
+            ui.text(screen, "small", text, tint, 60, y + 0.8)
+            career = racer["career"]
+            skill = rating.summary(self.app.stable_root, f"racer:{row.name}")
+            ui.text(screen, "small", f"{career['races']} races, {career['wins']} wins"
+                    + (f"   RATING {skill['rating']:.0f}" if skill else "   RATING 1000"), C_HUD_DIM, 60,
+                    y + 3.3)
+            bar(ui, screen, 7, y + 4.4, 20, racer["aggression"], C_PINK)
+            bar(ui, screen, 29, y + 4.4, 20, racer["caution"], C_CYAN)
+
     def draw(self, screen) -> None:
         ui = self.app.ui
         ui.backdrop(screen)
         title = "WORKSHOP: MAKE HOUSE RIVALS" if self.app.workshop else "YOUR STABLE"
         ui.text(screen, "big", title, C_HUD_ACCENT, 6, 4, shadow=True)
         rows = self.rows()
-        y = 15.0
+        # The list scrolls: rows are laid out top to bottom, and the window
+        # (LIST_TOP..LIST_BOTTOM) follows the selected row.
+        tops, pos = [], 0.0
+        for row in rows:
+            tops.append(pos)
+            pos += self.row_height(row)
+        sel = min(self.row, len(rows) - 1)
+        window = self.LIST_BOTTOM - self.LIST_TOP
+        sel_top, sel_bottom = tops[sel], tops[sel] + max(5.0, self.row_height(rows[sel]))
+        if sel_top < self.scroll:
+            self.scroll = sel_top
+        elif sel_bottom > self.scroll + window:
+            self.scroll = sel_bottom - window
+        self.scroll = max(0.0, min(self.scroll, max(0.0, pos - window)))
         for i, row in enumerate(rows):
-            selected = i == self.row
-            colour = C_HUD_ACCENT if selected else C_HUD_TEXT
-            if selected:
-                ui.text(screen, "mid", ">", C_PINK, 4, y)
-            if row == "new":
-                ui.text(screen, "mid", "+ CREATE A RACER", colour, 7, y, shadow=True)
-                y += 5.5
-            elif row == "breed":
-                ok = len(self.breedable()) >= 2
-                ui.text(screen, "mid", "+ BREED TWO RACERS", colour if ok else C_HUD_DIM, 7, y, shadow=ok)
-                if not ok:
-                    need = ("needs two trained racers" if self.app.workshop
-                            else "needs two racers at stud")
-                    ui.text(screen, "small", need, C_HUD_DIM, 60, y + 0.8)
-                y += 7
-            elif row == "championship":
-                ch = championship.active(self.app.stable_root)
-                if ch:
-                    label, ok = f"> CONTINUE CHAMPIONSHIP  (race {len(ch['races']) + 1} of {len(ch['tracks'])})", True
-                else:
-                    ok = bool(championship.eligible(self.app.stable_root))
-                    label = "+ ENTER A CHAMPIONSHIP"
-                ui.text(screen, "mid", label, colour if ok else C_HUD_DIM, 7, y, shadow=ok)
-                if not ok:
-                    ui.text(screen, "small", "needs a trained racer that is still racing", C_HUD_DIM, 60, y + 4.2)
-                y += 7
-            elif row == "ratings":
-                ui.text(screen, "mid", "RATINGS", colour, 7, y, shadow=True)
-                y += 6
-            elif row == "back":
-                ui.text(screen, "mid", "BACK", colour, 7, y + 1, shadow=True)
-            elif row == "hall":
-                ui.text(screen, "mid", "HALL OF FAME", colour, 7, y + 1, shadow=True)
-                y += 5
-            else:
-                racer = stable.load(row)
-                draw_chip(ui, screen, stable.livery_of(row), 7, y + 0.3, 5.5)
-                ui.text(screen, "mid", racer["name"].upper(), colour, 14, y, shadow=True)
-                draw_stars(ui, screen, racer["career"].get("titles", 0), 15.5 + text_width(ui, "mid", racer["name"].upper()),
-                           y + 0.6, 2.4, 4)
-                text, tint = status_text(self.app, row)
-                ui.text(screen, "small", text, tint, 60, y + 0.8)
-                career = racer["career"]
-                skill = rating.summary(self.app.stable_root, f"racer:{row.name}")
-                ui.text(screen, "small", f"{career['races']} races, {career['wins']} wins"
-                        + (f"   RATING {skill['rating']:.0f}" if skill else "   RATING 1000"), C_HUD_DIM, 60,
-                        y + 3.3)
-                bar(ui, screen, 7, y + 4.4, 20, racer["aggression"], C_PINK)
-                bar(ui, screen, 29, y + 4.4, 20, racer["caution"], C_CYAN)
-                y += 8
-        if not self.racers:
+            y = self.LIST_TOP + tops[i] - self.scroll
+            if y < self.LIST_TOP - 0.01 or y + max(5.0, self.row_height(row)) > self.LIST_BOTTOM + 0.01:
+                continue
+            self.draw_row(screen, row, i == sel, y)
+        if self.scroll > 0.01:
+            ui.text(screen, "small", "^ more above", C_HUD_DIM, 70, self.LIST_TOP - 3.4)
+        if pos - self.scroll > window + 0.01:
+            ui.text(screen, "small", "v more below  (PgUp / PgDn)", C_HUD_DIM, 50, self.LIST_BOTTOM + 0.2)
+        y = self.LIST_TOP + pos - self.scroll
+        if not self.racers and y < self.LIST_BOTTOM:
             ui.text(screen, "small", "No racers yet. Create one: give it a name and a personality, then train it.",
                     C_HUD_DIM, 7, y)
-            y += 5
         ui.text(screen, "small", "bars: aggression (pink), caution (blue)", C_HUD_DIM, 7, 84)
 
         ui.panel(screen, 104, 13, 52, 66)

@@ -512,3 +512,20 @@ def test_records_from_older_physics_are_kept_aside(tmp_path):
     assert records.update(tmp_path, "oval", 11.0, {"name": "New", "livery": None}, 2)
     assert records.load(tmp_path)["oval"]["name"] == "New"
     assert json.loads((tmp_path / "records.classic.json").read_text())["oval"]["name"] == "Old"
+
+
+def test_a_long_stable_list_scrolls_to_keep_the_selection_on_screen(app):
+    from game.stable_screens import StableScreen
+    root = stable.STABLE_DIR
+    for k in range(14):
+        instant_racer(root, f"Racer {k:02d}")
+    screen = StableScreen(app)
+    app.show(screen)
+    app.draw()
+    assert screen.scroll == 0.0
+    press(app, pygame.K_END)                                       # BACK, at the very bottom
+    assert screen.rows()[screen.row] == "back" and screen.scroll > 0.0
+    press(app, pygame.K_HOME)
+    assert screen.row == 0 and screen.scroll == 0.0
+    press(app, pygame.K_PAGEDOWN, pygame.K_PAGEDOWN)
+    assert screen.row == 12 and screen.scroll > 0.0
