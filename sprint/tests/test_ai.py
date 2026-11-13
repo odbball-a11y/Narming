@@ -515,3 +515,13 @@ def test_trained_drivers_appear_in_race_setup(app):
     app.show(SetupScreen(app))
     labels = [label for _, label in app.current.driver_choices()]
     assert "Evo gen 6" in labels and "Scripted" in labels and "None" in labels
+
+
+def test_driving_school_can_start_from_a_saved_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "RUNS_DIR", tmp_path)
+    first = tmp_path / "seed.npz"
+    np.savez_compressed(first, pop=random_weights(np.random.default_rng(1), 6, FLAT).astype(np.float32))
+    evolve.train(run="school", generations=1, population=6, tracks=["oval"], arch=FLAT,
+                 start_file=str(first), driving_school=True, log=lambda m: None)
+    config = json.loads((tmp_path / "school" / "config.json").read_text())
+    assert config["phase2_start"] is None                         # still in driving school

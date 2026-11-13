@@ -712,7 +712,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 phase2_from = phase2_from or 1
         if start_file:
             parent = {"file": project_path(start_file)}
-            phase2_from = phase2_from or 1
+            if not driving_school:
+                phase2_from = phase2_from or 1
         tracks = tracks or Track.available()
         if race_laps:
             race_seconds = {t: round(race_laps * LAP_SECONDS.get(t, DEFAULT_SECONDS / 2), 1) for t in tracks}
