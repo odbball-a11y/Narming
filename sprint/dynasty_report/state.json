@@ -315,7 +315,7 @@
   "id": "cinder-brick",
   "name": "Cinder Brick",
   "gen": 3,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Comet Brick",
    "Comet Velvet"
@@ -327,20 +327,20 @@
   "braking": 2,
   "aggression": 0.51,
   "caution": 0.45,
-  "rating": 1013,
+  "rating": 994,
   "peak": 1086,
-  "rated_races": 15,
-  "races": 15,
-  "wins": 3,
-  "podiums": 8,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 4,
+  "podiums": 10,
   "titles": 0,
   "specialty": "oval",
   "tracks": {
-   "oval": 408.1385615259685,
-   "speedway": 1193.7351101684428,
-   "esses": 1000.8642942324232,
-   "technical": 1040.4861321994943,
-   "grandprix": 956.474206455499
+   "oval": 345.0416408909854,
+   "speedway": 1274.9655518601287,
+   "esses": 872.5826979301507,
+   "technical": 1045.2483392278225,
+   "grandprix": 925.3341791777153
   },
   "pace": 0.9242
  },
@@ -381,7 +381,7 @@
   "id": "comet-velvet",
   "name": "Comet Velvet",
   "gen": 2,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Mischief Brick",
    "Vera Velvet"
@@ -411,10 +411,37 @@
   "pace": 0.954
  },
  {
+  "id": "dash-brick",
+  "name": "Dash Brick",
+  "gen": 4,
+  "status": "racing",
+  "parents": [
+   "Kestrel Brick",
+   "Orbit Slipstream"
+  ],
+  "weight": "heavy",
+  "top_speed": 3,
+  "accel": 2,
+  "handling": 4,
+  "braking": 3,
+  "aggression": 0.45,
+  "caution": 0.55,
+  "rating": null,
+  "peak": null,
+  "rated_races": 0,
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "titles": 0,
+  "specialty": "esses",
+  "tracks": {},
+  "pace": 0.9121
+ },
+ {
   "id": "flash-brick",
   "name": "Flash Brick",
   "gen": 3,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Comet Brick",
    "Comet Velvet"
@@ -426,20 +453,20 @@
   "braking": 4,
   "aggression": 0.52,
   "caution": 0.43,
-  "rating": 998,
+  "rating": 1016,
   "peak": 1099,
-  "rated_races": 10,
-  "races": 10,
-  "wins": 2,
-  "podiums": 6,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 4,
+  "podiums": 13,
   "titles": 1,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 712.9719086175963,
-   "speedway": 1191.755049194828,
-   "esses": 610.0915126793118,
-   "technical": 1160.5106046329624,
-   "grandprix": 886.0925126225328
+   "oval": 806.012741455387,
+   "speedway": 1043.9194167372434,
+   "esses": 737.5775771256581,
+   "technical": 1038.9503014930651,
+   "grandprix": 965.7192458121756
   },
   "pace": 0.9201
  },
@@ -447,7 +474,7 @@
   "id": "fury-thunderbolt",
   "name": "Fury Thunderbolt",
   "gen": 2,
-  "status": "stud",
+  "status": "dead",
   "parents": [
    "Zephyr Brick",
    "Storm Thunderbolt"
@@ -480,7 +507,7 @@
   "id": "kestrel-brick",
   "name": "Kestrel Brick",
   "gen": 3,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Zephyr Brick",
    "Comet Velvet"
@@ -492,20 +519,20 @@
   "braking": 3,
   "aggression": 0.61,
   "caution": 0.47,
-  "rating": 1039,
-  "peak": 1124,
-  "rated_races": 15,
-  "races": 15,
-  "wins": 1,
-  "podiums": 11,
+  "rating": 1080,
+  "peak": 1156,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 3,
+  "podiums": 15,
   "titles": 0,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 872.8458537979441,
-   "speedway": 861.5111233630641,
-   "esses": 1051.6329545686285,
-   "technical": 1034.596705771203,
-   "grandprix": 912.2184879869237
+   "oval": 993.0815272436581,
+   "speedway": 933.359115347163,
+   "esses": 899.9589358779882,
+   "technical": 1294.2116454817326,
+   "grandprix": 882.4565073969239
   },
   "pace": 0.9345
  },
@@ -546,7 +573,7 @@
   "id": "orbit-slipstream",
   "name": "Orbit Slipstream",
   "gen": 3,
-  "status": "racing",
+  "status": "stud",
   "parents": [
    "Comet Brick",
    "Zigzag Slipstream"
@@ -560,18 +587,18 @@
   "caution": 0.62,
   "rating": 1036,
   "peak": 1104,
-  "rated_races": 15,
-  "races": 15,
-  "wins": 4,
-  "podiums": 10,
+  "rated_races": 20,
+  "races": 20,
+  "wins": 5,
+  "podiums": 14,
   "titles": 2,
   "specialty": "all-rounder",
   "tracks": {
-   "oval": 966.7888760057838,
-   "speedway": 729.1692616604598,
-   "esses": 1234.151293058215,
-   "technical": 857.4657675801933,
-   "grandprix": 1105.3771106518209
+   "oval": 884.4334706481391,
+   "speedway": 820.3075652328495,
+   "esses": 1308.1710479780452,
+   "technical": 893.209068822177,
+   "grandprix": 984.4327776147533
   },
   "pace": 0.9041
  },
@@ -739,6 +766,39 @@
    "grandprix": 802.8651791389354
   },
   "pace": 0.9275
+ },
+ {
+  "id": "zigzag-brick",
+  "name": "Zigzag Brick",
+  "gen": 4,
+  "status": "racing",
+  "parents": [
+   "Ace Thunderbolt",
+   "Kestrel Brick"
+  ],
+  "weight": "medium",
+  "top_speed": 3,
+  "accel": 5,
+  "handling": 1,
+  "braking": 3,
+  "aggression": 0.56,
+  "caution": 0.35,
+  "rating": 995,
+  "peak": 1094,
+  "rated_races": 5,
+  "races": 5,
+  "wins": 0,
+  "podiums": 3,
+  "titles": 0,
+  "specialty": "all-rounder",
+  "tracks": {
+   "oval": 925.2357271222679,
+   "speedway": 653.6879845191934,
+   "esses": 1125.3823316612952,
+   "technical": 1070.1865033775537,
+   "grandprix": 869.4317748783005
+  },
+  "pace": 0.9404
  },
  {
   "id": "zigzag-slipstream",

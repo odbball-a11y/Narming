@@ -171,3 +171,18 @@
 - ` 6.07h` breeding **Zigzag Brick**: Ace Thunderbolt x Kestrel Brick (fastest)
 - ` 6.11h`   born Zigzag Brick: gen 4, speed 3  accel 5  handling 1  brakes 3  medium, aggression 0.56, caution 0.35 (2.7 min)
 - ` 6.19h` schooled Zigzag Brick (8 generations, 4.4 min)
+- ` 6.27h` between races **Zigzag Brick** takes an all-rounder course (10 generations, 5.2 min) with Scripted car, Itself (its own best so far), Fury Thunderbolt; now all-rounder
+- ` 6.27h` season 31: **Careful Keith** (house) wins the title. Careful Keith 35 | Flash Brick 34 | Orbit Slipstream 29 | Zigzag Brick 24
+- ` 6.27h`   news: Flash Brick retires to stud after 20 races.
+- ` 6.27h`   news: Orbit Slipstream retires to stud after 20 races.
+- ` 6.27h`   news: Fury Thunderbolt has died. Remembered in the hall of fame.
+- ` 6.27h` breeding **Dash Brick**: Kestrel Brick x Orbit Slipstream (learner)
+- ` 6.32h`   born Dash Brick: gen 4, speed 3  accel 2  handling 4  brakes 3  heavy, aggression 0.45, caution 0.55 (2.6 min)
+- ` 6.39h` schooled Dash Brick (8 generations, 4.5 min)
+- ` 6.55h` between races **Dash Brick** takes a Esses specialist course (20 generations, 9.5 min) with Scripted car, Itself (its own best so far), Tilly Thunderbolt; now Esses specialist
+- ` 6.55h` season 32: **Dash Brick** (racer) wins the title. Dash Brick 34 | Careful Keith 33 | Zigzag Brick 26 | Rocket Velvet 22
+- ` 6.55h`   news: Rocket Velvet retires to stud after 20 races.
+- ` 6.55h`   news: Comet Brick has died. Remembered in the hall of fame.
+- ` 6.55h` breeding **Sparks Velvet**: Orbit Slipstream x Rocket Velvet (fastest)
+- ` 6.60h`   born Sparks Velvet: gen 4, speed 5  accel 1  handling 3  brakes 3  heavy, aggression 0.31, caution 0.45 (2.8 min)
+- ` 6.68h` schooled Sparks Velvet (8 generations, 4.6 min)

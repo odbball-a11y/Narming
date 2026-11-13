@@ -1,6 +1,6 @@
-# Dynasty report (after 6.1 hours)
+# Dynasty report (after 6.6 hours)
 
-24 racers so far, 145 stable races, 29 seasons.
+26 racers so far, 155 stable races, 31 seasons.
 
 ## Top 10 by peak rating
 
@@ -24,7 +24,8 @@
 | 0 | 6 | 1241 | 1374 | 0.920 | 7 |
 | 1 | 6 | 1256 | 1366 | 0.928 | 7 |
 | 2 | 6 | 1193 | 1361 | 0.928 | 6 |
-| 3 | 6 | 1182 | 1342 | 0.916 | 5 |
+| 3 | 6 | 1188 | 1342 | 0.916 | 5 |
+| 4 | 2 | 1094 | 1094 | 0.926 | 0 |
 
 ## Which car wins?
 
@@ -33,22 +34,22 @@ By car weight (racers with at least 5 rated races):
 | weight | racers | mean peak | titles | wins |
 |---|---|---|---|---|
 | light | 6 | 1220 | 3 | 24 |
-| medium | 5 | 1290 | 5 | 24 |
-| heavy | 13 | 1189 | 17 | 57 |
+| medium | 6 | 1257 | 5 | 24 |
+| heavy | 13 | 1192 | 17 | 63 |
 
 Mean stars of the top third by peak rating against the rest:
 
 | group | top speed | accel | handling | braking | aggression | caution |
 |---|---|---|---|---|---|---|
 | top third | 3.62 | 3.00 | 2.75 | 2.62 | 0.50 | 0.39 |
-| the rest | 3.44 | 2.88 | 2.88 | 2.81 | 0.53 | 0.43 |
+| the rest | 3.41 | 3.00 | 2.76 | 2.82 | 0.53 | 0.43 |
 
 Specialists against all-rounders (at least 5 rated races):
 
 | kind | racers | mean peak | titles | wins |
 |---|---|---|---|---|
-| all-rounder | 17 | 1231 | 19 | 77 |
-| specialist | 7 | 1186 | 6 | 28 |
+| all-rounder | 18 | 1225 | 19 | 82 |
+| specialist | 7 | 1186 | 6 | 29 |
 
 Best rating on each track (track kings):
 
