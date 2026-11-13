@@ -126,7 +126,11 @@ class Car:
             vf = 0.0
 
         # --- lateral grip: remove sideways speed at a limited rate ---------
-        grip = p.grip * (1.0 - p.throttle_grip_loss * throttle) * (1.0 - p.brake_grip_loss * brake)
+        if p.brake_circle or p.throttle_circle:
+            used = (p.brake_circle * brake) ** 2 + (p.throttle_circle * throttle) ** 2
+            grip = p.grip * math.sqrt(max(0.0, 1.0 - used))
+        else:
+            grip = p.grip * (1.0 - p.throttle_grip_loss * throttle) * (1.0 - p.brake_grip_loss * brake)
         if on_grass:
             grip *= tuning.GRASS_GRIP
         max_cancel = grip * dt
@@ -136,6 +140,9 @@ class Car:
             vl += max_cancel
         else:
             vl = 0.0
+
+        if p.scrub and vf > 0.0:                      # what is still sliding drags the car back
+            vf = max(0.0, vf - p.scrub * abs(vl) * dt)
 
         # --- back to world frame, surface drag, integrate ------------------
         vx = vf * ch - vl * sh

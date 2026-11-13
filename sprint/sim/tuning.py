@@ -76,6 +76,18 @@ class CarParams:
     # Higher: braking while turning makes the tail step out.
     brake_grip_loss: float = 0.10
 
+    # Tyre scrub: a car that keeps sliding sideways loses forward speed in
+    # proportion (deceleration = scrub x the sideways speed grip could not
+    # remove).  0 = a slide is free (the original model).  A clean line never
+    # slides, so it never pays this.
+    scrub: float = 0.0
+
+    # Friction circle: braking and throttle use up the tyres' grip budget, so
+    # cornering grip = grip x sqrt(1 - (brake_circle x brake)^2 - (throttle_circle x throttle)^2).
+    # Both 0 = the original linear throttle/brake grip losses above.
+    brake_circle: float = 0.0
+    throttle_circle: float = 0.0
+
     # Maximum turn rate (rad/s) at low speed with full steering lock.
     # Higher: darts into hairpins, twitchy.  Lower: wide turning circle.
     steer_rate_low: float = 3.0
@@ -305,11 +317,27 @@ FINISH_GRACE = 30.0
 COOLDOWN = 1.5
 
 
+_NEWER_PHYSICS = {"scrub": 0.0, "brake_circle": 0.0, "throttle_circle": 0.0}
+
+
+def _fingerprint_params():
+    """repr(CAR_PARAMS) leaving out physics options that are switched off, so
+    recordings made before they existed still match."""
+    text = repr(CAR_PARAMS)
+    for key, default in _NEWER_PHYSICS.items():
+        text = text.replace(f", {key}={default!r}", "")
+
+    class _Plain:                      # repr() of the text itself, without quotes
+        def __repr__(self):
+            return text
+    return _Plain()
+
+
 def physics_fingerprint() -> str:
     """Identifies the values a recorded replay depends on.  A replay made
     with a different fingerprint may not play back identically."""
     import hashlib
-    parts = (TICK_RATE, CAR_PARAMS, GRASS_GRIP, GRASS_DRAG, WALL_RESTITUTION,
+    parts = (TICK_RATE, _fingerprint_params(), GRASS_GRIP, GRASS_DRAG, WALL_RESTITUTION,
              WALL_FRICTION, CAR_RESTITUTION, DAMAGE_MIN_IMPACT, WALL_DAMAGE, CAR_DAMAGE,
              DAMAGE_TOP_SPEED_LOSS, DAMAGE_ACCEL_LOSS, DRAFT_LENGTH, DRAFT_HALF_WIDTH,
              DRAFT_SPREAD, DRAFT_MIN_SPEED, DRAFT_TOP_SPEED_GAIN, DRAFT_ACCEL_GAIN,

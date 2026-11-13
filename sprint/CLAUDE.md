@@ -342,6 +342,17 @@ podium): `record_result(..., finished=)`.
   sideways speed for free, and evolution uses that. Fixing it needs a slide cost
   in the physics (tyre scrub) or in the score.
 
+- Physics options (`tuning.CarParams.scrub`, `brake_circle`, `throttle_circle`,
+  all 0 = the original physics, and left out of `physics_fingerprint` while off,
+  so old replays still match): scrub = forward deceleration proportional to the
+  sideways speed grip could not remove (a clean line never pays it); the circle
+  replaces the linear throttle/brake grip losses with sqrt(1 - used^2).
+  `lines_physics.py` runs the old graduate and the scripted driver under variants
+  (no retraining). Result: scrub is the lever; 8 makes the old graduate slide
+  6.5% of a lap instead of 25.7%, 18% -> 1% damage, only 2.8% slower; 16 is ~7%
+  slower (barely quicker than scripted); the friction circle alone changes little
+  without retraining. Scripted laps never change.
+
 Still to build: 6-8 cars per race (new HUD, more grid slots, slower
 training), wet/dry weather (not wanted for now), PPO as a rival method.
 

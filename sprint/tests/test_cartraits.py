@@ -180,3 +180,29 @@ def test_exam_on_several_tracks_in_a_chosen_car():
     car = {"top_speed": 4, "accel": 4, "handling": 2, "braking": 2, "weight": "heavy"}
     report = evolve.exam(weights, brain.DEFAULT_ARCH, ["oval", "speedway"], car=car)
     assert set(report) == {"oval", "speedway"}
+
+
+def test_tyre_scrub_and_friction_circle_default_to_off_and_cost_slides_only():
+    import math
+    from dataclasses import replace
+    from sim import tuning
+    from sim.driver import Controls
+    from sim.track import Track
+    from sim.world import World
+    base = tuning.car_params(0)
+    assert base.scrub == 0.0 and base.brake_circle == 0.0 and base.throttle_circle == 0.0
+
+    def one_tick(params, sideways):
+        """Forward speed after one tick of a car moving at 25 u/s with `sideways` u/s of slide."""
+        w = World(Track.load("speedway"), 1, laps=1, params=[params])
+        car = w.cars[0]
+        ch, sh = math.cos(car.heading), math.sin(car.heading)
+        car.vx, car.vy = 25.0 * ch - sideways * sh, 25.0 * sh + sideways * ch
+        w.step([Controls(0.0, 0.0, 0.0)])
+        c = car
+        return c.vx * math.cos(c.heading) + c.vy * math.sin(c.heading)
+    scrubby = replace(base, scrub=8.0)
+    assert one_tick(base, 0.0) == one_tick(scrubby, 0.0)           # no slide, no scrub
+    assert one_tick(scrubby, 6.0) < one_tick(base, 6.0) - 0.1      # a slide now drags the car back
+    circle = replace(base, brake_circle=0.9)
+    assert circle.grip == base.grip                                # (the circle acts through the brake input)
