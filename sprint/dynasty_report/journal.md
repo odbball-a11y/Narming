@@ -42,3 +42,15 @@
 - ` 1.49h`   news: Sally Slipstream retires to stud after 20 races.
 - ` 1.49h`   news: Tilly Thunderbolt retires to stud after 20 races.
 - ` 1.49h` breeding **Zephyr Brick**: Barnaby Brick x Sally Slipstream (learner)
+- ` 1.54h`   born Zephyr Brick: gen 1, speed 2  accel 4  handling 3  brakes 3  heavy, aggression 0.55, caution 0.42 (2.8 min)
+- ` 1.62h` schooled Zephyr Brick (8 generations, 4.8 min)
+- ` 1.71h` between races **Zephyr Brick** takes an all-rounder course (10 generations, 5.9 min) with Scripted car, Itself (its own best so far), Tilly Thunderbolt; now all-rounder
+- ` 1.71h` season 9: **Zephyr Brick** (racer) wins the title. Zephyr Brick 42 | Vera Velvet 34 | Mischief Brick 33 | Careful Keith 21
+- ` 1.71h`   news: Vera Velvet retires to stud after 20 races.
+- ` 1.71h` breeding **Flash Velvet**: Barnaby Brick x Vera Velvet (fastest)
+- ` 1.76h`   born Flash Velvet: gen 1, speed 3  accel 3  handling 3  brakes 3  heavy, aggression 0.53, caution 0.46 (3.0 min)
+- ` 1.84h` schooled Flash Velvet (8 generations, 4.8 min)
+- ` 1.94h` between races **Flash Velvet** takes an all-rounder course (10 generations, 5.5 min) with Scripted car, Itself (its own best so far), Vera Velvet; now all-rounder
+- ` 1.94h` season 10: **Zephyr Brick** (racer) wins the title. Zephyr Brick 38 | Flash Velvet 32 | Mischief Brick 29 | Careful Keith 23
+- ` 1.94h` breeding **Zigzag Slipstream**: Sally Slipstream x Vera Velvet (learner)
+- ` 1.98h`   born Zigzag Slipstream: gen 1, speed 5  accel 2  handling 3  brakes 2  medium, aggression 0.39, caution 0.4 (2.7 min)
