@@ -32,7 +32,7 @@ DATA = HERE / "dynasty"
 ROOT = DATA / "stable"
 OUT = HERE / "dynasty_report"
 
-ALIVE_CAP = 12              # racers racing or at stud at once
+RACING_CAP = 6              # foals are bred only while fewer racers than this are still racing
 FOUNDER_GENERATIONS = 10
 FOAL_GENERATIONS = 8        # upskill after the breeding camp
 SEASONS_BETWEEN_FOALS = 1   # a season after every foal, so studs age with the stable
@@ -164,7 +164,7 @@ def foal_name(root: Path, sire: Path, dam: Path, rng: random.Random) -> str:
 
 
 def breed_one(root: Path, log: Log, workers: int, fast: bool, rng: random.Random, criterion: str) -> bool:
-    if len(alive(root)) >= ALIVE_CAP:
+    if sum(1 for d in alive(root) if stable.can_race(d)) >= RACING_CAP:
         return False
     pair = breed_pair(root)
     if pair is None:
@@ -349,7 +349,10 @@ def main() -> int:
                 if stable.is_breeding(d):
                     stable.breed(d, workers=args.workers)
             upskill_foals(ROOT, log, args.workers, population, foal_gens)
-            run_season(ROOT, log)
+            if any(stable.can_race(d) for d in alive(ROOT)):
+                run_season(ROOT, log)
+            else:                                                  # everyone has retired: breed until someone can race
+                log.write("nobody is racing; breeding the next foals first", milestone=True)
             if breed_one(ROOT, log, args.workers, args.fast, rng, "fastest" if cycle % 2 == 0 else "learner"):
                 upskill_foals(ROOT, log, args.workers, population, foal_gens)
             train_between(ROOT, log, args.workers, population, rng, args.fast)

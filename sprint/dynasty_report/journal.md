@@ -186,3 +186,74 @@
 - ` 6.55h` breeding **Sparks Velvet**: Orbit Slipstream x Rocket Velvet (fastest)
 - ` 6.60h`   born Sparks Velvet: gen 4, speed 5  accel 1  handling 3  brakes 3  heavy, aggression 0.31, caution 0.45 (2.8 min)
 - ` 6.68h` schooled Sparks Velvet (8 generations, 4.6 min)
+- ` 6.77h` between races **Sparks Velvet** takes an all-rounder course (10 generations, 5.6 min) with Scripted car, Itself (its own best so far), Vortex Brick; now all-rounder
+- ` 6.77h` season 33: **Careful Keith** (house) wins the title. Careful Keith 35 | Zigzag Brick 30 | Dash Brick 26 | Sparks Velvet 24
+- ` 6.86h` between races **Sparks Velvet** takes an all-rounder course (10 generations, 5.4 min) with Scripted car, Itself (its own best so far), Comet Velvet; now all-rounder
+- ` 6.86h` season 34: **Storm Slipstream** (racer) wins the title. Storm Slipstream 38 | Dash Brick 35 | Careful Keith 29 | Sparks Velvet 20
+- ` 6.86h`   news: Storm Slipstream retires to stud after 20 races.
+- ` 6.98h` between races **Zigzag Brick** takes a Oval specialist course (20 generations, 7.3 min) with Scripted car, Itself (its own best so far), Cinder Brick; now all-rounder
+- ` 6.98h` season 35: **Dash Brick** (racer) wins the title. Dash Brick 36 | Careful Keith 31 | Sparks Velvet 30 | Vortex Brick 30
+- ` 6.98h`   news: Dash Brick retires to stud after 20 races.
+- ` 6.98h`   news: Vortex Brick retires to stud after 20 races.
+- ` 7.08h` between races **Sparks Velvet** takes an all-rounder course (10 generations, 5.6 min) with Scripted car, Itself (its own best so far), Sally Slipstream; now all-rounder
+- ` 7.08h` saved a loadable snapshot (saves/dynasty.zip)
+- ` 7.08h` season 36: **Zigzag Brick** (racer) wins the title. Zigzag Brick 35 | Xena Brick 30 | Careful Keith 21 | Sparks Velvet 18
+- ` 7.08h`   news: Sparks Velvet retires to stud after 20 races.
+- ` 7.08h`   news: Xena Brick retires to stud after 20 races.
+- ` 7.08h`   news: Zigzag Brick retires to stud after 20 races.
+- ` 7.08h` error:
+```
+Traceback (most recent call last):
+  File "/home/user/Narming/sprint/dynasty.py", line 352, in main
+    run_season(ROOT, log)
+    ~~~~~~~~~~^^^^^^^^^^^
+  File "/home/user/Narming/sprint/dynasty.py", line 121, in run_season
+    raise RuntimeError("nobody can race")
+RuntimeError: nobody can race
+```
+- ` 7.08h` error:
+```
+Traceback (most recent call last):
+  File "/home/user/Narming/sprint/dynasty.py", line 352, in main
+    run_season(ROOT, log)
+    ~~~~~~~~~~^^^^^^^^^^^
+  File "/home/user/Narming/sprint/dynasty.py", line 121, in run_season
+    raise RuntimeError("nobody can race")
+RuntimeError: nobody can race
+```
+- ` 7.08h` error:
+```
+Traceback (most recent call last):
+  File "/home/user/Narming/sprint/dynasty.py", line 352, in main
+    run_season(ROOT, log)
+    ~~~~~~~~~~^^^^^^^^^^^
+  File "/home/user/Narming/sprint/dynasty.py", line 121, in run_season
+    raise RuntimeError("nobody can race")
+RuntimeError: nobody can race
+```
+- ` 7.08h` error:
+```
+Traceback (most recent call last):
+  File "/home/user/Narming/sprint/dynasty.py", line 352, in main
+    run_season(ROOT, log)
+    ~~~~~~~~~~^^^^^^^^^^^
+  File "/home/user/Narming/sprint/dynasty.py", line 121, in run_season
+    raise RuntimeError("nobody can race")
+RuntimeError: nobody can race
+```
+- ` 7.09h` error:
+```
+Traceback (most recent call last):
+  File "/home/user/Narming/sprint/dynasty.py", line 352, in main
+    run_season(ROOT, log)
+    ~~~~~~~~~~^^^^^^^^^^^
+  File "/home/user/Narming/sprint/dynasty.py", line 121, in run_season
+    raise RuntimeError("nobody can race")
+RuntimeError: nobody can race
+```
+- ` 7.09h` too many errors in a row; stopping
+- ` 7.09h` saved dynasty-final.zip
+- ` 7.09h` dynasty finished
+- ` 7.24h` dynasty running until hour 8.0
+- ` 7.24h` nobody is racing; breeding the next foals first
+- ` 7.24h` breeding **Indigo Slipstream**: Storm Slipstream x Zigzag Brick (fastest)
