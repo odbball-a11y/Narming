@@ -752,7 +752,9 @@ class RacerScreen(Screen):
                 x += 34 if k == 0 else 20
             laps = "   ".join(f"{stable.TRACK_NAMES.get(t, t)} {format_time(r['solo_best_lap'])}"
                              for t, r in exam.items())
-            ui.text(screen, "small", "best laps alone: " + laps, C_HUD_DIM, 6, y + 9.4)
+            smooth = stable.smoothness(exam)
+            ui.text(screen, "small", "best laps alone: " + laps
+                    + (f"     smoothness {smooth * 100:.0f}%" if smooth is not None else ""), C_HUD_DIM, 6, y + 9.4)
         else:
             ui.text(screen, "small", "not trained yet", C_HUD_DIM, 6, y + 3)
 

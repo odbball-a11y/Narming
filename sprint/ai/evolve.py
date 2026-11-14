@@ -32,12 +32,13 @@ import sim.scripted  # noqa: F401
 from sim import cartraits, tuning
 from sim.driver import Controls, create_driver
 from sim.track import Track
+from sim.telemetry import LapRecorder
 from sim.world import World
 
 from . import jsonio
 from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver, Population,
                     fit_genomes, genome_size, n_weights, notes_for, notes_mask, observe, random_weights,
-                    to_controls, with_notes)
+                    to_controls, track_reference, with_notes)
 
 PROJECT = Path(__file__).resolve().parent.parent
 RUNS_DIR = PROJECT / "training"
@@ -76,6 +77,11 @@ DEFAULT_SECONDS = 40.0
 # At 0.25 drivers learned to bounce off the barriers on Technical rather
 # than brake (about 50% damage in a clean-air time trial).
 SOLO_DAMAGE_WEIGHT = 1.0
+# Smoothness (user request): solo laps pay a little for jerky inputs (how much
+# steering and pedal jump between decisions, on average) and for time spent
+# sliding (sideways speed above SLIDE_SPEED).  Small, so cars stay quick.
+SMOOTH_WEIGHT = 0.1
+SLIDE_SPEED = 3.0
 
 # Starting damage used in driving tests, rotating by generation.
 SOLO_DAMAGE = (0.0, 0.25, 0.5)
@@ -156,7 +162,7 @@ class PackRun:
     """
 
     def __init__(self, weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None,
-                 slot: int = 0, damage: float = 0.0, car: dict | None = None):
+                 slot: int = 0, damage: float = 0.0, car: dict | None = None, record: bool = False):
         self.track = get_track(track_name)
         self.count = len(weights)
         params = cartraits.params_for(car) if car else None
@@ -167,11 +173,16 @@ class PackRun:
         self.brains = Population(weights, arch)
         for i, car in enumerate(self.world.cars):          # each driver's own track notes
             car.notes = notes_for(weights[i], arch, self.track)
+            car.reference = track_reference(self.track, car.params)
         self.progress = _Progress(self.world, range(self.count))
         self.ticks = int((seconds or SOLO_SECONDS.get(track_name, DEFAULT_SECONDS)) * tuning.TICK_RATE)
         self.world.end_tick = self.ticks
         self.controls = [Controls()] * self.count
         self.done = False
+        self.recorder = LapRecorder(self.world) if record else None
+        self.jitter = np.zeros(self.count)          # summed input changes, per driver
+        self.slide = np.zeros(self.count)           # decisions spent sliding
+        self.decisions = np.zeros(self.count)
 
     @property
     def alive(self) -> int:
@@ -191,24 +202,37 @@ class PackRun:
                 return
             idle = [0.0] * N_INPUTS
             obs = np.array([idle if cars[i].retired else observe(world, i) for i in range(self.count)])
-            self.controls = [to_controls(s, p) for s, p in self.brains.act(obs).tolist()]
-        world.step(self.controls)
+            out = self.brains.act(obs)
+            if world.tick:                            # smoothness: how much the inputs jumped, and sliding
+                live = np.array([not c.retired for c in cars])
+                prev = getattr(self, "_out", out)
+                self.jitter += np.abs(out - prev).sum(axis=1) * live
+                self.slide += np.array([c.slip > SLIDE_SPEED for c in cars]) * live
+                self.decisions += live
+            self._out = out
+            self.controls = [to_controls(s, p) for s, p in out.tolist()]
+        events = world.step(self.controls)
+        if self.recorder:
+            self.recorder.record(self.controls, events)
         if world.tick >= self.ticks:
             self.progress.update(retire=False)
             self.done = True
 
 
 def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float | None = None,
-              slot: int = 0, damage: float = 0.0, car: dict | None = None) -> dict:
+              slot: int = 0, damage: float = 0.0, car: dict | None = None, record: bool = False) -> dict:
     """Run every driver in `weights` on the track at once, as ghosts, from
     grid `slot` with `damage` already on the car, in a car with traits
     `car` (None = the standard car)."""
-    run = PackRun(weights, arch, track_name, seconds, slot, damage, car)
+    run = PackRun(weights, arch, track_name, seconds, slot, damage, car, record=record)
     while not run.done:
         run.step()
     cars = run.world.cars
     return {"laps": run.laps(), "damage": [car.damage - damage for car in cars],
-            "best_lap": [car.best_lap for car in cars]}
+            "best_lap": [car.best_lap for car in cars],
+            "recorded": run.recorder.laps if run.recorder else [],
+            "jitter": (run.jitter / np.maximum(run.decisions, 1)).tolist(),
+            "slide": (run.slide / np.maximum(run.decisions, 1)).tolist()}
 
 
 # --------------------------------------------------------- phase 2 (race)
@@ -302,9 +326,11 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
               for k, r in enumerate(scenario["rivals"]) if not isinstance(r, str)}
     for n, world in enumerate(worlds):                     # everyone races with their own track notes
         world.cars[0].notes = notes_for(weights[n], arch, track)
+        world.cars[0].reference = track_reference(track, world.cars[0].params)
         for k, r in enumerate(scenario["rivals"]):
             if not isinstance(r, str):
                 world.cars[k + 1].notes = notes_for(r, arch, track)
+                world.cars[k + 1].reference = track_reference(track, world.cars[k + 1].params)
     progress = [_Progress(w, [0]) for w in worlds]
     seconds = scenario.get("seconds") or RACE_SECONDS.get(track.key, DEFAULT_SECONDS)
     ticks = int(seconds * tuning.TICK_RATE)
@@ -443,7 +469,8 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
     k = 0
     for _ in tracks:
         part = merged(k)
-        solo += np.array(part["laps"]) - SOLO_DAMAGE_WEIGHT * np.array(part["damage"])
+        solo += (np.array(part["laps"]) - SOLO_DAMAGE_WEIGHT * np.array(part["damage"])
+                 - SMOOTH_WEIGHT * (np.array(part["jitter"]) + np.array(part["slide"])))
         k += len(pieces)
     solo /= len(tracks)
     if not scenarios:
@@ -492,14 +519,16 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
 
 # ------------------------------------------------------------------- exams
 
-def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = None) -> dict:
+def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = None,
+         label: str | None = None) -> dict:
     """Standard report card for one driver, the same for every generation so
     generations can be compared: a solo time trial, and a three-lap race
     against three scripted cars starting from the back of the grid."""
     from sim.race import FINISHED, Race
     report = {}
+    from . import telemetry
     for name in tracks:
-        solo = test_solo(weights[None, :], arch, name, car=car)
+        solo = test_solo(weights[None, :], arch, name, car=car, record=True)
         learner = NeuralDriver(weights, arch, "Evolved")
         learner.car_params = cartraits.params_for(car) if car else None
         race = Race(name, [(3, learner), (0, "scripted"),
@@ -511,11 +540,19 @@ def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = 
             if race.phase != "countdown" and not race.world.cars[0].finished:
                 stats.on_tick(events)
         row = next(r for r in race.results() if r["car"] == 0)
+        weight = telemetry.weight_of(race.world.cars[0].params)
+        laps = [{"lap": lap, "driver": label or "AI", "kind": "ai", "car": car, "weight": weight}
+                for _, lap in solo["recorded"]]
+        laps += [{"lap": lap, "driver": label or "AI", "kind": "ai", "car": car, "weight": weight}
+                 for i, lap in race.telemetry.laps if i == 0]
+        telemetry.submit(name, laps)                    # the champion's laps may set a track record
         racecar = race.world.cars[0]
         report[name] = {
             "solo_laps": round(solo["laps"][0], 3),
             "solo_best_lap": solo["best_lap"][0],
             "solo_damage": round(solo["damage"][0], 3),
+            "solo_jitter": round(solo["jitter"][0], 3),
+            "solo_slide": round(solo["slide"][0], 3),
             "race_place": row["place"],
             "race_finished": row["finished"],
             "race_laps": row["laps"],
@@ -819,7 +856,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 "bonus": round(bonus, 3),
                 "solo_setup": solo_setup(gen),
                 "car": car_for(config, gen),
-                "exam": exam(pop[0], arch, config.get("exam_tracks") or tracks,
+                "exam": exam(pop[0], arch, config.get("exam_tracks") or tracks, label=config.get("name") or run,
                              car=config.get("car") if isinstance(config.get("car"), dict) else None),
             }
             if racing:

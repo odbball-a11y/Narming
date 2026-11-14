@@ -28,12 +28,13 @@ class Car:
         "damage", "draft", "draft_source", "retired",
         "yaw_rate", "front_use", "rear_slip",
         "accel_long", "accel_lat", "front_load", "rear_load",
-        "notes",
+        "notes", "reference",
     )
 
     def __init__(self, params: CarParams):
         self.params = params
         self.notes = None          # the driver's track notes for this track (AI only; physics ignores them)
+        self.reference = None      # reference notes from the track's fastest lap (AI only)
         self.place(0.0, 0.0, 0.0)
 
     def place(self, x: float, y: float, heading: float) -> None:

@@ -929,6 +929,17 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
 
 # --------------------------------------------------------------------- CLI
 
+def smoothness(exam: dict | None) -> float | None:
+    """0..1 from a test (1 = perfectly smooth): input jumps and time sliding, averaged over its tracks."""
+    if not exam:
+        return None
+    rows = [e for e in exam.values() if "solo_jitter" in e]
+    if not rows:
+        return None
+    rough = sum(e["solo_jitter"] + 2.0 * e["solo_slide"] for e in rows) / len(rows)
+    return round(max(0.0, 1.0 - rough), 3)
+
+
 def track_knowledge(racer_dir) -> dict:
     """Generations of training each track has had (all-track courses count
     for every track): how much the racer's notes for it have been worked on."""

@@ -217,6 +217,8 @@ def finish_race(root, ch: dict, race: Race) -> dict:
         res["track_rating"] = [round(ch_["track_before"], 1), round(ch_["track_after"], 1)]
         res["sigma"] = round(ch_["sigma"], 1)
     record = {"track": race.track.key, "order": order, "results": results}
+    from . import telemetry
+    telemetry.submit_race(race)              # every flying lap goes into the telemetry store
     for res in results:                      # the fastest lap of the race may be a track record
         if res["fastest"]:
             res["track_record"] = records.update(root, race.track.key, res["best_lap"],

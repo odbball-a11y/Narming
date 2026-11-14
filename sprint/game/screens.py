@@ -487,7 +487,11 @@ class RaceScreen(Screen):
     def tick(self) -> None:
         events = self.race.step()
         if not self.is_replay and any(e[0] == "race_over" for e in events):
-            news = self.on_over(self.race) if self.on_over else []   # only championship races count
+            if self.on_over:
+                news = self.on_over(self.race)
+            else:                                                   # practice: counts for nothing but lap records
+                from ai import telemetry
+                news = [f"New {self.race.track.name} lap record!"] if telemetry.submit_race(self.race) else []
             if news:
                 self.message = " ".join(news)
         if self.race.phase != race_module.COUNTDOWN:

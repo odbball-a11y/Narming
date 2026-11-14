@@ -11,6 +11,7 @@ from typing import Sequence
 
 from . import tuning
 from .driver import Controls, Driver, create_driver
+from .telemetry import LapRecorder
 from .track import Track
 from .world import World
 
@@ -54,6 +55,7 @@ class Race:
         self.end_tick = None
         self.controls_log: list[tuple] = []
         self.final_hash = None
+        self.telemetry = LapRecorder(self.world)       # every car's flying laps, for records and ghosts
         for i, driver in enumerate(self.drivers):
             driver.reset(self.world, i)
 
@@ -122,6 +124,7 @@ class Race:
                 controls.append(Controls(*driver.act(world, i)).clamped())
         self.controls_log.append(tuple(v for c in controls for v in c))
         events = world.step(controls)
+        self.telemetry.record(controls, events)
         for car in world.cars:
             if car.finished and not car.retired and car.speed < PARK_SPEED:
                 car.vx = car.vy = 0.0

@@ -197,6 +197,8 @@ def observe(world, i: int) -> list[float]:
     # ---- input version 4: lines and corner speed (adjusted by the driver's track notes) ----
     ideal_off, ideal_curv = track.ideal()
     notes = car.notes
+    if car.reference is not None:          # what the fastest lap proved, plus the driver's own tweaks
+        notes = car.reference if notes is None else np.clip(notes + car.reference, -1.5, 1.5)
     corner_of = track.corners()["of"] if notes is not None else None
     lat = car.lateral
 
@@ -302,6 +304,17 @@ def notes_layout() -> list:
 def with_notes(arch: dict) -> dict:
     """The arch with track notes for every track (kept if it has them already)."""
     return arch if arch.get("notes") else dict(arch, notes=notes_layout())
+
+
+USE_REFERENCE = True       # drivers see the reference notes of the track's fastest lap
+
+
+def track_reference(track, params):
+    """Reference notes for a car on `track` (from ai.telemetry), or None."""
+    if not USE_REFERENCE:
+        return None
+    from . import telemetry
+    return telemetry.reference(track, telemetry.weight_of(params))
 
 
 def arch_for_vector(weights, arch: dict) -> dict:
@@ -453,7 +466,9 @@ class NeuralDriver(Driver):
         self.brain = Brain(self.weights, self.arch)
         self.held = Controls()
         if world is not None:
-            world.cars[car_index].notes = notes_for(self.weights, self.arch, world.track)
+            car = world.cars[car_index]
+            car.notes = notes_for(self.weights, self.arch, world.track)
+            car.reference = track_reference(world.track, car.params)
 
     def act(self, world, car_index: int) -> Controls:
         if world.tick % DECISION_TICKS == 0:
