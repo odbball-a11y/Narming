@@ -35,10 +35,12 @@ def test_house_rivals_have_their_fixed_colours(dirs):
 def test_new_racers_get_unique_colours_never_red_or_green(dirs):
     root = stable.STABLE_DIR
     seen = []
-    for k in range(7):
+    house = {r["livery"]["colour"] for r in stable.house_rivals()}
+    free = [c for c in livery.ORDER if c not in house]             # colours no house rival wears
+    for k in range(len(free)):
         racer = instant_racer(root, f"Racer {k}")
         look = stable.livery_of(racer)
-        assert look["colour"] not in livery.RESERVED
+        assert look["colour"] not in livery.RESERVED and look["colour"] not in house
         assert look["colour"] not in [s["colour"] for s in seen]
         assert look["number"] not in [s["number"] for s in seen] + [5, 13]
         seen.append(look)
