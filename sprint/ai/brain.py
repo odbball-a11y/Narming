@@ -19,7 +19,9 @@ import math
 
 import numpy as np
 
+from sim import tuning
 from sim.driver import Controls, Driver
+from sim.track import GRASS
 
 # Distances ahead (track units) at which the driver is told the curvature.
 LOOK_AHEAD = (4.0, 9.0, 16.0, 25.0, 36.0, 50.0)
@@ -58,8 +60,12 @@ _INPUTS_V4 = _INPUTS_V3 + ["line offset now", "line offset 12 ahead", "line offs
 _INPUTS_V5 = _INPUTS_V4 + ["yaw rate", "front grip use", "rear slip", "car balance"]
 # Version 6: weight transfer, the load on each end of the car (1 = at rest).
 _INPUTS_V6 = _INPUTS_V5 + ["front load", "rear load"]
-INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4, 5: _INPUTS_V5, 6: _INPUTS_V6}
-INPUT_VERSION = 6
+# Version 7, surface sensing: how far onto the grass, the grip of the surface
+# under the car, and the room to the tarmac edge on each side.
+_INPUTS_V7 = _INPUTS_V6 + ["on grass", "surface grip", "room to tarmac edge left", "room to tarmac edge right"]
+INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4, 5: _INPUTS_V5, 6: _INPUTS_V6,
+                  7: _INPUTS_V7}
+INPUT_VERSION = 7
 
 # Distances ahead (units) scanned for the corner that limits speed, and the
 # braking the car is assumed to use to reach it (a fraction of full braking).
@@ -244,6 +250,14 @@ def observe(world, i: int) -> list[float]:
     # ---- input version 6: weight transfer ----
     obs.append(car.front_load - 1.0)
     obs.append(car.rear_load - 1.0)
+
+    # ---- input version 7: the surface ----
+    edge = track._hw[idx]                                   # tarmac half-width here
+    verge = max(1e-6, track._lim[idx] - edge)               # width of the grass to the barrier
+    obs.append(min(1.0, max(0.0, (abs(car.lateral) - edge) / verge)))       # 0 on tarmac .. 1 at the barrier
+    obs.append(tuning.GRASS_GRIP if car.surface == GRASS else 1.0)
+    obs.append(max(-1.0, min(2.0, (edge + car.lateral) / 6.0)))             # negative = already off on that side
+    obs.append(max(-1.0, min(2.0, (edge - car.lateral) / 6.0)))
     return obs
 
 

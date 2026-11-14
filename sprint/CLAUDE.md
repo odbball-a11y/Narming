@@ -525,6 +525,10 @@ podium): `record_result(..., finished=)`.
   rival's current files (so a track-school save or a revert carries over), it
   never races, never ages (`stud_life_left`), `check_deaths` skips it, no limit
   on litters; the card says HOUSE STUD. Not listed separately in track school.
+- Surface sensing, inputs version 7 (`brain._INPUTS_V7`, 56 inputs): on grass
+  (0 on tarmac .. 1 at the barrier), surface grip (1.0 or `GRASS_GRIP`), room to
+  the tarmac edge left / right (negative once over it). Older brains get them at
+  zero strength (drive exactly as before) until training uses them.
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`
