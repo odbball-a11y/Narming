@@ -1,0 +1,142 @@
+{
+ "name": "Zappy Zoe",
+ "aggression": 0.5,
+ "caution": 0.5,
+ "traits": {
+  "top_speed": 3,
+  "accel": 3,
+  "handling": 3,
+  "braking": 3,
+  "weight": "medium"
+ },
+ "livery": {
+  "colour": "orange",
+  "trim": "band",
+  "trim_colour": "dark",
+  "number": 12
+ },
+ "arch": {
+  "hidden": [
+   24,
+   16
+  ],
+  "memory": 4,
+  "inputs": 6,
+  "notes": [
+   [
+    "esses",
+    9,
+    "4e911b9a5559e957"
+   ],
+   [
+    "grandprix",
+    9,
+    "cc67893c5a62f5e1"
+   ],
+   [
+    "oval",
+    4,
+    "013dc500ef767b91"
+   ],
+   [
+    "speedway",
+    5,
+    "6a236c863f55517b"
+   ],
+   [
+    "technical",
+    7,
+    "49d3b277bcb65c92"
+   ]
+  ]
+ },
+ "created": "2026-11-13",
+ "generations": 460,
+ "exam": {
+  "oval": {
+   "solo_laps": 2.303,
+   "solo_best_lap": 10.826423813275962,
+   "solo_damage": 0.0,
+   "race_place": 2,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 36.1800382432668,
+   "race_best_lap": 11.567895417223152,
+   "race_hits": 4.0,
+   "race_fault": 2.0,
+   "race_walls": 0,
+   "race_overtakes": 2,
+   "race_passed": 0,
+   "race_draft": 0.255,
+   "race_damage": 0.07
+  },
+  "speedway": {
+   "solo_laps": 2.317,
+   "solo_best_lap": 12.922916968997807,
+   "solo_damage": 0.0,
+   "race_place": 1,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 41.298315949119846,
+   "race_best_lap": 12.687052221811253,
+   "race_hits": 3.0,
+   "race_fault": 1.5,
+   "race_walls": 0,
+   "race_overtakes": 3,
+   "race_passed": 0,
+   "race_draft": 0.168,
+   "race_damage": 0.05
+  },
+  "esses": {
+   "solo_laps": 2.335,
+   "solo_best_lap": 15.464972099799425,
+   "solo_damage": 0.0,
+   "race_place": 4,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 60.276508280343286,
+   "race_best_lap": 16.430638828987902,
+   "race_hits": 6.0,
+   "race_fault": 3.0,
+   "race_walls": 3,
+   "race_overtakes": 0,
+   "race_passed": 0,
+   "race_draft": 0.115,
+   "race_damage": 0.084
+  },
+  "technical": {
+   "solo_laps": 2.004,
+   "solo_best_lap": 23.122916365010816,
+   "solo_damage": 0.0,
+   "race_place": 4,
+   "race_finished": true,
+   "race_laps": 3,
+   "race_time": 87.02533445091345,
+   "race_best_lap": 25.379616211244688,
+   "race_hits": 0.0,
+   "race_fault": 0.0,
+   "race_walls": 0,
+   "race_overtakes": 0,
+   "race_passed": 0,
+   "race_draft": 0.02,
+   "race_damage": 0.0
+  },
+  "grandprix": {
+   "solo_laps": 0.657,
+   "solo_best_lap": null,
+   "solo_damage": 0.032,
+   "race_place": 4,
+   "race_finished": false,
+   "race_laps": 2,
+   "race_time": null,
+   "race_best_lap": 37.014457524648364,
+   "race_hits": 7.0,
+   "race_fault": 0.0,
+   "race_walls": 7,
+   "race_overtakes": 0,
+   "race_passed": 0,
+   "race_draft": 0.008,
+   "race_damage": 0.178
+  }
+ }
+}
