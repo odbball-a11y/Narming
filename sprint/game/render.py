@@ -527,6 +527,13 @@ class RaceRenderer:
             screen.blit(image, image.get_rect(center=cam.to_screen(x, y)))
         self.draw_effects(screen, world, poses)
 
+    def draw_ghost(self, screen: pygame.Surface, x: float, y: float, heading: float) -> None:
+        """A see-through white car: where the record lap was at this point of the lap."""
+        sprite = self.sprite_for({"colour": "white", "trim": "stripe", "trim_colour": "dark"})
+        image = pygame.transform.rotozoom(sprite, -math.degrees(heading), self.sprite_zoom)
+        image.set_alpha(110)
+        screen.blit(image, image.get_rect(center=self.camera.to_screen(x, y)))
+
     def draw_hud(self, screen: pygame.Surface, race, banner: str = "", liveries=None) -> None:
         """Top strip: a timing screen.  One row per car in race order (1st,
         2nd, ... down the left column, then the right), each with its colour,

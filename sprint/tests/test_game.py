@@ -51,6 +51,10 @@ def test_main_menu_navigation(app):
     assert isinstance(app.current, LabScreen)
     press(app, pygame.K_ESCAPE)
     press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)
+    from game.telemetry_screen import TelemetryScreen
+    assert isinstance(app.current, TelemetryScreen)
+    press(app, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN, pygame.K_ESCAPE)
+    press(app, pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_DOWN, pygame.K_RETURN)
     assert isinstance(app.current, ControlsScreen)
     press(app, pygame.K_ESCAPE)
     press(app, pygame.K_UP, pygame.K_UP, pygame.K_RETURN)          # wraps to REPLAYS

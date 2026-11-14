@@ -70,7 +70,7 @@ def draw_list(ui, screen, items, selected: int, x: float, y: float, step: float 
 # ------------------------------------------------------------------ menus
 
 class MainMenu(Screen):
-    ITEMS = ["RACE", "STABLE", "AI LAB", "CONTROLS", "REPLAYS", "QUIT"]
+    ITEMS = ["RACE", "STABLE", "AI LAB", "TELEMETRY", "CONTROLS", "REPLAYS", "QUIT"]
 
     def __init__(self, app):
         super().__init__(app)
@@ -95,6 +95,9 @@ class MainMenu(Screen):
                 self.app.show(StableScreen(self.app))
             elif choice == "AI LAB":
                 self.app.show(LabScreen(self.app))
+            elif choice == "TELEMETRY":
+                from .telemetry_screen import TelemetryScreen
+                self.app.show(TelemetryScreen(self.app, self.app.setup.get("track", "speedway")))
             elif choice == "CONTROLS":
                 self.app.show(ControlsScreen(self.app))
             elif choice == "REPLAYS":
@@ -375,6 +378,17 @@ class RaceScreen(Screen):
         self.message = ""
         self.saved_path = None
         self.problems = recording.compatibility_problems(race.track) if recording else []
+        # The ghost: the record lap for the first human's car weight, in practice races (G toggles it).
+        self.ghost_car, self.ghost_lap, self.show_ghost = None, None, False
+        if not recording and not on_over:
+            humans = [i for i, d in enumerate(race.drivers)
+                      if type(d).__name__ in ("KeyboardDriver", "GamepadDriver")]
+            if humans:
+                from ai import telemetry
+                self.ghost_car = humans[0]
+                weight = telemetry.weight_of(race.world.cars[humans[0]].params)
+                self.ghost_lap = telemetry.best(race.track.key, weight)
+                self.show_ghost = self.ghost_lap is not None
 
     # ------------------------------------------------------------- helpers
 
@@ -431,6 +445,9 @@ class RaceScreen(Screen):
             return
         if event.key == pygame.K_F1:
             self.debug = not self.debug
+        elif event.key == pygame.K_g and self.ghost_lap is not None:
+            self.show_ghost = not self.show_ghost
+            self.message = "Ghost on: the record lap" if self.show_ghost else "Ghost off"
         elif event.key == pygame.K_F5 and not self.is_replay:
             importlib.reload(tuning)
             self.restart()
@@ -520,6 +537,13 @@ class RaceScreen(Screen):
         screen.fill((0, 0, 0))
         racing = race.phase == race_module.RACING
         self.renderer.draw_world(screen, race.world, self.alpha if racing else 1.0, self.liveries)
+        if self.show_ghost and racing:
+            car = race.world.cars[self.ghost_car]
+            if car.crossed_start and not car.finished:
+                from sim.telemetry import pose_at
+                pose = pose_at(self.ghost_lap, race.world.time - car.lap_start_time)
+                if pose:
+                    self.renderer.draw_ghost(screen, *pose)
         banner = "REPLAY    hold F to fast-forward    ESC pause" if self.is_replay else ""
         if self.message and not self.over:
             banner = self.message

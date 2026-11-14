@@ -424,6 +424,31 @@ podium): `record_result(..., finished=)`.
   against 3.25 / 2.25 without, best laps 13.46 / 12.90 v 13.56 / 13.21; the
   notes were still small (+-0.1) after 30 gens. One seed.
 
+- Telemetry (user: "track the traces of all drivers ... builds a history of
+  what is fastest"; own laps count; screen + ghost; it enhances the notes,
+  compared to the ideal line, informing braking points). `sim/telemetry.py`
+  `LapRecorder` (in every `Race`, and `PackRun(record=True)`) keeps each car's
+  flying laps (lap 2 on) resampled every 2 units: t, x, y, heading, lateral,
+  speed, throttle, brake, steering, slip; `pose_at` for ghosts. `ai/telemetry.py`
+  keeps the 5 fastest laps per track plus the fastest per weight in
+  `telemetry/<track>.json` (git-ignored, tagged with the physics fingerprint;
+  `submit`, `submit_race`, `best`). Practice races (humans included), every
+  championship race and every training exam (the champion's solo and race
+  laps) submit. `corner_report` gives per corner the lap's apex speed v the
+  ideal line's safe speed, its apex line v the ideal, where it lifted/braked
+  and where it got back on the power; `reference(track, weight)` turns that into
+  reference notes (same three fields), and every AI sees its own notes plus the
+  reference (`car.reference`, set beside `car.notes`; `brain.USE_REFERENCE`).
+  Tests keep their own telemetry (conftest). TELEMETRY screen (main menu):
+  fastest laps, the lap's line with lift/brake and power-on points, speed trace
+  v the record and the ideal line's safe speed with a pedal strip, and a
+  corner table. Practice races with a human show a ghost of the record lap for
+  that car's weight (G toggles).
+- Smoothness: `PackRun` measures input jumps between decisions and the share
+  of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
+  slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`
+  is shown on the racer card.
+
 Still to build: six-car training races (slower training), wet/dry weather (not
 wanted for now), PPO as a rival method.
 
