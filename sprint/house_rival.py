@@ -51,6 +51,7 @@ def main() -> int:
     ap.add_argument("--min-generations", type=int, default=100)
     ap.add_argument("--max-generations", type=int, default=1000)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--no-publish", action="store_true", help="leave it in the workshop (publish later from its card)")
     args = ap.parse_args()
     migrate.ensure()
     root = stable.WORKSHOP_DIR
@@ -84,6 +85,9 @@ def main() -> int:
             print("time or generation limit reached", flush=True)
             break
         stable.upskill(racer, args.aggression, args.caution, partners, args.chunk)
+    if args.no_publish:
+        print(f"{args.name} stays in the workshop (not published)", flush=True)
+        return 0
     path = stable.publish(racer)
     print(f"published {args.name} as a house rival: {path}", flush=True)
     return 0
