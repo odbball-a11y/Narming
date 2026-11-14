@@ -491,3 +491,33 @@ def test_blend_and_mixed_crossover_stay_between_parents():
     assert np.all((child >= lo) & (child <= hi))
     for _ in range(4):                                  # "mixed" picks blend or dominant
         assert stable.crossover(a, b, arch, rng, "mixed").shape == a.shape
+
+
+def test_zappy_zoe_stands_at_stud_for_ever(tmp_path, monkeypatch):
+    import numpy as np
+    root = tmp_path / "stable"
+    studs = stable.ensure_house_studs(root)
+    zoe = root / "house-zappy-zoe"
+    assert zoe in studs and stable.can_breed(zoe) and not stable.can_race(zoe)
+    assert stable.load(zoe)["name"] == "Zappy Zoe"
+    with np.load(stable.RIVALS_DIR / "zappy-zoe.npz") as data:
+        assert np.allclose(stable.brain(zoe), data["pop"][0])        # her current house brain
+    assert stable.latest_exam(zoe) is not None
+    stable.ensure_house_studs(root)                                  # idempotent
+    assert len([d for d in stable.list_racers(root) if stable.is_house_stud(d)]) == 1
+    racer = stable.load(zoe)
+    racer["breedings"] = 50                                          # far past the limit for other studs
+    stable.save(zoe, racer)
+    assert stable.check_deaths(root) == [] and stable.status(zoe) == "stud"
+    assert stable.stud_life_left(zoe) > 0
+
+
+def test_a_foal_can_be_bred_from_the_house_stud(dirs):
+    root = stable.STABLE_DIR
+    betty, _ = two_trained(root)
+    zoe = stable.ensure_house_studs(root)[0]
+    foal = stable.mate(root, zoe, betty, "Zoe Junior")
+    assert stable.load(foal)["parents"] == ["house-zappy-zoe", "bold-betty"]
+    cert = small_breed(foal)
+    assert cert["sire"]["name"] == "Zappy Zoe" and stable.brain_file(foal) is not None
+    assert stable.status(zoe) == "stud" and stable.check_deaths(root) == []

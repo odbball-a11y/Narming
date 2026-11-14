@@ -95,6 +95,8 @@ def status_text(app, racer_dir) -> tuple[str, tuple]:
     state = racer.get("status", "racing")
     if state == "dead":
         return f"IN THE HALL OF FAME: died {racer.get('death_cause', '')}", C_HUD_DIM
+    if state == "stud" and racer.get("house_stud"):
+        return f"HOUSE STUD: breeds for ever ({racer.get('breedings', 0)} litters so far)", C_HUD_ACCENT
     if state == "stud":
         return (f"AT STUD: {racer.get('breedings', 0)}/{stable.STUD_BREEDINGS} litters, "
                 f"{stable.stud_life_left(racer_dir)} races left to live"), C_HUD_ACCENT
@@ -122,6 +124,7 @@ class StableScreen(Screen):
         self.reload()
 
     def reload(self) -> None:
+        stable.ensure_house_studs(self.app.stable_root)
         self.racers = stable.list_racers(self.app.stable_root)
         self.rivals = stable.house_rivals()
 
@@ -949,6 +952,7 @@ class BreedScreen(Screen):
 
     def __init__(self, app):
         super().__init__(app)
+        stable.ensure_house_studs(app.stable_root)
         self.parents = [d for d in stable.list_racers(app.stable_root) if stable.can_breed(d)]
         self.sire, self.dam = 0, 1
         self.name = ""

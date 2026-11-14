@@ -55,6 +55,7 @@ TRAINING_BUDGET = 50    # training generations a racer gets in its whole life (n
 CAREER_RACES = 50       # races before a racer retires to stud: 10 five-race championships (user request)
 STUD_BREEDINGS = 5      # litters a racer at stud can sire before it dies
 STUD_LIFETIME = 40      # stable races (by anyone) a racer lives for at stud
+HOUSE_STUDS = ["zappy-zoe"]   # house rivals that also stand at stud in the stable, for ever (user request)
 
 # Personality sliders, each 0..1, and the race scoring at their ends.
 # (0, 0) is the balanced scoring; aggression 1 is Dangerous Dave's upbringing,
@@ -257,8 +258,45 @@ def retire(racer_dir, reason: str = "retired early") -> None:
     save(racer_dir, racer)
 
 
+def is_house_stud(racer_dir) -> bool:
+    return bool(load(racer_dir).get("house_stud"))
+
+
+def ensure_house_studs(root) -> list[Path]:
+    """Give the stable a permanent stud for each of HOUSE_STUDS: a racer
+    record that breeds with the house rival's current brain and car, never
+    races, never dies and has no limit on litters.  Returns their folders."""
+    root = Path(root)
+    out = []
+    for rid in HOUSE_STUDS:
+        d = root / f"house-{rid}"
+        out.append(d)
+        if (d / "racer.json").exists():
+            continue
+        card_file = RIVALS_DIR / f"{rid}.json"
+        if not card_file.exists():
+            continue
+        card = _read(card_file)
+        root.mkdir(parents=True, exist_ok=True)
+        d.mkdir(exist_ok=True)
+        racer = {"id": d.name, "name": card["name"], "house_stud": rid,
+                 "created": card.get("created") or datetime.date.today().isoformat(),
+                 "aggression": card.get("aggression", 0.5), "caution": card.get("caution", 0.5),
+                 "traits": card.get("traits") or cartraits.default(),
+                 "livery": card.get("livery") or liveries.assign(_taken_liveries(root)),
+                 "parents": [], "status": "stud", "retired_at": clock(root), "retired_reason": "house stud",
+                 "versions": [{"run": "v1", "generations": 0, "aggression": card.get("aggression", 0.5),
+                               "caution": card.get("caution", 0.5), "partners": [], "track": "speedway",
+                               "focus": None}],
+                 "career": {"races": 0, "wins": 0, "podiums": 0, "best_laps": {}}}
+        save(d, racer)
+    return out
+
+
 def stud_life_left(racer_dir) -> int:
     racer = load(racer_dir)
+    if racer.get("house_stud"):
+        return STUD_LIFETIME                  # never ages
     return max(0, STUD_LIFETIME - (clock(Path(racer_dir).parent) - racer.get("retired_at", 0)))
 
 
@@ -278,7 +316,7 @@ def check_deaths(root) -> list[str]:
     died = []
     for d in list_racers(root):
         racer = load(d)
-        if racer.get("status") != "stud" or is_breeding(d):
+        if racer.get("status") != "stud" or is_breeding(d) or racer.get("house_stud"):
             continue
         if racer.get("breedings", 0) >= STUD_BREEDINGS:
             _die(d, f"after {STUD_BREEDINGS} litter{'s' if STUD_BREEDINGS != 1 else ''}")
@@ -355,8 +393,12 @@ def needs_training(racer_dir) -> bool:
 
 
 def brain_file(racer_dir) -> Path | None:
-    """The latest trained generation of the racer, or None if untrained."""
+    """The latest trained generation of the racer, or None if untrained.
+    A house stud uses its house rival's current brain."""
     racer = load(racer_dir)
+    if racer.get("house_stud"):
+        f = RIVALS_DIR / f"{racer['house_stud']}.npz"
+        return f if f.exists() else None
     for v in reversed(racer["versions"]):
         gens = evolve.list_generations(Path(racer_dir) / v["run"])
         if gens:
@@ -375,6 +417,10 @@ def history(racer_dir) -> list[dict]:
 
 
 def latest_exam(racer_dir) -> dict | None:
+    racer = load(racer_dir)
+    if racer.get("house_stud"):
+        card = RIVALS_DIR / f"{racer['house_stud']}.json"
+        return _read(card).get("exam") if card.exists() else None
     h = history(racer_dir)
     return h[-1]["exam"] if h else None
 

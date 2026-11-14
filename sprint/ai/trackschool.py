@@ -56,8 +56,8 @@ def options(root: Path | None = None) -> list[dict]:
         out.append({"key": f"house:{card['id']}", "name": card["name"], "traits": card.get("traits"),
                     "livery": card.get("livery")})
     for d in stable.list_racers(root, include_dead=True) if root else []:
-        if stable.brain_file(d) is None or stable.is_breeding(d):
-            continue
+        if stable.brain_file(d) is None or stable.is_breeding(d) or stable.is_house_stud(d):
+            continue                              # (a house stud is its house rival, listed above)
         racer = stable.load(d)
         out.append({"key": f"racer:{d}", "name": racer["name"], "traits": racer.get("traits"),
                     "livery": stable.livery_of(d) if hasattr(stable, "livery_of") else racer.get("livery")})
