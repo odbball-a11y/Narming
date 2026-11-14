@@ -82,10 +82,27 @@ def _source(key: str) -> tuple[np.ndarray, dict]:
     return pop, arch_for_vector(pop[0], grad["arch"])
 
 
-def start(option: dict, track: str) -> Path:
-    """A fresh practice copy of `option` for `track`; returns its folder."""
+def folder(option: dict, track: str) -> Path:
     slug = re.sub(r"[^a-z0-9]+", "-", option["name"].lower()).strip("-") or "driver"
-    run_dir = DIR / f"{slug}-{track}"
+    return DIR / f"{slug}-{track}"
+
+
+def existing(option: dict, track: str) -> int | None:
+    """The last generation of an earlier session for this driver and track."""
+    run_dir = folder(option, track)
+    if not (run_dir / "school.json").exists() or meta(run_dir).get("key") != option["key"]:
+        return None
+    gens = evolve.list_generations(run_path(run_dir))
+    return gens[-1] if gens else None
+
+
+def start(option: dict, track: str, fresh: bool = False) -> Path:
+    """A practice copy of `option` for `track`; returns its folder.  An
+    earlier session for the same driver and track carries on where it
+    stopped, unless `fresh`."""
+    run_dir = folder(option, track)
+    if not fresh and existing(option, track) is not None:
+        return run_dir
     if run_dir.exists():
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True)
@@ -93,10 +110,55 @@ def start(option: dict, track: str) -> Path:
     arch = with_notes(arch)
     pop = fit_genomes(pop, arch)
     np.savez_compressed(run_dir / "start.npz", pop=pop.astype(np.float32))
-    meta = {"name": option["name"], "key": option["key"], "track": track, "arch": arch,
+    info = {"name": option["name"], "key": option["key"], "track": track, "arch": arch,
             "traits": option.get("traits"), "livery": option.get("livery")}
-    (run_dir / "school.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    (run_dir / "school.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
     return run_dir
+
+
+def best_generation(run_dir) -> dict | None:
+    """The generation whose best driver set the fastest clean test lap:
+    {"gen", "lap", "damage"} (None before the first generation)."""
+    track = meta(run_dir)["track"]
+    best = None
+    for h in evolve.load_history(run_path(run_dir)):
+        e = h["exam"].get(track, {})
+        lap = e.get("solo_best_lap")
+        if lap and e.get("solo_damage", 1.0) <= 0.05 and (best is None or lap < best["lap"]):
+            best = {"gen": h["gen"], "lap": lap, "damage": e.get("solo_damage", 0.0)}
+    return best
+
+
+def save_to_house(run_dir, gen: int | None = None) -> dict:
+    """Make the trained copy of a house rival the house rival itself.  The
+    old one is kept in house/rivals/old/.  Uses `gen`, or the generation with
+    the fastest clean test lap.  Returns {"name", "gen", "lap", "backup"}."""
+    from datetime import datetime
+    from . import rating
+    info = meta(run_dir)
+    if not info["key"].startswith("house:"):
+        raise ValueError("only a house rival's copy can become the house car")
+    rid = info["key"][6:]
+    pick = best_generation(run_dir) if gen is None else {"gen": gen, "lap": None}
+    if pick is None:
+        raise ValueError("no generation has a clean test lap yet")
+    best = evolve.load_generation(run_path(run_dir), pick["gen"])["pop"][:1].astype(np.float32)
+    rivals = stable.RIVALS_DIR
+    card = json.loads((rivals / f"{rid}.json").read_text(encoding="utf-8"))
+    old = rivals / "old"
+    old.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = old / f"{rid}-{stamp}"
+    shutil.copy(rivals / f"{rid}.npz", backup.with_suffix(".npz"))
+    shutil.copy(rivals / f"{rid}.json", backup.with_suffix(".json"))
+    np.savez_compressed(rivals / f"{rid}.npz", pop=best)
+    card["arch"] = info["arch"]
+    card["generations"] = card.get("generations", 0) + pick["gen"]
+    card.setdefault("track_school", []).append({"track": info["track"], "gen": pick["gen"], "lap": pick["lap"],
+                                                "date": stamp})
+    (rivals / f"{rid}.json").write_text(json.dumps(card, indent=1), encoding="utf-8")
+    rating.loosen(stable.STABLE_DIR, f"house:{rid}")          # it has changed: let its rating move faster
+    return {"name": card["name"], "gen": pick["gen"], "lap": pick["lap"], "backup": str(backup)}
 
 
 def meta(run_dir) -> dict:
@@ -137,6 +199,18 @@ def train(run_dir, workers: int = 0, generations: int = GENERATIONS, on_generati
 
 
 def main() -> None:
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "save":
+        ap = argparse.ArgumentParser(description="Make a track-school copy of a house rival the house car.")
+        ap.add_argument("cmd")
+        ap.add_argument("dir")
+        ap.add_argument("--gen", type=int, default=None, help="generation to use (default: fastest clean test lap)")
+        args = ap.parse_args()
+        migrate.ensure()
+        done = save_to_house(args.dir, args.gen)
+        lap = f", test lap {done['lap']:.2f} s" if done["lap"] else ""
+        print(f"{done['name']} is now generation {done['gen']}{lap}. The old one is kept as {done['backup']}.*")
+        return
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("dir")
     ap.add_argument("--workers", type=int, default=0)

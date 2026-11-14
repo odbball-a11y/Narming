@@ -38,8 +38,20 @@ class TrackSchoolScreen(Screen):
         self.row = 0
         self.mode = "pick"
         self.message = ""
+        self.confirm = False
 
     # ------------------------------------------------------------ choosing
+
+    def rows(self) -> list[str]:
+        """DRIVER, TRACK, then what can be done with this driver and track."""
+        option, track = self.options[self.pick[0]], self.tracks[self.pick[1]]
+        last = trackschool.existing(option, track)
+        out = ["driver", "track", "continue" if last is not None else "start"]
+        if last is not None:
+            out.append("fresh")
+            if option["key"].startswith("house:"):
+                out.append("house")
+        return out
 
     def handle_event(self, event) -> None:
         if event.type != pygame.KEYDOWN:
@@ -49,24 +61,59 @@ class TrackSchoolScreen(Screen):
                 self.stop()
             elif event.key == pygame.K_r:
                 self.restart_car()
+            elif event.key == pygame.K_h and self.info["key"].startswith("house:"):
+                self.save_house()
             return
+        rows = self.rows()
+        self.row = min(self.row, len(rows) - 1)
         if event.key in BACK:
             from .screens import MainMenu
             self.app.show(MainMenu(self.app))
         elif event.key in UP + DOWN:
-            self.row = (self.row + (1 if event.key in DOWN else -1)) % 3
+            self.row = (self.row + (1 if event.key in DOWN else -1)) % len(rows)
+            self.confirm = False
         elif event.key in LEFT + RIGHT and self.row < 2:
             size = len(self.options) if self.row == 0 else len(self.tracks)
             self.pick[self.row] = (self.pick[self.row] + (1 if event.key in RIGHT else -1)) % size
-        elif event.key in ACCEPT and self.row == 2:
-            self.begin()
+            self.message, self.confirm = "", False
+        elif event.key in ACCEPT:
+            what = rows[self.row]
+            if what in ("start", "continue"):
+                self.begin()
+            elif what == "fresh":
+                self.begin(fresh=True)
+            elif what == "house":
+                option, track = self.options[self.pick[0]], self.tracks[self.pick[1]]
+                self.dir = trackschool.folder(option, track)
+                self.save_house()
 
-    def begin(self) -> None:
+    def save_house(self) -> None:
+        """Press twice: the trained copy becomes the house car (the old one is kept)."""
+        if not getattr(self, "confirm", False):
+            best = trackschool.best_generation(self.dir)
+            if best is None:
+                self.message = "No clean test lap yet: let it train a little longer."
+                return
+            self.confirm = True
+            self.message = (f"Press again to make gen {best['gen']} (test lap {best['lap']:.2f} s) the house "
+                            f"{trackschool.meta(self.dir)['name']}. The old one is kept.")
+            return
+        self.confirm = False
+        try:
+            done = trackschool.save_to_house(self.dir)
+            from ai import stable as _stable
+            _stable.register(self.app.stable_root)
+            self.message = f"{done['name']} is now generation {done['gen']} and will race in championships."
+        except ValueError as e:
+            self.message = str(e)
+
+    def begin(self, fresh: bool = False) -> None:
         if self.app.training_dir():
             self.message = "Something is already training: stop it first (on its racer card)."
             return
         option, track = self.options[self.pick[0]], self.tracks[self.pick[1]]
-        self.dir = trackschool.start(option, track)
+        self.dir = trackschool.start(option, track, fresh=fresh)
+        self.message, self.confirm = "", False
         self.info = trackschool.meta(self.dir)
         self.run_dir = trackschool.run_path(self.dir)
         trackschool.touch(self.dir)
@@ -215,8 +262,15 @@ class TrackSchoolScreen(Screen):
             ui.text(screen, "mid", label, C_HUD_DIM, 10, y)
             ui.text(screen, "mid", f"<  {value}  >", colour, 40, y)
             y += 8
-        ui.text(screen, "mid", "> START" if self.row == 2 else "START", C_HUD_ACCENT if self.row == 2 else C_HUD_TEXT,
-                10, y + 4)
+        option, track = self.options[self.pick[0]], self.tracks[self.pick[1]]
+        last = trackschool.existing(option, track)
+        labels = {"start": "START", "continue": f"CONTINUE  (it has trained {last} generations here)",
+                  "fresh": "START AGAIN FROM SCRATCH", "house": "MAKE THIS THE HOUSE CAR  (its fastest clean generation)"}
+        for i, what in enumerate(self.rows()[2:], start=2):
+            sel = self.row == i
+            ui.text(screen, "mid", ("> " if sel else "") + labels[what], C_HUD_ACCENT if sel else C_HUD_TEXT, 10, y + 2)
+            y += 6
+        y -= 12
         if self.message:
             ui.text(screen, "small", self.message, C_PINK, 10, y + 14)
         ui.text(screen, "small", f"Each stint the newest generation's best car runs {STINT_LAPS} laps (the first "
@@ -262,7 +316,10 @@ class TrackSchoolScreen(Screen):
             ui.text(screen, "small", "none yet", C_HUD_DIM, 92, 4.4)
         self.draw_chart(screen)
         self.draw_scoreboard(screen)
-        ui.text(screen, "small", "R restart the stint   ESC stop training and go back", C_HUD_TEXT,
+        keys = "R restart the stint   ESC stop training and go back"
+        if self.info["key"].startswith("house:"):
+            keys = "H make this the house car (twice)   " + keys
+        ui.text(screen, "small", self.message or keys, C_PINK if self.message else C_HUD_TEXT,
                 WORLD_W / 2, WORLD_H - 0.8, "midbottom", shadow=True)
 
     def draw_chart(self, screen) -> None:

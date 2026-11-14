@@ -488,6 +488,15 @@ podium): `record_result(..., finished=)`.
   distance), last lap, session best, best ever for this car type
   (`telemetry.best`), a stint scoreboard and the per-generation test-lap chart.
   Trial (Zappy Zoe, Esses): stints went from 15.3 s to ~13.5 s within ~100 gens.
+  Sessions are kept: `start` carries on an earlier session for the same driver
+  and track (`existing`, `folder`; `fresh=True` wipes it). For a house rival,
+  `save_to_house(dir, gen=None)` makes the generation with the fastest clean
+  test lap (`best_generation`, damage <= 5%) the house car: old files kept in
+  `house/rivals/old/`, card gets `track_school` entries and new `arch`, its
+  rating is loosened. Screen: CONTINUE / START AGAIN / MAKE THIS THE HOUSE CAR
+  rows, H (twice) while watching; CLI `python -m ai.trackschool save DIR [--gen N]`.
+  Note the copy only trained on one track (other tracks' notes frozen, network
+  shared), so it may be weaker elsewhere.
   `App.stop_training` now stops the job's whole process group (worker processes
   were left running before; `taskkill /T` on Windows).
 - Smoothness: `PackRun` measures input jumps between decisions and the share
