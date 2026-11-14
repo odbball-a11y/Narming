@@ -540,11 +540,9 @@ def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = 
             if race.phase != "countdown" and not race.world.cars[0].finished:
                 stats.on_tick(events)
         row = next(r for r in race.results() if r["car"] == 0)
-        weight = telemetry.weight_of(race.world.cars[0].params)
-        laps = [{"lap": lap, "driver": label or "AI", "kind": "ai", "car": car, "weight": weight}
-                for _, lap in solo["recorded"]]
-        laps += [{"lap": lap, "driver": label or "AI", "kind": "ai", "car": car, "weight": weight}
-                 for i, lap in race.telemetry.laps if i == 0]
+        params = race.world.cars[0].params
+        laps = [telemetry.entry(lap, label or "AI", "ai", params, car) for _, lap in solo["recorded"]]
+        laps += [telemetry.entry(lap, label or "AI", "ai", params, car) for i, lap in race.telemetry.laps if i == 0]
         if submit:
             telemetry.submit(name, laps)                # the champion's laps may set a track record
         racecar = race.world.cars[0]

@@ -386,8 +386,7 @@ class RaceScreen(Screen):
             if humans:
                 from ai import telemetry
                 self.ghost_car = humans[0]
-                weight = telemetry.weight_of(race.world.cars[humans[0]].params)
-                self.ghost_lap = telemetry.best(race.track.key, weight)
+                self.ghost_lap = telemetry.best(race.track.key, race.world.cars[humans[0]].params)
                 self.show_ghost = self.ghost_lap is not None
 
     # ------------------------------------------------------------- helpers

@@ -314,7 +314,7 @@ def track_reference(track, params):
     if not USE_REFERENCE:
         return None
     from . import telemetry
-    return telemetry.reference(track, telemetry.weight_of(params))
+    return telemetry.reference(track, params)
 
 
 def arch_for_vector(weights, arch: dict) -> dict:

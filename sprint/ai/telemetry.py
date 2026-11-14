@@ -4,10 +4,10 @@ what they teach.
 Laps come from `sim.telemetry.LapRecorder` (every Race records them): the
 game submits practice and championship laps, training submits its
 champion's test laps.  Each track keeps its KEEP fastest laps overall plus
-the fastest in each car weight, in `telemetry/<track>.json`, tagged with the
+the fastest of every car type, in `telemetry/<track>.json`, tagged with the
 physics they were driven under (laps from other physics are set aside).
 
-`reference(track, weight)` turns the best lap into "reference notes": for
+`reference(track, params)` turns the best lap of that car's type into "reference notes": for
 every corner, how its apex speed, line and getting back on the power compare
 with the ideal line, in the same three fields as a driver's own track notes.
 Every AI driver sees its own notes plus these, so its notes become personal
@@ -31,7 +31,6 @@ from . import jsonio
 PROJECT = Path(__file__).resolve().parent.parent
 DIR = PROJECT / "telemetry"
 KEEP = 5
-WEIGHTS = ("light", "medium", "heavy")
 POWER_ON = 0.8          # throttle at which the car counts as back on the power
 NOMINAL_POWER = 12.0    # units after the apex where getting on the power counts as normal
 _cache: dict = {}
@@ -58,10 +57,37 @@ def weight_of(params) -> str:
     return "medium"
 
 
+# A car's type is its physics: two cars with the same numbers here are the same
+# car.  Laps are kept per type, and a car learns only from the best lap of its
+# own type, or failing that of the nearest type within NEAR (about three
+# stars' difference at the same weight), never from a slower kind of car.
+FEATURES = ("top_speed", "accel", "grip", "brake_decel", "mass", "balance")
+SCALE = {"top_speed": 32.0, "accel": 20.0, "grip": 34.0, "brake_decel": 42.0, "mass": 1.0, "balance": 1.0}
+NEAR = 0.12
+
+
+def features(params) -> dict:
+    return {k: round(float(getattr(params, k, 0.0)) / SCALE[k], 3) for k in FEATURES}
+
+
+def car_type(params) -> str:
+    f = features(params)
+    return "|".join(f"{f[k]:.3f}" for k in FEATURES)
+
+
+def distance(a: dict, b: dict) -> float:
+    return math.sqrt(sum((a[k] - b[k]) ** 2 for k in FEATURES))
+
+
+def entry(lap: dict, driver: str, kind: str, params, car=None) -> dict:
+    """A lap ready to submit, labelled with who drove it and in what car."""
+    return {"lap": lap, "driver": driver, "kind": kind, "car": car, "weight": weight_of(params),
+            "type": car_type(params), "features": features(params)}
+
+
 def submit(track_key: str, entries: list[dict]) -> bool:
-    """Add laps: entries are {"lap", "driver", "kind" ("ai"/"human"), "car" (traits or None),
-    "weight"}.  Keeps the fastest KEEP plus the fastest of each weight.  True if the
-    track record fell."""
+    """Add laps (from `entry`).  Keeps the fastest KEEP overall (for the screen)
+    plus the fastest of every car type.  True if the track record fell."""
     if not entries:
         return False
     data = load(track_key)
@@ -70,15 +96,16 @@ def submit(track_key: str, entries: list[dict]) -> bool:
     record = laps[0]["time"] if laps else None
     stamp = time.strftime("%Y-%m-%d %H:%M")
     for e in entries:
-        lap = dict(e["lap"], driver=e.get("driver", "?"), kind=e.get("kind", "ai"), car=e.get("car"),
-                   weight=e.get("weight", "medium"), date=stamp)
-        laps.append(lap)
+        laps.append(dict(e["lap"], driver=e.get("driver", "?"), kind=e.get("kind", "ai"), car=e.get("car"),
+                         weight=e.get("weight", "medium"), type=e.get("type"), features=e.get("features"),
+                         date=stamp))
     laps.sort(key=lambda l: l["time"])
     keep = laps[:KEEP]
-    for w in WEIGHTS:
-        best = next((l for l in laps if l.get("weight") == w), None)
-        if best is not None and best not in keep:
-            keep.append(best)
+    seen = {l.get("type") for l in keep}
+    for lap in laps:                                   # the best lap of every car type
+        if lap.get("type") and lap["type"] not in seen:
+            keep.append(lap)
+            seen.add(lap["type"])
     if [l["time"] for l in keep] == [l["time"] for l in before]:
         return False
     data["laps"] = keep
@@ -95,20 +122,25 @@ def submit_race(race, kinds=None, labels=None) -> list[str]:
         driver = race.drivers[i]
         kind = (kinds[i] if kinds else ("human" if type(driver).__name__ in ("KeyboardDriver", "GamepadDriver")
                                         else "ai"))
-        params = race.world.cars[i].params
-        traits = getattr(driver, "car_traits", None)
-        entries.append({"lap": lap, "driver": labels[i] if labels else getattr(driver, "label", "?"),
-                        "kind": kind, "car": traits, "weight": weight_of(params)})
+        entries.append(entry(lap, labels[i] if labels else getattr(driver, "label", "?"), kind,
+                             race.world.cars[i].params))
     return [race.track.key] if submit(race.track.key, entries) else []
 
 
-def best(track_key: str, weight: str | None = None) -> dict | None:
+def best(track_key: str, params=None) -> dict | None:
+    """The fastest lap on the track; with `params`, the fastest lap of that car's
+    type, or of the nearest type within NEAR, or None (no slower car's lap)."""
     laps = load(track_key)["laps"]
-    if weight:
-        same = [l for l in laps if l.get("weight") == weight]
-        if same:
-            return same[0]
-    return laps[0] if laps else None
+    if params is None:
+        return laps[0] if laps else None
+    mine = car_type(params)
+    same = [l for l in laps if l.get("type") == mine]
+    if same:
+        return same[0]
+    f = features(params)
+    near = [(distance(f, l["features"]), l["time"], i) for i, l in enumerate(laps)
+            if l.get("features") and distance(f, l["features"]) <= NEAR]
+    return laps[min(near)[2]] if near else None
 
 
 def corner_report(track, lap: dict) -> list[dict]:
@@ -140,13 +172,14 @@ def corner_report(track, lap: dict) -> list[dict]:
     return out
 
 
-def reference(track, weight: str = "medium") -> np.ndarray | None:
-    """Reference notes (corners, 3) from the best lap of this weight (or any), or None."""
+def reference(track, params) -> np.ndarray | None:
+    """Reference notes (corners, 3) from the best lap of this car's type (or the
+    nearest type), or None."""
     from .brain import NOTE_LINE, NOTE_SPEED
-    key = (track.key, weight)
+    key = (track.key, car_type(params))
     if key in _cache:
         return _cache[key]
-    lap = best(track.key, weight)
+    lap = best(track.key, params)
     notes = None
     if lap and len(lap.get("speed", [])) >= int(track.length / SPACING) - 2:
         rows = []
