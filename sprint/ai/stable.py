@@ -166,6 +166,22 @@ def livery_of(racer_dir) -> dict:
     return racer["livery"]
 
 
+def shown_name(data: dict) -> str:
+    """A racer's or house rival's name, with a * when it has had extra
+    training in track school (data = racer.json or a house card)."""
+    return data["name"] + (" *" if data.get("track_school") else "")
+
+
+def track_school_text(data: dict) -> str | None:
+    """'* track school: Esses (gen 46, 13.42 s)' or None."""
+    done = data.get("track_school")
+    if not done:
+        return None
+    parts = [f"{TRACK_NAMES.get(t['track'], t['track'])} (gen {t['gen']}"
+             + (f", {t['lap']:.2f} s)" if t.get("lap") else ")") for t in done]
+    return "* extra training in track school: " + ", ".join(parts)
+
+
 def traits_of(racer_dir) -> dict:
     """The racer's car (racers made before car traits drive the standard car)."""
     return load(racer_dir).get("traits") or cartraits.default()
@@ -514,7 +530,7 @@ def champion(racer_dir, label: str | None = None) -> NeuralDriver:
         raise ValueError(f"{racer['name']} has not been trained yet")
     with np.load(f) as data:
         weights = data["pop"][0].astype(np.float64)
-    driver = NeuralDriver(weights, arch_for_vector(weights, graduate()["arch"]), label or racer["name"])
+    driver = NeuralDriver(weights, arch_for_vector(weights, graduate()["arch"]), label or shown_name(racer))
     driver.racer_dir = str(racer_dir)
     driver.car_params = cartraits.params_for(traits_of(racer_dir))
     driver.livery = livery_of(racer_dir)
@@ -549,7 +565,7 @@ def house_driver(rival_id: str) -> NeuralDriver:
     meta = next((r for r in house_rivals() if r["id"] == rival_id), None) or _read(RIVALS_DIR / f"{rival_id}.json")
     with np.load(RIVALS_DIR / f"{rival_id}.npz") as data:
         weights = data["pop"][0].astype(np.float64)
-    driver = NeuralDriver(weights, meta["arch"], meta["name"])
+    driver = NeuralDriver(weights, meta["arch"], shown_name(meta))
     driver.car_params = cartraits.params_for(meta.get("traits") or cartraits.default())
     driver.livery = meta.get("livery")
     return driver
@@ -641,7 +657,7 @@ def register(root: Path | None = None) -> list[str]:
     keys = []
     for rival in house_rivals():
         key = f"house:{rival['id']}"
-        register_driver(key, rival["name"], lambda slot=0, r=rival["id"]: house_driver(r))
+        register_driver(key, shown_name(rival), lambda slot=0, r=rival["id"]: house_driver(r))
         keys.append(key)
     for d in list_racers(root, include_dead=True) if root else []:
         if brain_file(d) is None or is_breeding(d):
@@ -649,7 +665,7 @@ def register(root: Path | None = None) -> list[str]:
         state = status(d)                  # retired and dead racers still turn out for practice races
         tag = "" if state == "racing" else (" (retired)" if state == "stud" else " (legend)")
         key = f"racer:{d.name}"
-        register_driver(key, load(d)["name"] + tag, lambda slot=0, p=d: champion(p))
+        register_driver(key, shown_name(load(d)) + tag, lambda slot=0, p=d: champion(p))
         keys.append(key)
     return keys
 

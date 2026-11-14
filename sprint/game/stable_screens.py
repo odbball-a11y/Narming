@@ -218,8 +218,8 @@ class StableScreen(Screen):
         else:
             racer = stable.load(row)
             draw_chip(ui, screen, stable.livery_of(row), 7, y + 0.3, 5.5)
-            ui.text(screen, "mid", racer["name"].upper(), colour, 14, y, shadow=True)
-            draw_stars(ui, screen, racer["career"].get("titles", 0), 15.5 + text_width(ui, "mid", racer["name"].upper()),
+            ui.text(screen, "mid", stable.shown_name(racer).upper(), colour, 14, y, shadow=True)
+            draw_stars(ui, screen, racer["career"].get("titles", 0), 15.5 + text_width(ui, "mid", stable.shown_name(racer).upper()),
                        y + 0.6, 2.4, 4)
             text, tint = status_text(self.app, row)
             ui.text(screen, "small", text, tint, 60, y + 0.8)
@@ -273,9 +273,9 @@ class StableScreen(Screen):
         y = 24.0
         for rival in self.rivals:
             draw_chip(ui, screen, rival.get("livery"), 107, y + 0.4, 5.5)
-            ui.text(screen, "mid", rival["name"].upper(), C_HUD_TEXT, 114, y)
+            ui.text(screen, "mid", stable.shown_name(rival).upper(), C_HUD_TEXT, 114, y)
             draw_stars(ui, screen, rating.titles_of(self.app.stable_root, f"house:{rival['id']}"),
-                       115.5 + text_width(ui, "mid", rival["name"].upper()), y + 0.6, 2.2, 3)
+                       115.5 + text_width(ui, "mid", stable.shown_name(rival).upper()), y + 0.6, 2.2, 3)
             bar(ui, screen, 107, y + 4.2, 20, rival.get("aggression", 0), C_PINK)
             bar(ui, screen, 130, y + 4.2, 20, rival.get("caution", 0), C_CYAN)
             y += 8.5
@@ -704,8 +704,11 @@ class RacerScreen(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         racer = self.racer
-        ui.text(screen, "big", racer["name"].upper(), C_HUD_ACCENT, 6, 3, shadow=True)
+        ui.text(screen, "big", stable.shown_name(racer).upper(), C_HUD_ACCENT, 6, 3, shadow=True)
         text, tint = status_text(self.app, self.racer_dir)
+        school = stable.track_school_text(racer)
+        if school:
+            text += "    " + school
         ui.text(screen, "small", text, tint, 6, 9.5)
         look = stable.livery_of(self.racer_dir)
         draw_chip(ui, screen, look, 143, 3, 12)

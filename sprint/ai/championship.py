@@ -104,11 +104,11 @@ def start(root, racer_dirs) -> dict:
     for d in dirs:
         if not stable.can_race(d):
             raise ValueError(f"{stable.load(d)['name']} cannot race (untrained, retired or breeding)")
-        entrants.append({"kind": "racer", "id": d.name, "name": stable.load(d)["name"],
+        entrants.append({"kind": "racer", "id": d.name, "name": stable.shown_name(stable.load(d)),
                          "livery": stable.livery_of(d)})
     for rival in house_field(root):
         if len(entrants) < FIELD:
-            entrants.append({"kind": "house", "id": rival["id"], "name": rival["name"],
+            entrants.append({"kind": "house", "id": rival["id"], "name": stable.shown_name(rival),
                              "livery": rival["livery"]})
     n = 1
     while len(entrants) < FIELD:           # scripted cars keep one look all season

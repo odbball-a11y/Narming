@@ -497,6 +497,14 @@ podium): `record_result(..., finished=)`.
   rows, H (twice) while watching; CLI `python -m ai.trackschool save DIR [--gen N]`.
   Note the copy only trained on one track (other tracks' notes frozen, network
   shared), so it may be weaker elsewhere.
+  Any car can do this (user: "any car can be saved as the championship driver,
+  with a * that points out this additional training"): `can_save` (house rivals
+  and stable racers; not the graduate), `save` dispatches; `save_to_racer` adds a
+  version (`generations` 0, so the training budget is untouched; `track_school`
+  in the version and `racer["track_school"]`; refused while the racer has
+  unfinished training or no longer races). `stable.shown_name(data)` adds " *"
+  to anything with `track_school` (championship entrants, driver labels, the
+  stable list, house panel, card title); `track_school_text` is the card note.
   `App.stop_training` now stops the job's whole process group (worker processes
   were left running before; `taskkill /T` on Windows).
 - Smoothness: `PackRun` measures input jumps between decisions and the share

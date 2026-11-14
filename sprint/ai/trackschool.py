@@ -129,6 +129,64 @@ def best_generation(run_dir) -> dict | None:
     return best
 
 
+def can_save(info: dict) -> bool:
+    """A house rival's or a stable racer's copy can become its championship
+    driver (the graduate's cannot: it never races)."""
+    return info["key"].startswith(("house:", "racer:"))
+
+
+def save(run_dir, gen: int | None = None) -> dict:
+    """Make the trained copy the championship driver of the car it came from."""
+    if meta(run_dir)["key"].startswith("racer:"):
+        return save_to_racer(run_dir, gen)
+    return save_to_house(run_dir, gen)
+
+
+def _pick(run_dir, gen):
+    pick = best_generation(run_dir) if gen is None else {"gen": gen, "lap": None}
+    if pick is None:
+        raise ValueError("no generation has a clean test lap yet")
+    return pick
+
+
+def save_to_racer(run_dir, gen: int | None = None) -> dict:
+    """The trained copy becomes the stable racer's brain, as a new version
+    (its earlier versions stay).  Track school is extra training: it does not
+    use the racer's training budget, and the racer is marked with a *."""
+    from datetime import datetime
+    from . import rating
+    info = meta(run_dir)
+    racer_dir = Path(info["key"][6:])
+    if not stable.can_race(racer_dir):
+        raise ValueError(f"{info['name']} no longer races")
+    left = stable.progress(racer_dir)
+    if left["done"] < left["target"]:
+        raise ValueError(f"{info['name']} still has training to finish ({left['done']} of {left['target']})")
+    pick = _pick(run_dir, gen)
+    src = run_path(run_dir)
+    racer = stable.load(racer_dir)
+    last = racer["versions"][-1]
+    version = {"run": f"v{len(racer['versions']) + 1}", "generations": 0,
+               "aggression": last.get("aggression", racer["aggression"]), "caution": last.get("caution", racer["caution"]),
+               "partners": [], "track": info["track"], "focus": info["track"],
+               "track_school": {"track": info["track"], "gen": pick["gen"], "lap": pick["lap"]}}
+    dest = racer_dir / version["run"]
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    shutil.copy(src / "config.json", dest / "config.json")
+    shutil.copy(evolve.gen_path(src, pick["gen"]), evolve.gen_path(dest, pick["gen"]))
+    hist = [h for h in evolve.load_history(src) if h["gen"] <= pick["gen"]]
+    (dest / "history.json").write_text(json.dumps(hist), encoding="utf-8")
+    racer["versions"].append(version)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    racer.setdefault("track_school", []).append({"track": info["track"], "gen": pick["gen"], "lap": pick["lap"],
+                                                 "date": stamp})
+    stable.save(racer_dir, racer)
+    rating.loosen(racer_dir.parent, f"racer:{racer['id']}")
+    return {"name": racer["name"], "gen": pick["gen"], "lap": pick["lap"], "backup": None}
+
+
 def save_to_house(run_dir, gen: int | None = None) -> dict:
     """Make the trained copy of a house rival the house rival itself.  The
     old one is kept in house/rivals/old/.  Uses `gen`, or the generation with
@@ -139,9 +197,7 @@ def save_to_house(run_dir, gen: int | None = None) -> dict:
     if not info["key"].startswith("house:"):
         raise ValueError("only a house rival's copy can become the house car")
     rid = info["key"][6:]
-    pick = best_generation(run_dir) if gen is None else {"gen": gen, "lap": None}
-    if pick is None:
-        raise ValueError("no generation has a clean test lap yet")
+    pick = _pick(run_dir, gen)
     best = evolve.load_generation(run_path(run_dir), pick["gen"])["pop"][:1].astype(np.float32)
     rivals = stable.RIVALS_DIR
     card = json.loads((rivals / f"{rid}.json").read_text(encoding="utf-8"))
@@ -201,15 +257,16 @@ def train(run_dir, workers: int = 0, generations: int = GENERATIONS, on_generati
 def main() -> None:
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "save":
-        ap = argparse.ArgumentParser(description="Make a track-school copy of a house rival the house car.")
+        ap = argparse.ArgumentParser(description="Make a track-school copy the championship driver of its car.")
         ap.add_argument("cmd")
         ap.add_argument("dir")
         ap.add_argument("--gen", type=int, default=None, help="generation to use (default: fastest clean test lap)")
         args = ap.parse_args()
         migrate.ensure()
-        done = save_to_house(args.dir, args.gen)
+        done = save(args.dir, args.gen)
         lap = f", test lap {done['lap']:.2f} s" if done["lap"] else ""
-        print(f"{done['name']} is now generation {done['gen']}{lap}. The old one is kept as {done['backup']}.*")
+        kept = f" The old one is kept as {done['backup']}.*" if done["backup"] else " Its earlier versions are kept."
+        print(f"{done['name']} now races as track-school generation {done['gen']}{lap}.{kept}")
         return
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("dir")
