@@ -702,7 +702,7 @@ class LabScreen(Screen):
             return
         sc = scenarios[self.test_index % len(scenarios)]
         run = self.app.ai_run
-        others = [s for s in range(4) if s != sc["slot"]]
+        others = [s for s in range(len(sc["rivals"]) + 1) if s != sc["slot"]]
         entries = [(sc["slot"], roster.champion(run, self.gen, f"Gen {self.gen}"))]
         for slot, rival in zip(others, sc["rivals"]):
             if str(rival).startswith("wreck:"):              # a rival that crashes out (training races)

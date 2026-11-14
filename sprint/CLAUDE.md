@@ -397,8 +397,7 @@ podium): `record_result(..., finished=)`.
   tow), lap, current lap time (or finishing time), last, best (pink = the race's
   fastest) and a damage bar; `PLACES` goes to 8th. The results overlay, the
   championship table and the standings screen tighten their rows for six.
-  AI training races are still four cars (three rivals); not yet trained in
-  six-car fields.
+  AI training races default to four cars; any field size is possible (see below).
 
 - Track notes (user choices: per corner, speed + line + throttle, inherited,
   house rivals get notes that keep evolving). `Track.corners()` finds apexes as
@@ -529,6 +528,14 @@ podium): `record_result(..., finished=)`.
   (0 on tarmac .. 1 at the barrier), surface grip (1.0 or `GRASS_GRIP`), room to
   the tarmac edge left / right (negative once over it). Older brains get them at
   zero strength (drive exactly as before) until training uses them.
+- Any number of cars in training races: a run's config has `field` (cars per
+  racing-school race, learner included; `evolve.FIELD` = 4 when absent, so old
+  runs are unchanged); `evolve.train(field=)`, `train.py --field N`,
+  `stable.TRAIN_FIELD` (4; stable training, foal camps, house notes).
+  `make_scenarios` gives `field - 1` rivals and rotates grid places 0..field-1;
+  `test_race` handles any number of rivals and returns `field`; `place_points`
+  spreads the four-car `place` table over any field (first and last unchanged,
+  four-car races score exactly as before). The exam stays four cars.
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`

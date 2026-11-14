@@ -55,6 +55,7 @@ TRAINING_BUDGET = 50    # training generations a racer gets in its whole life (n
 CAREER_RACES = 50       # races before a racer retires to stud: 10 five-race championships (user request)
 STUD_BREEDINGS = 5      # litters a racer at stud can sire before it dies
 STUD_LIFETIME = 40      # stable races (by anyone) a racer lives for at stud
+TRAIN_FIELD = 4         # cars in a stable racer's training races (championships race 6)
 HOUSE_STUDS = ["zappy-zoe"]   # house rivals that also stand at stud in the stable, for ever (user request)
 
 # Personality sliders, each 0..1, and the race scoring at their ends.
@@ -557,6 +558,7 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
     # generation as all five together, so it trains harder on that track.
     races = grad["races_per_track"] * len(grad["tracks"]) // len(tracks)
     evolve.train(run=v["run"], root=racer_dir, generations=remaining, population=population,
+                 field=TRAIN_FIELD,
                  seed=index, tracks=tracks, exam_tracks=list(grad["tracks"]), arch=grad["arch"],
                  races_per_track=races,
                  race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
@@ -1030,6 +1032,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
         np.savez_compressed(start, pop=foals[i:i + 1].astype(np.float32))
         run = f"cand_{i:02d}"
         evolve.train(run=run, root=litter_dir, generations=camp_generations, population=camp_population,
+                     field=TRAIN_FIELD,
                      elites=2, seed=info["seed"] % 100000 + i, tracks=tracks, arch=arch, races_per_track=1,
                      race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                      race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
@@ -1139,6 +1142,7 @@ def house_notes(rival_id: str, generations: int, tracks: list | None = None, wor
     arch = with_notes(card.get("arch") or grad["arch"])
     run = f"house-{rival_id}-{'train' if full else 'notes'}"   # full: the whole brain trains, not just its notes
     evolve.train(run=run, generations=generations, population=population, seed=len(rival_id),
+                 field=TRAIN_FIELD,
                  tracks=list(tracks or grad["tracks"]), exam_tracks=list(grad["tracks"]), arch=arch,
                  races_per_track=grad["races_per_track"], race_bonuses=False,
                  start_file=str(RIVALS_DIR / f"{rival_id}.npz"), race_seconds=dict(grad["race_seconds"]),

@@ -98,6 +98,7 @@ PHASE1_DAMAGE = 0.05
 # then a mix.  Chances for each rival seat once the mix starts:
 SCRIPTED_ONLY_GENS = 10
 RIVAL_MIX = (("scripted", 0.4), ("recent", 0.4), ("hall", 0.2))
+FIELD = 4                # cars in a training race unless a run's config says otherwise ("field")
 WRECK_CHANCE = 0.25      # share of racing-school races where one rival crashes out and sits on track
 RECENT_GENS = 6          # "recent" = champions of the last few generations
 HALL_EVERY = 10          # every 10th racing-school champion joins the hall of fame
@@ -301,18 +302,21 @@ class RaceStats:
 
 
 def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
-    """One real four-car race per driver in `weights`, all stepped together.
+    """One real race per driver in `weights`, all stepped together.  The
+    field is the learner plus however many rivals the scenario has.
 
-    scenario: {"track", "slot" (the learner's grid place), "rivals": three
-    entries, each "scripted" or a weight vector, "seconds"}.
+    scenario: {"track", "slot" (the learner's grid place), "rivals": one
+    entry per rival, each "scripted", "wreck:..." or a weight vector, "seconds"}.
     """
     track = get_track(scenario["track"])
     slot = scenario["slot"]
     count = len(weights)
+    rivals = len(scenario["rivals"])
     learners = Population(weights, arch)
-    others = [s for s in range(4) if s != slot]
+    others = [s for s in range(rivals + 1) if s != slot]
     worlds, scripted, stats = [], [], []
-    cars = [scenario.get("car")] + list(scenario.get("rival_cars") or [None, None, None])
+    cars = [scenario.get("car")] + list(scenario.get("rival_cars") or [None] * rivals)
+    cars += [None] * (rivals + 1 - len(cars))
     params = [cartraits.params_for(c) if c else None for c in cars]
     for _ in range(count):
         world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True, params=params)
@@ -320,6 +324,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         for k, rival in enumerate(scenario["rivals"]):
             if isinstance(rival, str) and rival.startswith("wreck:"):
                 drivers[k + 1] = wreck.WreckDriver(slot=others[k], **wreck.parse(rival))
+                drivers[k + 1].reset(world, k + 1)
             elif isinstance(rival, str):
                 drivers[k + 1] = create_driver(rival, slot=others[k])
                 drivers[k + 1].reset(world, k + 1)
@@ -353,13 +358,14 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
                 theirs[k] = [to_controls(s, p) for s, p in out.tolist()]
         for n, world in enumerate(worlds):
             controls = [mine[n]]
-            for k in (1, 2, 3):
+            for k in range(1, rivals + 1):
                 controls.append(theirs[k][n] if k in brains else scripted[n][k].act(world, k))
             stats[n].on_tick(world.step(controls))
     for p in progress:
         p.update(retire=False)
     return {
         "place": [s.place() for s in stats],
+        "field": [rivals + 1] * count,
         "laps": [p.total[0] / track.length for p in progress],
         "damage": [w.cars[0].damage for w in worlds],
         "fault": [s.fault for s in stats],
@@ -409,6 +415,18 @@ def style_weights(style: str | None) -> dict:
     return {**RACE_WEIGHTS, **STYLES.get(style or "balanced", {})}
 
 
+def place_points(place, field, table) -> np.ndarray:
+    """Points for finishing places.  `table` gives first .. last of a
+    four-car race; for any other field size first still gets table[0] and
+    last table[-1], with the places between spread evenly (a four-car race
+    scores exactly as before)."""
+    table = np.asarray(table, dtype=float)
+    place = np.asarray(place, dtype=float)
+    field = np.full_like(place, len(table)) if field is None else np.asarray(field, dtype=float)
+    frac = np.where(field > 1, (place - 1) / np.maximum(field - 1, 1), 0.0)
+    return np.interp(np.clip(frac, 0, 1) * (len(table) - 1), np.arange(len(table)), table)
+
+
 def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.ndarray:
     """Score of each driver in one race (higher is better).
 
@@ -417,7 +435,7 @@ def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.nd
     """
     w = weights or RACE_WEIGHTS
     r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
-    score = (np.asarray(w["place"])[r["place"].astype(int) - 1] + w["laps"] * r["laps"]
+    score = (place_points(r["place"], r.get("field"), w["place"]) + w["laps"] * r["laps"]
              - w["damage"] * r["damage"] - w["fault"] * r["fault"] - w["walls"] * r["walls"]
              + w.get("overtake", 0.0) * r["overtakes"] - w.get("passed", 0.0) * r["passed"])
     # Time in a tow is not rewarded (user decision): drivers learned to steer at
@@ -658,15 +676,16 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
     count = config["races_per_track"] * len(tracks)
     rel = gen - start
     base = start - 1
+    field = int(config.get("field") or FIELD)
     recent = [g for g in history_gens if start <= g < gen][-RECENT_GENS:]
     hall = [g for g in history_gens if g == base or (g >= start and (g - start) % HALL_EVERY == 0 and g < gen)]
-    slots = list(rng.permutation(4))
+    slots = list(rng.permutation(field))
     scenarios = []
     partners = config.get("partners")
     own = recent + [g for g in hall if g not in recent]
     for k in range(count):
         rivals = []
-        for _ in range(3):
+        for _ in range(field - 1):
             if partners:
                 # Rivals chosen by the player: each seat is one of the
                 # training partners; "self" = the racer's own recent best.
@@ -691,7 +710,7 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
             rivals.append(int(rng.choice(pool)) if pool else "scripted")
         if rng.random() < WRECK_CHANCE:      # one rival crashes out and sits by the track
             seconds = config.get("race_seconds", RACE_SECONDS).get(tracks[k % len(tracks)], DEFAULT_SECONDS)
-            seat = int(rng.integers(0, 3))
+            seat = int(rng.integers(0, field - 1))
             rivals[seat] = (f"wreck:{rng.uniform(2.0, max(3.0, seconds * 0.5)):.2f}:"
                             f"{rng.choice([-1, 1])}:{rng.uniform(0.2, 0.8):.2f}")
         car = car_for(config, gen)
@@ -704,12 +723,12 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
                 rival_cars.append(partners_[int(r[2:])].get("traits"))
             else:
                 rival_cars.append(None)
-        scenarios.append({"track": tracks[k % len(tracks)], "slot": int(slots[k % 4]), "rivals": rivals,
+        scenarios.append({"track": tracks[k % len(tracks)], "slot": int(slots[k % field]), "rivals": rivals,
                           "car": car, "rival_cars": rival_cars,
                           "seconds": config.get("race_seconds", RACE_SECONDS).get(
                               tracks[k % len(tracks)], DEFAULT_SECONDS)})
-        if k % 4 == 3:
-            slots = list(rng.permutation(4))
+        if k % field == field - 1:
+            slots = list(rng.permutation(field))
     return scenarios
 
 
@@ -722,7 +741,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           race_seconds: dict | None = None, partners: list | None = None, car=None,
           driving_school: bool = False, exam_tracks: list | None = None,
           solo_share: float | None = None, notes: bool = False, notes_only: bool = False,
-          record_laps: bool = True) -> Path:
+          record_laps: bool = True, field: int | None = None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -785,7 +804,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "races_per_track": races_per_track or 2, "race_bonuses": race_bonuses,
                   "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
                   "partners": partners, "car": car, "exam_tracks": exam_tracks, "solo_share": solo_share,
-                  "notes_only": bool(notes_only),
+                  "notes_only": bool(notes_only), "field": int(field or FIELD),
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)

@@ -87,6 +87,8 @@ def main() -> int:
                     help="hidden layer sizes (new runs), e.g. --hidden 32 32")
     ap.add_argument("--memory", type=int, default=None,
                     help="memory values the network carries between decisions (new runs; 0 = none)")
+    ap.add_argument("--field", type=int, default=None,
+                    help="cars in each racing-school race, the learner included (new runs; default 4)")
     ap.add_argument("--races", type=int, default=None,
                     help="racing-school races per driver per track (new runs; default 2, or the --from run's)")
     ap.add_argument("--from", dest="start_from", metavar="RUN[:GEN]",
@@ -189,7 +191,7 @@ def main() -> int:
                      race_laps=args.race_laps, start_from=args.start_from, style=args.style,
                      name=args.name, car=car, race_weights=race_weights,
                      driving_school=args.driving_school, start_file=start_file, race_seconds=race_seconds,
-                     workers=args.workers, on_generation=report,
+                     workers=args.workers, on_generation=report, field=args.field,
                      log=lambda m: print(m, flush=True))
         config = evolve.load_config(run_dir)
         if config.get("name"):
