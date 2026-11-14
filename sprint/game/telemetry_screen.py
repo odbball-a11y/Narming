@@ -120,13 +120,13 @@ class TelemetryScreen(Screen):
     def draw_trace(self, screen, lap: dict, record: dict) -> None:
         """Speed around the lap: this lap, the record and the ideal line's safe speed."""
         ui = self.app.ui
-        x, y, w, h = 66, 11, 91, 34
+        x, y, w, h = 66, 11, 91, 44
         ui.panel(screen, x, y, w, h, border=(70, 56, 120))
         ui.text(screen, "small", "SPEED AROUND THE LAP", C_HUD_TEXT, x + 2, y + 1.2)
         ui.text(screen, "small", "this lap", C_CYAN, x + 34, y + 1.2)
         ui.text(screen, "small", "record", C_PINK, x + 47, y + 1.2)
         ui.text(screen, "small", "ideal line's safe speed", C_HUD_DIM, x + 58, y + 1.2)
-        left, right, top, bottom = x + 3, x + w - 2, y + 5, y + h - 8
+        left, right, top, bottom = x + 3, x + w - 2, y + 5, y + h - 18
         _, curv = self.track.ideal()
         from ai.brain import GRIP_PLAN
         grip = tuning.CarParams().grip * GRIP_PLAN
@@ -160,17 +160,30 @@ class TelemetryScreen(Screen):
             pygame.draw.rect(screen, colour, pygame.Rect(int(px), int(ui.px(0, band)[1]),
                                                          max(1, int(ui.unit * (right - left) / n) + 1),
                                                          int(ui.unit * 1.6)))
-        ui.text(screen, "small", "pedals: green power, grey lift, red brake", C_HUD_DIM, left, band + 2.2)
+        ui.text(screen, "small", "pedals: green power, grey lift, red brake", C_HUD_DIM, left, band + 2.0)
+        # Steering: how much lock, and how often it corrects (up = right, down = left).
+        mid, amp = band + 9.0, 3.2
+        a, b = ui.px(left, mid), ui.px(right, mid)
+        pygame.draw.line(screen, (56, 44, 100), a, b)
+        for series, colour in ((record["steering"], C_PINK), (lap["steering"], C_CYAN)):
+            pts = [ui.px(left + k / max(1, n - 1) * (right - left), mid - max(-1.0, min(1.0, v)) * amp)
+                   for k, v in enumerate(series[:n])]
+            if len(pts) > 1:
+                pygame.draw.lines(screen, colour, False, pts, max(1, int(ui.unit * 0.22)))
+        moves = sum(abs(lap["steering"][k] - lap["steering"][k - 1]) for k in range(1, n))
+        ui.text(screen, "small", f"steering (up = right): {moves:.1f} of corrections this lap"
+                + (f", record {sum(abs(record['steering'][k] - record['steering'][k - 1]) for k in range(1, n)):.1f}"
+                   if record is not lap else ""), C_HUD_DIM, left, mid + amp + 0.6)
 
     def draw_corners(self, screen, lap: dict) -> None:
         ui = self.app.ui
-        x, y = 66, 47
-        ui.panel(screen, x, y, 91, 38)
+        x, y = 66, 57
+        ui.panel(screen, x, y, 91, 30)
         ui.text(screen, "small", "CORNER BY CORNER  (against the ideal line)", C_HUD_ACCENT, x + 2, y + 1.3)
         heads = ((2, "#"), (7, "APEX SPEED"), (27, "LINE AT APEX"), (50, "LIFTS / BRAKES"), (71, "POWER ON"))
         for hx, head in heads:
-            ui.text(screen, "small", head, C_HUD_DIM, x + hx, y + 5)
-        row = y + 8.5
+            ui.text(screen, "small", head, C_HUD_DIM, x + hx, y + 4.4)
+        row = y + 7.4
         for c_i, c in enumerate(telemetry.corner_report(self.track, lap)[:9]):
             gain = c["apex_speed"] / c["ideal_speed"] - 1.0
             ui.text(screen, "small", str(c_i + 1), C_HUD_TEXT, x + 2, row)
@@ -182,4 +195,4 @@ class TelemetryScreen(Screen):
                     C_HUD_TEXT, x + 50, row)
             ui.text(screen, "small", "-" if c["power_after"] is None else f"{c['power_after']:.0f} after apex",
                     C_HUD_TEXT, x + 71, row)
-            row += 3.2
+            row += 2.4
