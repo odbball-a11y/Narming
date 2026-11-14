@@ -91,7 +91,7 @@ def submit(track_key: str, entries: list[dict]) -> bool:
 def submit_race(race, kinds=None, labels=None) -> list[str]:
     """Submit every flying lap a Race recorded.  Returns the tracks whose record fell."""
     entries = []
-    for i, lap in race.telemetry.laps:
+    for i, lap in getattr(getattr(race, "telemetry", None), "laps", []):
         driver = race.drivers[i]
         kind = (kinds[i] if kinds else ("human" if type(driver).__name__ in ("KeyboardDriver", "GamepadDriver")
                                         else "ai"))

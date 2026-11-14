@@ -520,7 +520,7 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
 # ------------------------------------------------------------------- exams
 
 def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = None,
-         label: str | None = None) -> dict:
+         label: str | None = None, submit: bool = True) -> dict:
     """Standard report card for one driver, the same for every generation so
     generations can be compared: a solo time trial, and a three-lap race
     against three scripted cars starting from the back of the grid."""
@@ -545,7 +545,8 @@ def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = 
                 for _, lap in solo["recorded"]]
         laps += [{"lap": lap, "driver": label or "AI", "kind": "ai", "car": car, "weight": weight}
                  for i, lap in race.telemetry.laps if i == 0]
-        telemetry.submit(name, laps)                    # the champion's laps may set a track record
+        if submit:
+            telemetry.submit(name, laps)                # the champion's laps may set a track record
         racecar = race.world.cars[0]
         report[name] = {
             "solo_laps": round(solo["laps"][0], 3),
@@ -712,7 +713,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           root=None, start_file: str | None = None, race_weights: dict | None = None,
           race_seconds: dict | None = None, partners: list | None = None, car=None,
           driving_school: bool = False, exam_tracks: list | None = None,
-          solo_share: float | None = None, notes: bool = False, notes_only: bool = False) -> Path:
+          solo_share: float | None = None, notes: bool = False, notes_only: bool = False,
+          record_laps: bool = True) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -857,6 +859,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                 "solo_setup": solo_setup(gen),
                 "car": car_for(config, gen),
                 "exam": exam(pop[0], arch, config.get("exam_tracks") or tracks, label=config.get("name") or run,
+                             submit=record_laps,
                              car=config.get("car") if isinstance(config.get("car"), dict) else None),
             }
             if racing:

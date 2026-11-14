@@ -67,11 +67,12 @@ def test_a_house_rival_learns_notes_without_changing_how_it_drives(tmp_path, mon
     monkeypatch.setattr(evolve, "RUNS_DIR", tmp_path / "runs")
     with np.load(rivals / "careful-keith.npz") as data:
         before = data["pop"][0].astype(np.float64)
+    had = json.loads((rivals / "careful-keith.json").read_text()).get("notes_generations", 0)
     card = stable.house_notes("careful-keith", 1, tracks=["oval"], population=6)
     with np.load(rivals / "careful-keith.npz") as data:
         after = data["pop"][0].astype(np.float64)
     arch = card["arch"]
-    assert arch["notes"] and card["notes_generations"] == 1
+    assert arch["notes"] and card["notes_generations"] == had + 1
     k = brain.n_weights(arch)
     assert np.allclose(after[:k], before[:k], atol=1e-6)                    # the same driver
     assert len(after) == brain.genome_size(arch)

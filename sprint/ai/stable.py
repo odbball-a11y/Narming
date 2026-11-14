@@ -875,7 +875,8 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
                      elites=2, seed=info["seed"] % 100000 + i, tracks=tracks, arch=arch, races_per_track=1,
                      race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),
                      race_weights=weights, partners=[{"name": "Scripted car", "kind": "scripted"}],
-                     solo_share=SOLO_SHARE, notes=True, workers=workers, log=lambda m: None, car=traits)
+                     solo_share=SOLO_SHARE, notes=True, workers=workers, log=lambda m: None, car=traits,
+                     record_laps=False)          # a litter's trial laps never change what the next litter sees
         hist = evolve.load_history(litter_dir / run)
         paces_by_gen = [pace(h["exam"]) for h in hist]
         valid = [p for p in paces_by_gen if p]
