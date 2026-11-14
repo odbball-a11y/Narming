@@ -46,9 +46,9 @@ def test_coasting_slows_down():
 
 def test_velocity_is_separate_from_heading_car_slides_then_recovers():
     world = make_world()
-    car = put_on_track(world, world.cars[0], 10.0, speed=25.0)
+    car = put_on_track(world, world.cars[0], 30.0, speed=25.0)
     # Full lock and full throttle: power oversteer, the rear lets go.
-    step_n(world, Controls(1.0, 1.0, 0.0), 60)
+    step_n(world, Controls(1.0, 1.0, 0.0), 55)
     travel = math.atan2(car.vy, car.vx)
     drift = abs((car.heading - travel + math.pi) % (2 * math.pi) - math.pi)
     assert car.sliding
