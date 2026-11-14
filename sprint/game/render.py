@@ -562,9 +562,17 @@ class RaceRenderer:
                 pygame.draw.rect(screen, (30, 26, 52), ui.rect(x0 - 0.6, y, col_w - 0.8, row_h))
             ui.text(screen, "small", PLACES[place] if place < len(PLACES) else f"{place + 1}TH", colour, x0, ty)
             pygame.draw.rect(screen, colour, ui.rect(x0 + 6.0, y + 0.4, 1.2, row_h - 0.8))
-            name = race.drivers[i].label.upper()[:15]
+            name = race.drivers[i].label.upper()[:13]
             towed = car.draft > 0.08 and not car.finished           # in a tow: the name turns cyan
-            ui.text(screen, "small", name, C_CYAN if towed else C_HUD_TEXT, x0 + 8.4, ty)
+            label = ui.text(screen, "small", name, C_CYAN if towed else C_HUD_TEXT, x0 + 8.4, ty)
+            # A little picture of the car just after the name, to match it to the car on track.
+            sprite = self.sprite_for(look if "trim" in look else
+                                     {"colour": look["colour"], "trim": "stripe", "trim_colour": "white"})
+            height = row_h * ui.unit * 0.78
+            icon = pygame.transform.smoothscale(
+                sprite, (max(1, int(sprite.get_width() * height / sprite.get_height())), max(1, int(height))))
+            left = min(label.right + ui.unit * 1.0, ui.px(x0 + 29.5, 0)[0] - icon.get_width() - ui.unit * 0.4)
+            screen.blit(icon, (int(left), int(ui.px(0, y + row_h / 2)[1] - icon.get_height() / 2)))
             lap_now = min(car.laps + 1, world.laps)
             ui.text(screen, "small", "FIN" if car.finished else f"L{lap_now}/{world.laps}", C_HUD_ACCENT,
                     x0 + 30.0, ty)
