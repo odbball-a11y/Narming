@@ -54,7 +54,7 @@ def test_foals_get_each_corners_notes_from_one_parent():
     a, b = brain.fit_genomes(graduate_vectors(2), arch)
     k = brain.n_weights(arch)
     a[k:], b[k:] = 0.5, -0.5
-    child = stable.crossover(a, b, arch, np.random.default_rng(2))
+    child = stable.crossover(a, b, arch, np.random.default_rng(2), "neuron")
     notes = child[k:].reshape(-1, brain.NOTE_FIELDS)
     for row in notes:
         assert np.allclose(row, 0.5, atol=0.1) or np.allclose(row, -0.5, atol=0.1)

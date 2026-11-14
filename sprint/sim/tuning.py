@@ -98,7 +98,7 @@ class CarParams:
     # understeer).  The rear end is the `grip` above: throttle eats it (power
     # oversteer) and braking unloads it (lift-off oversteer, see brake_transfer).
     # 0 = steering always gets what it asks, as in the original model.
-    front_limit: float = 1.2
+    front_limit: float = 1.1   # was 1.2 (user: the rear stepped out too easily through the Esses)
 
     # Seconds the car takes to rotate to what steering asks (yaw inertia).
     # While the rear is sliding the lag grows (a spin keeps spinning).

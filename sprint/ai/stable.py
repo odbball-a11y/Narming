@@ -656,8 +656,9 @@ def register(root: Path | None = None) -> list[str]:
 
 # ----------------------------------------------------------------- breeding
 
-LITTER = 20             # foals bred per mating
-SHORTLIST = 5           # foals that go on to a mini training camp
+LITTER = 50             # foals bred per mating (cheap: they are judged by time trials, all at once)
+SHORTLIST = 5           # fastest foals that get a race check
+FINALISTS = 3           # foals (passing the race check) that go on to a mini training camp
 CAMP_GENERATIONS = 3    # length of each mini-camp
 CAMP_POPULATION = 16
 TEMPERAMENT_SPREAD = 0.08   # how far a foal's personality strays from its parents' average
@@ -671,20 +672,48 @@ def brain(racer_dir) -> np.ndarray:
         return data["pop"][0].astype(np.float64)
 
 
-def crossover(a: np.ndarray, b: np.ndarray, arch: dict, rng: np.random.Generator) -> np.ndarray:
-    """A child brain made of whole neurons from each parent.
+CROSSOVER = "mixed"           # how a foal's brain is made from its parents' (see crossover)
+CROSSOVER_METHODS = ("neuron", "blend", "dominant")
+MIXED = ("blend", "dominant")  # a "mixed" litter alternates these
+# Test (litters of 40, three pairs of house rivals, time trials): blend had the
+# best typical foal (median 1-6% quicker than its parents, 11-40 of 40 foals
+# beat both parents); dominant gave the single fastest foal in two of three
+# pairs; the old neuron splice was worst (median 12-29% slower, 0-1 beat both).
 
-    Every neuron (its incoming weights and bias, in every layer including the
+
+def crossover(a: np.ndarray, b: np.ndarray, arch: dict, rng: np.random.Generator,
+              method: str | None = None) -> np.ndarray:
+    """A child brain from two parents' brains.
+
+    "blend": a weighted average of the parents (both grew from the same
+    graduate, so their weights line up), then small mutations.  "dominant":
+    90% of neurons from one parent, the rest from the other.  "neuron" (the
+    first method): every neuron (its incoming weights and bias, in every layer including the
     outputs) is copied whole from one parent or the other, so working units
     such as "react to a car on my left" are kept rather than blurred.  This
     only makes sense because all racers descend from the same graduate, so
     the parents' neurons line up.  A few small mutations follow.
     """
+    method = method or CROSSOVER
+    if method == "mixed":
+        method = MIXED[int(rng.integers(len(MIXED)))]
     a, b = fit_genomes(a, arch), fit_genomes(b, arch)
+    if method == "blend":
+        # Both parents grew from the same graduate, so a weighted average of their
+        # weights tends to keep what each learned (rather than splicing parts).
+        w = rng.uniform(0.35, 0.65)
+        child = w * a + (1.0 - w) * b
+        mask = rng.random(len(child)) < 0.2
+        return child + rng.normal(0.0, 0.02, len(child)) * mask
+    share = 0.5
+    if method == "dominant":                  # mostly one parent, a few neurons from the other
+        if rng.random() < 0.5:
+            a, b = b, a
+        share = 0.9
     child = np.empty_like(a)
     la, lb, lc = unpack(a, arch), unpack(b, arch), unpack(child, arch)
     for (wa, ba), (wb, bb), (wc, bc) in zip(la, lb, lc):
-        pick = rng.random(len(ba)) < 0.5
+        pick = rng.random(len(ba)) < share
         wc[:] = np.where(pick[:, None], wa, wb)
         bc[:] = np.where(pick, ba, bb)
     k = n_weights(arch)
@@ -694,6 +723,50 @@ def crossover(a: np.ndarray, b: np.ndarray, arch: dict, rng: np.random.Generator
         child[k:] = np.where(pick[:, None], na, nb).ravel()
     mask = rng.random(len(child)) < 0.2
     return child + rng.normal(0.0, 0.02, len(child)) * mask
+
+
+TRIAL_LAPS = 4.5             # time trial length, in scripted laps per track (the first lap is a rolling start)
+
+
+def _trial_job(args):
+    weights, arch, track, seconds, car = args
+    return evolve.test_solo(weights, arch, track, seconds=seconds, car=car)
+
+
+def time_trial(pop: np.ndarray, arch: dict, tracks, car: dict | None = None, workers: int = 0) -> list[dict]:
+    """Every driver in `pop` laps every track alone (all at once, as ghosts),
+    several flying laps each.  Per driver: pace (median flying lap over the
+    scripted car's, averaged over tracks; 1.6 for a track with no flying lap),
+    damage, spread (how much its laps vary) and score = pace + damage / 2 +
+    spread (lower is better)."""
+    from concurrent.futures import ProcessPoolExecutor
+    chunks = np.array_split(np.arange(len(pop)), max(1, min(workers or 1, len(pop))))
+    jobs = [(pop[c], arch, t, SCRIPTED_LAPS[t] * TRIAL_LAPS + 4.0, car) for t in tracks for c in chunks]
+    if workers > 1:
+        with ProcessPoolExecutor(workers) as ex:
+            results = list(ex.map(_trial_job, jobs))
+    else:
+        results = [_trial_job(j) for j in jobs]
+    out = [{"pace": 0.0, "damage": 0.0, "spread": 0.0} for _ in range(len(pop))]
+    k = 0
+    for t in tracks:
+        for c in chunks:
+            r = results[k]
+            k += 1
+            for j, i in enumerate(c):
+                flying = r["lap_times"][j][1:]
+                if flying:
+                    med = float(np.median(flying))
+                    out[i]["pace"] += med / SCRIPTED_LAPS[t]
+                    out[i]["spread"] += float(np.std(flying)) / med if len(flying) > 1 else 0.0
+                else:
+                    out[i]["pace"] += 1.6
+                out[i]["damage"] += r["damage"][j]
+    for o in out:
+        for key in ("pace", "damage", "spread"):
+            o[key] = round(o[key] / len(tracks), 4)
+        o["score"] = round(o["pace"] + o["damage"] / 2.0 + o["spread"], 4)
+    return out
 
 
 def breeding_progress(foal_dir) -> dict | None:
@@ -841,24 +914,39 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
 
     # The litter.
     _progress(foal_dir, stage="litter", done=0, of=litter)
-    foals = np.array([crossover(sire_w, dam_w, arch, rng) for _ in range(litter)])
+    method = info.get("method", CROSSOVER)
+    made_by = [MIXED[i % len(MIXED)] if method == "mixed" else method for i in range(litter)]
+    foals = np.array([crossover(sire_w, dam_w, arch, rng, m) for m in made_by])
 
-    # Round 1: every foal straight from breeding, alone and in one race,
-    # all scored the same (balanced) way so the comparison is fair.
+    # Round 1: time trials.  Every foal (and both parents, for comparison) laps
+    # every track alone, several flying laps each, in the foal's car.
     _progress(foal_dir, stage="trial", done=0, of=litter)
     traits = racer.get("traits") or cartraits.default()
+    trial_rows = np.concatenate([fit_genomes(np.array([sire_w, dam_w]), arch), foals])
+    timed = time_trial(trial_rows, arch, list(tracks), car=traits, workers=workers)
+    parent_trial, foal_trial = timed[:2], timed[2:]
+    score = np.array([t["score"] for t in foal_trial])
+    order = [int(i) for i in np.argsort(score, kind="stable")]          # lower is better
+    fastest = order[:shortlist]
+
+    # Race check: the fastest few each race once on every track (from the back
+    # against three scripted cars); a foal that crashes about is dropped, but
+    # the order still comes from the time trials.
     trial = [{"track": t, "slot": 3, "rivals": ["scripted"] * 3, "seconds": grad["race_seconds"][t],
               "car": traits} for t in tracks]
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:
-        score, _ = evolve.score_population(foals, arch, tracks, trial, 0.0, pool, chunks=max(1, workers),
-                                           weights=sliders_to_weights(0.0, 0.0), solo_share=SOLO_SHARE,
-                                           setup={"slot": 0, "damage": 0.0, "car": traits})
+        _, checks = evolve.score_population(foals[fastest], arch, tracks, trial, 0.0, pool,
+                                            chunks=max(1, workers), weights=sliders_to_weights(0.0, 0.0),
+                                            setup={"slot": 0, "damage": 0.0, "car": traits})
     finally:
         if pool:
             pool.shutdown()
-    order = [int(i) for i in np.argsort(-score, kind="stable")]
-    picked = order[:shortlist]
+    race_check = {i: {"place": round(float(checks["place"][k]), 2), "damage": round(float(checks["damage"][k]), 3)}
+                  for k, i in enumerate(fastest)}
+    passed = [i for i in fastest if race_check[i]["damage"] <= 0.5]
+    picked = (passed or fastest)[:FINALISTS]
+    score = -score                            # (kept for the certificate: higher is better)
 
     # Round 2: a short training camp each, with the foal's own personality.
     parents = [_parent_summary(root, info["sire"]), _parent_summary(root, info["dam"])]
@@ -882,7 +970,8 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
         valid = [p for p in paces_by_gen if p]
         to_target = next((h["gen"] for h, p in zip(hist, paces_by_gen) if p and p <= target), None)
         last = exam_average(hist[-1]["exam"])
-        candidates.append({"foal": i + 1, "trial_rank": k + 1, "trial_score": round(float(score[i]), 3),
+        candidates.append({"foal": i + 1, "trial_rank": order.index(i) + 1, "trial_score": round(float(score[i]), 3),
+                           "trial_pace": foal_trial[i]["pace"], "made_by": made_by[i], "race_check": race_check.get(i),
                            "pace": min(valid) if valid else None, "gens_to_target": to_target,
                            "race_place": round(last["race_place"], 2), "passes": round(last["race_overtakes"], 1),
                            "hits": round(last["race_fault"], 1), "damage": round(last["race_damage"], 3),
@@ -912,7 +1001,12 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     grandparents = {p["name"]: [_parent_summary(root, g)["name"] for g in p.get("parents", [])] for p in parents}
     certificate = {
         "sire": parents[0], "dam": parents[1], "grandparents": grandparents,
-        "litter": litter, "shortlist": len(picked), "criterion": info["criterion"],
+        "litter": litter, "shortlist": len(picked), "criterion": info["criterion"], "method": method,
+        "trial": {"parents_pace": [parent_trial[0]["pace"], parent_trial[1]["pace"]],
+                  "foal_pace": foal_trial[winner["foal"] - 1]["pace"],
+                  "vs_parents": round(foal_trial[winner["foal"] - 1]["pace"]
+                                      / ((parent_trial[0]["pace"] + parent_trial[1]["pace"]) / 2) - 1, 4),
+                  "litter_best": min(t["pace"] for t in foal_trial)},
         "criterion_text": CRITERIA[info["criterion"]], "target_pace": target,
         "candidates": candidates, "winner": winner,
         "temperament": {"aggression": racer["aggression"], "caution": racer["caution"]},

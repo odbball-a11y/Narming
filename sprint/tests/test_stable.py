@@ -262,7 +262,7 @@ def test_crossover_copies_whole_neurons_from_either_parent():
     arch = stable.graduate()["arch"]
     rng = np.random.default_rng(0)
     a, b = random_weights(rng, 2, arch)
-    child = stable.crossover(a, b, arch, rng)
+    child = stable.crossover(a, b, arch, rng, "neuron")
     for (wa, ba), (wb, bb), (wc, bc) in zip(unpack(a, arch), unpack(b, arch), unpack(child, arch)):
         from_a = [np.allclose(wc[j], wa[j], atol=0.15) and abs(bc[j] - ba[j]) < 0.15 for j in range(len(bc))]
         from_b = [np.allclose(wc[j], wb[j], atol=0.15) and abs(bc[j] - bb[j]) < 0.15 for j in range(len(bc))]
@@ -479,3 +479,15 @@ def test_race_news_appears_on_the_results_screen(app, monkeypatch):
         view.tick()
     assert "retires to stud" in view.message
     assert stable.status(racer) == "stud"
+
+
+def test_blend_and_mixed_crossover_stay_between_parents():
+    arch = {"hidden": [6, 4], "memory": 2, "inputs": 1}
+    rng = np.random.default_rng(3)
+    a = rng.normal(0, 1, stable.n_weights(arch))
+    b = rng.normal(0, 1, stable.n_weights(arch))
+    child = stable.crossover(a, b, arch, rng, "blend")
+    lo, hi = np.minimum(a, b) - 0.15, np.maximum(a, b) + 0.15
+    assert np.all((child >= lo) & (child <= hi))
+    for _ in range(4):                                  # "mixed" picks blend or dominant
+        assert stable.crossover(a, b, arch, rng, "mixed").shape == a.shape

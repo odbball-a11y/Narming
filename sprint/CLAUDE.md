@@ -448,6 +448,26 @@ podium): `record_result(..., finished=)`.
   v the record and the ideal line's safe speed with a pedal strip, and a
   corner table. Practice races with a human show a ghost of the best lap for
   that car's type (G toggles).
+- Front grip 1.2 -> 1.1 (user: cars lost the back end through the Esses; physics
+  4 for track records, telemetry restarts with the new fingerprint). Esses, house
+  rivals unretrained, 5-lap solo, lap / share of the lap with the rear past 50%
+  slip: Keith 16.30 -> 15.89 s, 5.5 -> 4.3%; Dave 15.71 -> 15.18, 9.2 -> 5.7%;
+  Zappy Zoe 15.39 -> 15.65, 3.0 -> 3.7%; Bold Zoe 15.18 -> 15.42, 8.5 -> 7.9%
+  (rear past 90% 1.0 -> 0.2%). Graduate7 trained its first 25 gens at 1.2.
+- Breeding by time trial (user: "maybe the trial is not a race but more time
+  trials ... we pick the best one"). `breed` makes `LITTER` (50) foals with
+  `crossover(method)`; `CROSSOVER` = "mixed" alternates "blend" (weighted average
+  of the parents, w 0.35-0.65, then mutation) and "dominant" (90% of neurons from
+  one parent). Round 1 is `time_trial`: every foal and both parents lap every
+  track alone for `TRIAL_LAPS` scripted laps in the foal's car; score = median
+  flying-lap pace + damage/2 + lap spread. The fastest `SHORTLIST` (5) get one
+  race check per track (dropped if damage > 0.5) and `FINALISTS` (3) go to camps
+  as before. Certificate: `method`, per candidate `made_by`, `trial_pace`,
+  `race_check`, and `trial` {parents_pace, foal_pace, vs_parents, litter_best}
+  ("at birth X% quicker than its parents"). Crossover test (litters of 40, three
+  house-rival pairs, time trials): neuron splice median foal 12-29% slower than
+  its parents, 0-1 of 40 beat both; blend median 1-6% quicker, 11-40 of 40 beat
+  both; dominant gave the single fastest foal in two of three pairs.
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`

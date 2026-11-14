@@ -231,6 +231,7 @@ def test_solo(weights: np.ndarray, arch: dict, track_name: str, seconds: float |
     return {"laps": run.laps(), "damage": [car.damage - damage for car in cars],
             "best_lap": [car.best_lap for car in cars],
             "recorded": run.recorder.laps if run.recorder else [],
+            "lap_times": [list(car.lap_times) for car in cars],
             "jitter": (run.jitter / np.maximum(run.decisions, 1)).tolist(),
             "slide": (run.slide / np.maximum(run.decisions, 1)).tolist()}
 

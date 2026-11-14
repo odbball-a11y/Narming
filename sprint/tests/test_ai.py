@@ -24,10 +24,15 @@ FLAT = {"hidden": [8], "memory": 0, "inputs": brain.INPUT_VERSION}
 def run_dir(tmp_path_factory):
     """A tiny real run: 3 driving-school generations then 3 racing-school ones."""
     root = tmp_path_factory.mktemp("training")
-    old = evolve.RUNS_DIR
+    from ai import telemetry
+    old, old_tel = evolve.RUNS_DIR, telemetry.DIR
     evolve.RUNS_DIR = root
+    telemetry.DIR = tmp_path_factory.mktemp("telemetry")   # its own laps, never the project's (module fixture)
+    telemetry._cache.clear()
     evolve.train(run="tiny", generations=6, population=8, elites=2, seed=1, tracks=["speedway"],
                  phase2_from=4, arch=ARCH, races_per_track=2)
+    telemetry.DIR = old_tel
+    telemetry._cache.clear()
     yield root / "tiny"
     evolve.RUNS_DIR = old
 

@@ -1133,10 +1133,22 @@ class CertificateScreen(Screen):
         y = 29.5
         target = (f"target: {stable.pace_text(cert['target_pace'])}" if "target_pace" in cert
                   else f"target {cert.get('target_lap', 0):.2f}s")
-        ui.text(screen, "small", f"THE LITTER: {cert['litter']} foals, {cert['shortlist']} shortlisted.  "
-                f"Picked by: {cert['criterion_text']} ({target})", C_HUD_ACCENT, 7, y)
+        made = {"mixed": "half blended, half mostly one parent", "blend": "blended", "dominant": "mostly one parent",
+                "neuron": "neuron by neuron"}.get(cert.get("method", "neuron"), cert.get("method", ""))
+        ui.text(screen, "small", f"THE LITTER: {cert['litter']} foals ({made}), {cert['shortlist']} to camp.", C_HUD_ACCENT, 7, y)
+        y += 3.4
+        ui.text(screen, "small", f"Picked by: {cert['criterion_text']} ({target})", C_HUD_TEXT, 7, y)
+        trial = cert.get("trial")
+        if trial:
+            y += 3.4
+            vs = trial["vs_parents"]
+            sc = lambda v: f"{(1 - v) * 100:+.0f}%"
+            ui.text(screen, "small", f"AT BIRTH (time trials): {abs(vs):.1%} {'quicker' if vs < 0 else 'slower'} than "
+                    f"its parents' average.  V scripted: parents {sc(trial['parents_pace'][0])} / "
+                    f"{sc(trial['parents_pace'][1])}, quickest foal {sc(trial['litter_best'])}",
+                    C_CYAN if vs < 0 else C_HUD_TEXT, 7, y)
         y += 3.6
-        for x, head in ((9, "FOAL"), (24, "ROUND 1"), (40, "PACE V SCRIPTED"), (68, "GENS TO TARGET"),
+        for x, head in ((9, "FOAL"), (24, "TIME TRIAL" if trial else "ROUND 1"), (46, "PACE V SCRIPTED"), (68, "GENS TO TARGET"),
                         (92, "AVG PLACE"), (110, "PASSES"), (126, "HITS"), (140, "DAMAGE")):
             ui.text(screen, "small", head, C_HUD_DIM, x, y)
         for c in cert["candidates"]:
@@ -1150,17 +1162,17 @@ class CertificateScreen(Screen):
                 lap = f"{c['best_lap']:.2f}s" if c.get("best_lap") else "-"
             gens = str(c["gens_to_target"]) if c["gens_to_target"] else "not reached"
             place = f"{c['race_place']:.1f}" if isinstance(c["race_place"], float) else f"P{c['race_place']}"
-            for x, value in ((9, f"no. {c['foal']}"), (24, f"{c['trial_rank']} of {cert['litter']}"), (40, lap),
+            for x, value in ((9, f"no. {c['foal']}"), (24, f"{c['trial_rank']} of {cert['litter']}" + (f"  {c['made_by']}" if c.get("made_by") else "")), (46, lap),
                              (68, gens), (92, place), (110, str(c["passes"])),
                              (126, f"{c['hits']:g}"), (140, f"{c['damage'] * 100:.0f}%")):
                 ui.text(screen, "small", value, colour, x, y)
 
         # Expectations
-        y += 6
+        y += 4.6
         ui.text(screen, "small", "WHAT TO EXPECT  (predictions from the family; its races will tell)",
                 C_HUD_ACCENT, 7, y)
         for note in cert["expectations"]:
-            y += 3.4
+            y += 3.1
             ui.text(screen, "small", "- " + note, C_HUD_TEXT, 7, y)
         ui.text(screen, "small", "ENTER or ESC to go back", C_HUD_DIM, 80, 86.5, "midbottom")
 
