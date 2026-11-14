@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 import sim.scripted  # noqa: F401
-from sim import cartraits, tuning
+from sim import cartraits, tuning, wreck
 from sim.driver import Controls, create_driver
 from sim.track import Track
 from sim.telemetry import LapRecorder
@@ -98,6 +98,7 @@ PHASE1_DAMAGE = 0.05
 # then a mix.  Chances for each rival seat once the mix starts:
 SCRIPTED_ONLY_GENS = 10
 RIVAL_MIX = (("scripted", 0.4), ("recent", 0.4), ("hall", 0.2))
+WRECK_CHANCE = 0.25      # share of racing-school races where one rival crashes out and sits on track
 RECENT_GENS = 6          # "recent" = champions of the last few generations
 HALL_EVERY = 10          # every 10th racing-school champion joins the hall of fame
 
@@ -317,7 +318,9 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True, params=params)
         drivers = {}
         for k, rival in enumerate(scenario["rivals"]):
-            if isinstance(rival, str):
+            if isinstance(rival, str) and rival.startswith("wreck:"):
+                drivers[k + 1] = wreck.WreckDriver(slot=others[k], **wreck.parse(rival))
+            elif isinstance(rival, str):
                 drivers[k + 1] = create_driver(rival, slot=others[k])
                 drivers[k + 1].reset(world, k + 1)
         worlds.append(world)
@@ -385,7 +388,7 @@ RACE_WEIGHTS = {
     "draft": 0.0,                    # personality, permanent: per share of time in a tow
     "bonus_overtake": 0.06,          # optional, fading: per pass made
     "bonus_passed": 0.06,            # optional, fading: per time overtaken
-    "bonus_draft": 0.3,              # optional, fading: per share of time in a tow
+    "bonus_draft": 0.0,              # (no longer used: drafting is not rewarded, see race_score)
 }
 
 
@@ -396,7 +399,7 @@ STYLES = {
     "balanced": {},
     # Dangerous Dave: places and passes are everything, damage is cheap.
     "aggressive": {"place": [4.0, 2.5, 1.0, 0.0], "damage": 0.6, "fault": 0.05, "walls": 0.02,
-                   "overtake": 0.35, "passed": 0.25, "draft": 0.6},
+                   "overtake": 0.35, "passed": 0.25},
     # Careful Keith: bring the car home in one piece, avoid contact at all costs.
     "cautious": {"place": [2.0, 1.3, 0.6, 0.0], "damage": 5.0, "fault": 1.0, "walls": 0.15},
 }
@@ -416,11 +419,12 @@ def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.nd
     r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
     score = (np.asarray(w["place"])[r["place"].astype(int) - 1] + w["laps"] * r["laps"]
              - w["damage"] * r["damage"] - w["fault"] * r["fault"] - w["walls"] * r["walls"]
-             + w.get("overtake", 0.0) * r["overtakes"] - w.get("passed", 0.0) * r["passed"]
-             + w.get("draft", 0.0) * r["draft"])
+             + w.get("overtake", 0.0) * r["overtakes"] - w.get("passed", 0.0) * r["passed"])
+    # Time in a tow is not rewarded (user decision): drivers learned to steer at
+    # any car ahead, wrecks included.  The tow still makes a car faster, so it
+    # pays off through places and overtakes.  Older runs' "draft" weights are ignored.
     if bonus:
-        score += bonus * (w["bonus_overtake"] * r["overtakes"] - w["bonus_passed"] * r["passed"]
-                          + w["bonus_draft"] * r["draft"])
+        score += bonus * (w["bonus_overtake"] * r["overtakes"] - w["bonus_passed"] * r["passed"])
     return score
 
 
@@ -685,6 +689,11 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
                     pick -= chance
             pool = {"recent": recent, "hall": hall}.get(kind)
             rivals.append(int(rng.choice(pool)) if pool else "scripted")
+        if rng.random() < WRECK_CHANCE:      # one rival crashes out and sits by the track
+            seconds = config.get("race_seconds", RACE_SECONDS).get(tracks[k % len(tracks)], DEFAULT_SECONDS)
+            seat = int(rng.integers(0, 3))
+            rivals[seat] = (f"wreck:{rng.uniform(2.0, max(3.0, seconds * 0.5)):.2f}:"
+                            f"{rng.choice([-1, 1])}:{rng.uniform(0.2, 0.8):.2f}")
         car = car_for(config, gen)
         partners_ = config.get("partners") or []
         rival_cars = []
@@ -834,7 +843,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             scenarios, resolved, bonus = [], None, 0.0
             if racing:
                 scenarios = make_scenarios(config, gen, start, [h["gen"] for h in history])
-                resolved = [dict(s, rivals=[r if r == "scripted" else champion_of(r) for r in s["rivals"]])
+                resolved = [dict(s, rivals=[r if r == "scripted" or str(r).startswith("wreck:") else champion_of(r)
+                                            for r in s["rivals"]])
                             for s in scenarios]
                 if config["race_bonuses"]:
                     bonus = max(0.0, 1.0 - (gen - start) / BONUS_FADE)

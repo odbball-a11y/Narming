@@ -507,6 +507,17 @@ podium): `record_result(..., finished=)`.
   stable list, house panel, card title); `track_school_text` is the card note.
   `App.stop_training` now stops the job's whole process group (worker processes
   were left running before; `taskkill /T` on Windows).
+- Drafting is no longer rewarded (user: cars were steering at crashed cars to get
+  a tow). `race_score` ignores the `draft` / `bonus_draft` weights (older runs'
+  too); the aggressive style lost its draft term; overtakes are still rewarded and
+  the tow still helps through the physics. Wrecks in racing school:
+  `evolve.WRECK_CHANCE` (25%) of training races give one rival seat to
+  `"wreck:<stop_after>:<side>:<place>"` = `sim/wreck.py` `WreckDriver` (races like
+  the scripted car, then at `stop_after` s pulls to one side and stops partly on
+  the tarmac; a stopped car gives no tow); hitting it costs damage and a caused
+  collision. Exams are unchanged. Existing brains keep the old habit until they
+  race-train again (stable training, upskills, breeding camps; not track school,
+  which is solo).
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`

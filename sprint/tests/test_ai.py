@@ -277,11 +277,11 @@ def test_scenarios_cover_all_grid_slots_and_follow_the_curriculum():
     first = evolve.make_scenarios(config, gen=40, start=40, history_gens=list(range(1, 40)))
     assert sorted(s["slot"] for s in first) == [0, 1, 2, 3]
     assert {s["track"] for s in first} == {"speedway", "technical"}
-    assert all(r == "scripted" for s in first for r in s["rivals"])   # scripted rivals first
+    assert all(r == "scripted" or r.startswith("wreck:") for s in first for r in s["rivals"])   # scripted rivals first
     later = evolve.make_scenarios(config, gen=80, start=40, history_gens=list(range(1, 80)))
     rivals = [r for s in later for r in s["rivals"]]
     assert any(r != "scripted" for r in rivals)                        # then self-play
-    assert all(r == "scripted" or 39 <= r < 80 for r in rivals)
+    assert all(r == "scripted" or str(r).startswith("wreck:") or 39 <= r < 80 for r in rivals)
     assert later == evolve.make_scenarios(config, gen=80, start=40, history_gens=list(range(1, 80)))
 
 

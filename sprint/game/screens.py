@@ -705,7 +705,11 @@ class LabScreen(Screen):
         others = [s for s in range(4) if s != sc["slot"]]
         entries = [(sc["slot"], roster.champion(run, self.gen, f"Gen {self.gen}"))]
         for slot, rival in zip(others, sc["rivals"]):
-            entries.append((slot, "scripted" if rival == "scripted" else roster.champion(run, rival, f"Gen {rival}")))
+            if str(rival).startswith("wreck:"):              # a rival that crashes out (training races)
+                from sim import wreck
+                entries.append((slot, wreck.WreckDriver(slot=slot, **wreck.parse(rival))))
+            else:
+                entries.append((slot, "scripted" if rival == "scripted" else roster.champion(run, rival, f"Gen {rival}")))
         self.start_race(sc["track"], entries, 2)
 
     def champions_race(self, with_human: bool) -> None:
