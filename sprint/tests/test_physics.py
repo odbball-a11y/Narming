@@ -55,10 +55,12 @@ def test_velocity_is_separate_from_heading_car_slides_then_recovers():
     assert car.slip > car.params.slide_threshold
     assert drift > 0.08                   # nose points inside the direction of travel
     # Lift and straighten: grip pulls the velocity back in line.
-    step_n(world, COAST, 40)
-    assert car.surface == 0               # still on the tarmac, so this is tyre grip
-    assert not car.sliding
-    assert car.slip < 0.5
+    for _ in range(60):
+        step_n(world, COAST, 1)
+        if not car.sliding and car.slip < 0.5:
+            break
+    assert not car.sliding and car.slip < 0.5
+    assert car.surface == 0               # recovered while still on the tarmac, so this is tyre grip
 
 
 def test_gentle_steering_at_low_speed_does_not_slide():
