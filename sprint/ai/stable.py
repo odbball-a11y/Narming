@@ -434,7 +434,7 @@ def partner_options(root: Path, exclude: str | None = None, include_house: bool 
     options = [{"key": "scripted", "name": "Scripted car", "kind": "scripted"},
                {"key": "self", "name": "Itself (its own best so far)", "kind": "self"}]
     for d in list_racers(root, include_dead=True):
-        if d.name == exclude:
+        if d.name == exclude or is_house_stud(d):      # house cars are race-only, never partners
             continue
         f = brain_file(d)
         if f is not None:
@@ -729,9 +729,17 @@ CRITERIA = {"fastest": "Fastest pace over the five tracks after its mini-camp",
 
 
 def brain(racer_dir) -> np.ndarray:
-    """The racer's own weights (its champion)."""
+    """The racer's own weights (its champion).  A house stud's are rewired to
+    the current inputs if its house file is older (they drive the same)."""
     with np.load(brain_file(racer_dir)) as data:
-        return data["pop"][0].astype(np.float64)
+        weights = data["pop"][0].astype(np.float64)
+    racer = load(racer_dir)
+    if racer.get("house_stud"):
+        card = _read(RIVALS_DIR / f"{racer['house_stud']}.json")
+        if card.get("arch"):
+            from .brain import upgrade
+            weights, _ = upgrade(weights, card["arch"])
+    return weights
 
 
 CROSSOVER = "mixed"           # how a foal's brain is made from its parents' (see crossover)
@@ -984,7 +992,7 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
     # every track alone, several flying laps each, in the foal's car.
     _progress(foal_dir, stage="trial", done=0, of=litter)
     traits = racer.get("traits") or cartraits.default()
-    trial_rows = np.concatenate([fit_genomes(np.array([sire_w, dam_w]), arch), foals])
+    trial_rows = np.concatenate([np.array([fit_genomes(sire_w, arch), fit_genomes(dam_w, arch)]), foals])
     timed = time_trial(trial_rows, arch, list(tracks), car=traits, workers=workers)
     parent_trial, foal_trial = timed[:2], timed[2:]
     score = np.array([t["score"] for t in foal_trial])

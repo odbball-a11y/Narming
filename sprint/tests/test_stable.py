@@ -204,7 +204,8 @@ def test_create_a_racer_through_the_screens_then_race_it(app):
     assert isinstance(app.current, CreateScreen) and app.current.racer_dir == card.racer_dir
     assert any(p["kind"] == "self" for p in app.current.partners)
     press(app, pygame.K_ESCAPE, pygame.K_ESCAPE)
-    assert isinstance(app.current, StableScreen) and len(app.current.racers) == 1
+    assert isinstance(app.current, StableScreen)
+    assert len([d for d in app.current.racers if not stable.is_house_stud(d)]) == 1
 
 
 def test_workshop_screen_can_train_against_and_publish_house_rivals(app):
@@ -333,7 +334,7 @@ def test_breed_through_the_screens(app, monkeypatch):
     press(app, pygame.K_RETURN)
     screen = app.current
     assert isinstance(screen, BreedScreen)
-    assert {stable.load(p)["name"] for p in screen.parents} == {"Bold Betty", "Steady Sam"}
+    assert {stable.load(p)["name"] for p in screen.parents} == {"Bold Betty", "Steady Sam", "Zappy Zoe"}   # + house stud
     press(app, pygame.K_RIGHT)                                   # sire cycles but never equals the dam
     assert screen.sire != screen.dam
     screen.row = screen.ROWS.index("start")

@@ -125,7 +125,7 @@ class StableScreen(Screen):
 
     def reload(self) -> None:
         stable.ensure_house_studs(self.app.stable_root)
-        self.racers = stable.list_racers(self.app.stable_root)
+        self.racers = sorted(stable.list_racers(self.app.stable_root), key=stable.is_house_stud)   # house studs last
         self.rivals = stable.house_rivals()
 
     def rows(self) -> list:

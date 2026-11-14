@@ -156,7 +156,7 @@ def test_did_not_finish_scores_nothing_and_fastest_lap_needs_a_finish(dirs):
 
         def results(self):
             rows = race.results()
-            rows[-1] = dict(rows[-1], finished=False, time=None, best_lap=min(r["best_lap"] for r in rows) - 1)
+            rows[-1] = dict(rows[-1], finished=False, time=None, best_lap=min(r["best_lap"] for r in rows if r["best_lap"]) - 1)
             return rows
 
     record = championship.finish_race(root, ch, Fake())
