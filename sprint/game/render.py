@@ -28,6 +28,7 @@ HAZE_STEP = 1.1
 HAZE_AMPLITUDE = 0.22
 HAZE_RIPPLE_ALPHA = 46
 FLASH_LIFE = 0.12     # seconds the contact flash lasts
+SMOKE_ALPHA = 95      # opacity of a fresh smoke puff (0-255; was 150), fading as it grows
 DEBRIS_LIFE = 4.0     # seconds bits of bodywork lie on the track after a big hit
 
 # 1980s arcade palette
@@ -393,7 +394,7 @@ class RaceRenderer:
             radius = max(2, int(cam.scale * (0.5 + 0.28 * k)))
             puff = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
             shade = 70 + 18 * k
-            pygame.draw.circle(puff, (shade, shade, shade + 6, 150 - 22 * k), (radius, radius), radius)
+            pygame.draw.circle(puff, (shade, shade, shade + 6, SMOKE_ALPHA - 16 * k), (radius, radius), radius)
             self.puffs.append(puff)
         self.smoke: list[list] = []          # [x, y, vx, vy, age]
         self.sparks: list[list] = []         # [x, y, vx, vy, age, life]
