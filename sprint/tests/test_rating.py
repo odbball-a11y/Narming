@@ -83,7 +83,7 @@ def test_every_championship_race_rates_everyone_scripted_cars_included(dirs):
     record = championship.finish_race(root, ch, race_)
     assert all(len(r["rating"]) == 2 and r["sigma"] > 0 for r in record["results"])
     table = {r["name"]: r for r in rating.table(root)}
-    assert set(table) == {"Zoe", "Careful Keith", "Dangerous Dave", "Scripted 1", "Scripted 2", "Scripted 3"}  # scripted included
+    assert set(table) == {e["name"] for e in ch["entrants"]} and "Scripted 1" in table      # scripted included
     assert all(r["races"] == 1 for r in table.values())
     winner = next(r for r in record["results"] if r["place"] == 1)
     assert winner["rating"][1] > winner["rating"][0]
@@ -96,7 +96,7 @@ def test_scripted_cars_are_the_same_car_every_race(dirs):
     ch = championship.start(root, [instant_racer(root, "Zoe")])
     first = championship.build_race(root, ch)
     scripted = next(d for d in first.drivers if d.label == "Scripted 1")
-    assert scripted.livery == ch["entrants"][3]["livery"]
+    assert scripted.livery == next(e for e in ch["entrants"] if e["name"] == "Scripted 1")["livery"]
     skill, params = scripted.skill, scripted.car_params
     ch["races"].append({"track": "oval", "order": [3, 2, 1, 0], "results": []})     # the grid changes
     second = championship.build_race(root, ch)

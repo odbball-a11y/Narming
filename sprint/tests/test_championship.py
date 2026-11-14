@@ -106,7 +106,10 @@ def test_a_season_has_five_races_the_right_points_and_a_reverse_grid(dirs):
     zoe = instant_racer(root, "Zoe")
     ch = championship.start(root, [zoe])
     assert [e["name"] for e in ch["entrants"]][:3] == ["Zoe", "Careful Keith", "Dangerous Dave"]
-    assert ch["entrants"][3]["kind"] == "scripted" and ch["entrants"][3]["livery"]["colour"] not in ("red", "green")
+    houses = len(stable.house_rivals())                                # every house rival, then scripted cars
+    assert [e["kind"] for e in ch["entrants"]] == ["racer"] + ["house"] * min(houses, 5) + ["scripted"] * (5 - min(houses, 5))
+    scripted = [e for e in ch["entrants"] if e["kind"] == "scripted"]
+    assert all(e["livery"]["colour"] not in ("red", "green") for e in scripted)
     assert ch["tracks"] == ["oval", "speedway", "esses", "technical", "grandprix"]
     with pytest.raises(ValueError):
         championship.start(root, [zoe])                                # one at a time
@@ -222,7 +225,8 @@ def test_play_a_season_through_the_screens(app):
     press(app, pygame.K_DOWN, pygame.K_RETURN)                         # and Ben
     press(app, pygame.K_DOWN, pygame.K_RETURN)                         # and Cal
     assert len(setup.chosen) == 3
-    assert [f["kind"] for f in setup.field()] == ["yours"] * 3 + ["house rival"] * 2 + ["scripted"]
+    houses = min(len(stable.house_rivals()), 3)
+    assert [f["kind"] for f in setup.field()] == ["yours"] * 3 + ["house rival"] * houses + ["scripted"] * (3 - houses)
     setup.row = setup.rows().index("start")
     press(app, pygame.K_RETURN)
     hub = app.current
