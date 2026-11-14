@@ -624,7 +624,9 @@ scales top speed and acceleration in `Car.step` and nothing else.
 tick by `World._update_draft` (a wedge behind any fast car) and also scale top
 speed and acceleration. `World(ghost=True)` turns off car-to-car collisions
 and drafting; `car.retired = True` stops a car being simulated. Both exist for
-AI training. The renderer draws smoke, the HUD damage bar, a heat-haze wake
+AI training. The renderer draws tow ripples (`draw_tows`: curved waves rolling
+back from the car giving a tow to the car taking it, `TOW_*`; user choice, replacing
+the haze below, which is now off: `HAZE_ON`), smoke, the HUD damage bar, a heat-haze wake
 behind every car above `HAZE_FROM` (55%) of its top speed (the track behind it
 is redrawn in shifted patches plus faint ripples drifting back; it stretches to
 reach a car taking a tow; replaced the tow streaks, user choice) and, on every

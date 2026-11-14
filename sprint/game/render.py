@@ -22,7 +22,13 @@ HUD_H = 11.0          # world units reserved at the top of the screen
 # Heat haze behind fast cars (drawing only): it starts at HAZE_FROM of the
 # car's top speed and at full speed stretches HAZE_LENGTH units behind it,
 # the track wobbling by up to HAZE_AMPLITUDE units.
+HAZE_ON = False       # heat haze behind every fast car (replaced by the tow ripples; user choice)
 HAZE_FROM = 0.55
+# Tow ripples: curved waves rolling back from a car giving a tow to the car
+# taking it, TOW_WAVES at a time, each taking TOW_WAVE_SECONDS to arrive.
+TOW_WAVES = 4
+TOW_WAVE_SECONDS = 0.45
+TOW_ALPHA = 170
 HAZE_LENGTH = 9.0
 HAZE_STEP = 1.1
 HAZE_AMPLITUDE = 0.22
@@ -552,9 +558,52 @@ class RaceRenderer:
                                       max(1, int(cam.scale * 0.22)))
                     screen.blit(self.haze_layer, (0, 0))
 
-    def draw_effects(self, screen, world, poses) -> None:
-        """Sparks and smoke, drawn over the cars."""
+    def draw_tows(self, screen, world, poses) -> None:
+        """A tow: ripples rolling back from the lead car's tail to the car
+        behind, curved like a wave front, stronger the deeper the tow."""
         cam = self.camera
+        layer = self.haze_layer
+        drawn = False
+        for i, car in enumerate(world.cars):
+            j = car.draft_source
+            if car.draft <= 0.08 or j < 0 or car.finished:
+                continue
+            if not drawn:
+                layer.fill((0, 0, 0, 0))
+                drawn = True
+            lx, ly, lh = poses[j]
+            fx, fy, fh = poses[i]
+            ax, ay = lx - math.cos(lh) * 2.3, ly - math.sin(lh) * 2.3      # the leader's tail
+            bx, by = fx + math.cos(fh) * 2.1, fy + math.sin(fh) * 2.1      # the follower's nose
+            dx, dy = bx - ax, by - ay
+            dist = math.hypot(dx, dy)
+            if dist < 0.6:
+                continue
+            ux, uy = dx / dist, dy / dist              # from the leader back to the follower
+            nx, ny = -uy, ux
+            phase = (world.tick * tuning.DT / TOW_WAVE_SECONDS) % 1.0
+            width = max(1, int(cam.scale * (0.16 + 0.22 * car.draft)))
+            for k in range(TOW_WAVES):
+                t = (phase + k / TOW_WAVES) % 1.0     # 0 at the leader, 1 arriving at the follower
+                fade = min(1.0, t * 4.0) * min(1.0, (1.0 - t) * 3.0)
+                alpha = int(TOW_ALPHA * fade * (0.45 + 0.55 * car.draft))
+                if alpha < 6:
+                    continue
+                cx, cy = ax + dx * t, ay + dy * t
+                half = tuning.CAR_WIDTH * (0.35 + 0.45 * t)          # spreading as it travels
+                bulge = 0.5 + 0.6 * t                                 # the front leads in the middle
+                pts = []
+                for u in (-1.0, -0.6, -0.25, 0.0, 0.25, 0.6, 1.0):
+                    along = bulge * (1.0 - u * u)
+                    pts.append(cam.to_screen(cx + ux * along + nx * u * half, cy + uy * along + ny * u * half))
+                pygame.draw.lines(layer, (170, 235, 255, alpha), False, pts, width)
+        if drawn:
+            screen.blit(layer, (0, 0))
+
+    def draw_effects(self, screen, world, poses) -> None:
+        """Tow ripples, sparks and smoke, drawn over the cars."""
+        cam = self.camera
+        self.draw_tows(screen, world, poses)
         for x, y, _, _, age in self.smoke:
             puff = self.puffs[min(int(age / 0.9 * len(self.puffs)), len(self.puffs) - 1)]
             screen.blit(puff, puff.get_rect(center=cam.to_screen(x, y)))
@@ -622,7 +671,8 @@ class RaceRenderer:
             x = car.prev_x + (car.x - car.prev_x) * alpha
             y = car.prev_y + (car.y - car.prev_y) * alpha
             poses.append((x, y, lerp_angle(car.prev_heading, car.heading, alpha)))
-        self.draw_haze(screen, world, poses)
+        if HAZE_ON:
+            self.draw_haze(screen, world, poses)
         for x, y, _, _, age, size in self.debris:
             fade = max(0.0, 1.0 - max(0.0, age - DEBRIS_LIFE + 1.0))
             colour = (int(60 + 40 * fade), int(60 + 40 * fade), int(66 + 40 * fade))
