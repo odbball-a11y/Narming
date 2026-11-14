@@ -118,6 +118,11 @@ class TrackSchoolScreen(Screen):
         self.alpha = 1.0
         self.still = 0.0
 
+    def on_resize(self) -> None:
+        """Full screen or a new window size: redraw the track at the new size."""
+        if self.mode == "watch":
+            self.renderer = self.app.renderer_for(self.track)
+
     def restart_car(self) -> None:
         self.stints.pop()
         self.new_stint()
@@ -227,10 +232,10 @@ class TrackSchoolScreen(Screen):
         pygame.draw.line(screen, C_HUD_ACCENT, strip.bottomleft, strip.bottomright, max(1, int(ui.unit * 0.3)))
         car = self.world.cars[0]
         trained = evolve.list_generations(self.run_dir) if self.run_dir.exists() else []
-        ui.text(screen, "small", f"{self.info['name'].upper()} AT {stable.TRACK_NAMES[self.info['track']].upper()}",
-                C_HUD_DIM, 3, 0.8)
+        ui.text(screen, "small", self.info["name"].upper()[:18], C_HUD_DIM, 3, 0.8)
         ui.text(screen, "big", f"GEN {self.gen}" if self.gen else "START", C_HUD_ACCENT, 3, 3.4)
-        ui.text(screen, "small", f"training gen {(trained[-1] if trained else 0) + 1}", C_HUD_DIM, 3, 8.3)
+        ui.text(screen, "small", f"{stable.TRACK_NAMES[self.info['track']]}, training gen "
+                f"{(trained[-1] if trained else 0) + 1}", C_HUD_DIM, 3, 8.3)
         lap_no = min(car.laps + 1, STINT_LAPS)
         ui.text(screen, "small", f"LAP {lap_no} OF {STINT_LAPS}" + ("  (rolling)" if lap_no == 1 else ""),
                 C_HUD_DIM, 30, 0.8)
