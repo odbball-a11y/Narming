@@ -454,6 +454,11 @@ podium): `record_result(..., finished=)`.
   slip: Keith 16.30 -> 15.89 s, 5.5 -> 4.3%; Dave 15.71 -> 15.18, 9.2 -> 5.7%;
   Zappy Zoe 15.39 -> 15.65, 3.0 -> 3.7%; Bold Zoe 15.18 -> 15.42, 8.5 -> 7.9%
   (rear past 90% 1.0 -> 0.2%). Graduate7 trained its first 25 gens at 1.2.
+- Grip 34 -> 36 (+6%; scripted slots 32.5 -> 34.5 and 36 -> 38; records physics
+  5). With front grip 1.1, house rivals unretrained, best lap old -> new grip:
+  Esses Keith 15.84 -> 15.66, Dave 15.14 -> 14.87, Zappy 15.37 -> 15.11, Bold
+  15.56 (15% damage) -> 14.38 (none); Technical 0.3-0.7 s quicker each; rear
+  slide share about the same.
 - Breeding by time trial (user: "maybe the trial is not a race but more time
   trials ... we pick the best one"). `breed` makes `LITTER` (50) foals with
   `crossover(method)`; `CROSSOVER` = "mixed" alternates "blend" (weighted average

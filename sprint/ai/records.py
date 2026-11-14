@@ -14,7 +14,7 @@ def path(root) -> Path:
     return Path(root) / "records.json"
 
 
-PHYSICS = 4     # records set under other physics (1 = classic, 2 = scrub only, 3 = front grip 1.2) are kept aside
+PHYSICS = 5     # records set under other physics (1 = classic, 2 = scrub only, 3 = front grip 1.2, 4 = grip 34) are kept aside
 
 
 def load(root) -> dict:

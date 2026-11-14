@@ -65,7 +65,7 @@ class CarParams:
     # (i.e. the maximum cornering acceleration) on tarmac.
     # Higher: car is on rails, slides are rare and short.
     # Lower: car drifts wide everywhere, feels like ice.
-    grip: float = 34.0
+    grip: float = 36.0     # was 34 (user: "a bit more grip")
 
     # Fraction of grip lost at full throttle (0 = none).
     # Higher: power-slides on corner exit, lifting off tucks the car back in.
@@ -170,9 +170,9 @@ class CarParams:
 _BASE = CarParams()
 CAR_PARAMS = [
     _BASE,                                             # slot 1: the baseline
-    replace(_BASE, top_speed=33.0, grip=32.5),         # slot 2: faster, looser
+    replace(_BASE, top_speed=33.0, grip=34.5),         # slot 2: faster, looser
     replace(_BASE, accel=22.0, top_speed=31.3),        # slot 3: quick off the line
-    replace(_BASE, grip=36.0, top_speed=31.5),         # slot 4: grippy, slower
+    replace(_BASE, grip=38.0, top_speed=31.5),         # slot 4: grippy, slower
 ]
 
 # Visual size of a car (drawing only).
