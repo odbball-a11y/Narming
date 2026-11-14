@@ -70,7 +70,7 @@ def draw_list(ui, screen, items, selected: int, x: float, y: float, step: float 
 # ------------------------------------------------------------------ menus
 
 class MainMenu(Screen):
-    ITEMS = ["RACE", "STABLE", "AI LAB", "TELEMETRY", "CONTROLS", "REPLAYS", "QUIT"]
+    ITEMS = ["RACE", "STABLE", "AI LAB", "TRACK SCHOOL", "TELEMETRY", "CONTROLS", "REPLAYS", "QUIT"]
 
     def __init__(self, app):
         super().__init__(app)
@@ -95,6 +95,9 @@ class MainMenu(Screen):
                 self.app.show(StableScreen(self.app))
             elif choice == "AI LAB":
                 self.app.show(LabScreen(self.app))
+            elif choice == "TRACK SCHOOL":
+                from .trackschool_screen import TrackSchoolScreen
+                self.app.show(TrackSchoolScreen(self.app))
             elif choice == "TELEMETRY":
                 from .telemetry_screen import TelemetryScreen
                 self.app.show(TelemetryScreen(self.app, self.app.setup.get("track", "speedway")))

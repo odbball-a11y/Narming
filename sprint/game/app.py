@@ -11,6 +11,30 @@ import pygame
 
 from sim.track import Track
 
+
+def _own_group() -> dict:
+    """Start a job in its own process group, so stopping it also stops the
+    worker processes it starts (they would otherwise be left running)."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _stop_group(proc) -> None:
+    """Stop a job and every process it started."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+    else:
+        import signal
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
 from . import input as game_input
 from .audio import Audio
 from .render import Camera, RaceRenderer, UI, render_track
@@ -77,15 +101,20 @@ class App:
         """Breed a foal's litter and pick the best, in a separate process."""
         self._start_job("breed", foal_dir)
 
-    def _start_job(self, command: str, racer_dir) -> None:
+    def start_trackschool(self, school_dir) -> None:
+        """Train a track-school copy in a separate process."""
+        self._start_job(None, school_dir, module="ai.trackschool")
+
+    def _start_job(self, command: str | None, racer_dir, module: str = "ai.stable") -> None:
         from ai import evolve
         if self.training_dir():
             raise RuntimeError("already training")
         workers = max(1, min(3, (os.cpu_count() or 2) - 1))
         log = open(Path(racer_dir) / "train.log", "a", encoding="utf-8")
-        proc = subprocess.Popen([sys.executable, "-m", "ai.stable", command, str(racer_dir),
+        proc = subprocess.Popen([sys.executable, "-m", module] + ([command] if command else []) + [str(racer_dir),
                                  "--workers", str(workers)],
-                                cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT)
+                                cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT,
+                                **_own_group())
         self.trainer = {"proc": proc, "dir": str(racer_dir), "log": log}
 
     def stop_training(self) -> None:
@@ -94,11 +123,7 @@ class App:
             return
         proc = self.trainer["proc"]
         if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+            _stop_group(proc)
         self.trainer["log"].close()
         self.trainer = None
 

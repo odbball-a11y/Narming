@@ -473,6 +473,23 @@ podium): `record_result(..., finished=)`.
   house-rival pairs, time trials): neuron splice median foal 12-29% slower than
   its parents, 0-1 of 40 beat both; blend median 1-6% quicker, 11-40 of 40 beat
   both; dominant gave the single fastest foal in two of three pairs.
+- Track school (main menu TRACK SCHOOL; user: "watch a car training for speed on
+  a track ... see the lap times improve"). `ai/trackschool.py`: `options(root)`
+  (graduate, house rivals, every trained stable racer), `start(option, track)`
+  makes a practice copy in `trackschool/<driver>-<track>/` (git-ignored; the real
+  racer and its budget are never touched), `train` = `evolve.train` on that one
+  track, solo only (`phase2_from` never), notes on, population 60, ~2-3 s per
+  generation; run by the game as `python -m ai.trackschool DIR` (`App.start_trackschool`).
+  It stops itself (`Stopped`) when the screen has not touched `alive` for
+  `HEARTBEAT` (60 s), so a crashed game does not leave it training for ever.
+  `game/trackschool_screen.py`: pick driver and track; then stints of
+  `STINT_LAPS` (3) laps, the first from a rolling start, each by the best of
+  the newest finished generation; live delta to the session-best lap (by
+  distance), last lap, session best, best ever for this car type
+  (`telemetry.best`), a stint scoreboard and the per-generation test-lap chart.
+  Trial (Zappy Zoe, Esses): stints went from 15.3 s to ~13.5 s within ~100 gens.
+  `App.stop_training` now stops the job's whole process group (worker processes
+  were left running before; `taskkill /T` on Windows).
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`
