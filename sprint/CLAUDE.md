@@ -590,7 +590,13 @@ scales top speed and acceleration in `Car.step` and nothing else.
 tick by `World._update_draft` (a wedge behind any fast car) and also scale top
 speed and acceleration. `World(ghost=True)` turns off car-to-car collisions
 and drafting; `car.retired = True` stops a car being simulated. Both exist for
-AI training. The renderer draws smoke, tow streaks and the HUD damage bar.
+AI training. The renderer draws smoke, the HUD damage bar, a heat-haze wake
+behind every car above `HAZE_FROM` (55%) of its top speed (the track behind it
+is redrawn in shifted patches plus faint ripples drifting back; it stretches to
+reach a car taking a tow; replaced the tow streaks, user choice) and, on every
+`("car", a, b, impact)` event (`on_tick(world, events)`), sparks at the contact
+point scaled by the impact, a short flash, and bits of debris after big hits
+(`DEBRIS_LIFE` 4 s). Constants at the top of `game/render.py`.
 
 ## AI drivers (`ai/`)
 

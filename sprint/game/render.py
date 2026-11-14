@@ -19,6 +19,17 @@ WORLD_W = 160.0
 WORLD_H = 90.0
 HUD_H = 11.0          # world units reserved at the top of the screen
 
+# Heat haze behind fast cars (drawing only): it starts at HAZE_FROM of the
+# car's top speed and at full speed stretches HAZE_LENGTH units behind it,
+# the track wobbling by up to HAZE_AMPLITUDE units.
+HAZE_FROM = 0.55
+HAZE_LENGTH = 9.0
+HAZE_STEP = 1.1
+HAZE_AMPLITUDE = 0.22
+HAZE_RIPPLE_ALPHA = 46
+FLASH_LIFE = 0.12     # seconds the contact flash lasts
+DEBRIS_LIFE = 4.0     # seconds bits of bodywork lie on the track after a big hit
+
 # 1980s arcade palette
 C_BACKDROP = (26, 18, 54)
 C_BACKDROP_GRID = (48, 30, 92)
@@ -369,6 +380,7 @@ class RaceRenderer:
         cam = self.camera
         self.track_surface = render_track(self.track, cam)
         self.skid_layer = pygame.Surface(cam.size, pygame.SRCALPHA)
+        self.haze_layer = pygame.Surface(cam.size, pygame.SRCALPHA)
         self.sprite_cache: dict = {}
         self.sprite_zoom = cam.scale * tuning.CAR_LENGTH / (self.sprite_for(None).get_width() - 4)
         size = int(cam.scale * 5)
@@ -384,6 +396,9 @@ class RaceRenderer:
             pygame.draw.circle(puff, (shade, shade, shade + 6, 150 - 22 * k), (radius, radius), radius)
             self.puffs.append(puff)
         self.smoke: list[list] = []          # [x, y, vx, vy, age]
+        self.sparks: list[list] = []         # [x, y, vx, vy, age, life]
+        self.debris: list[list] = []         # [x, y, vx, vy, age, size]
+        self.flashes: list[list] = []        # [x, y, age, size]
         self.fx_random = random.Random(7)    # visual only, never touches the sim
         # Ghost-pack sprites: translucent runner, bright leader, faded retiree.
         self.ghost = make_car_sprite((120, 225, 255), cam.scale)
@@ -404,11 +419,18 @@ class RaceRenderer:
     def clear_skids(self) -> None:
         self.skid_layer.fill((0, 0, 0, 0))
         self.smoke = []
+        self.sparks = []
+        self.debris = []
+        self.flashes = []
 
-    def on_tick(self, world) -> None:
-        """Visual effects that build up over time; call once per sim tick."""
+    def on_tick(self, world, events=()) -> None:
+        """Visual effects that build up over time; call once per sim tick with
+        the tick's events (car-to-car contact throws sparks)."""
         self.add_skid_marks(world)
         rnd = self.fx_random
+        for ev in events:
+            if ev[0] == "car":
+                self.add_sparks(world, ev[1], ev[2], ev[3])
         for car in world.cars:
             # Damaged cars smoke: the worse the damage, the thicker.
             if car.damage > 0.12 and rnd.random() < car.damage * 0.3:
@@ -423,41 +445,132 @@ class RaceRenderer:
             p[4] += dt
         if self.smoke and self.smoke[0][4] > 0.9:
             self.smoke = [p for p in self.smoke if p[4] <= 0.9]
+        for p in self.sparks:
+            p[0] += p[2] * dt
+            p[1] += p[3] * dt
+            p[2] *= 0.97
+            p[3] *= 0.97
+            p[4] += dt
+        self.sparks = [p for p in self.sparks if p[4] < p[5]]
+        for f in self.flashes:
+            f[2] += dt
+        self.flashes = [f for f in self.flashes if f[2] < FLASH_LIFE]
+        for p in self.debris:                      # bits of bodywork slide to a stop, then fade
+            p[0] += p[2] * dt
+            p[1] += p[3] * dt
+            p[2] *= 0.94
+            p[3] *= 0.94
+            p[4] += dt
+        self.debris = [p for p in self.debris if p[4] < DEBRIS_LIFE]
+
+    def add_sparks(self, world, a: int, b: int, impact: float) -> None:
+        """Sparks where two cars touched: a rub throws a couple, a big hit a
+        burst, plus a few bits of debris that lie on the track for a while."""
+        ca, cb = world.cars[a], world.cars[b]
+        dx, dy = cb.x - ca.x, cb.y - ca.y
+        dist = math.hypot(dx, dy) or 1.0
+        nx, ny = dx / dist, dy / dist
+        share = ca.params.radius / (ca.params.radius + cb.params.radius)
+        px, py = ca.x + dx * share, ca.y + dy * share            # the contact point
+        vx, vy = (ca.vx + cb.vx) / 2, (ca.vy + cb.vy) / 2
+        hit = max(0.0, impact - tuning.DAMAGE_MIN_IMPACT)        # what does damage
+        rnd = self.fx_random
+        self.flashes.append([px, py, 0.0, 0.5 + min(1.5, hit * 0.12)])
+        count = min(45, 3 + int(hit * 2.5))
+        for _ in range(count):
+            side = rnd.choice((-1.0, 1.0))                      # sprayed sideways off the contact
+            spray = rnd.uniform(4.0, 9.0 + hit * 1.2)
+            along = rnd.uniform(-0.6, 0.6)
+            tx, ty = -ny, nx
+            self.sparks.append([px, py,
+                                vx * 0.75 + (tx * along + nx * side * 0.6) * spray + rnd.uniform(-1, 1),
+                                vy * 0.75 + (ty * along + ny * side * 0.6) * spray + rnd.uniform(-1, 1),
+                                0.0, rnd.uniform(0.12, 0.25 + min(0.3, hit * 0.03))])
+        if hit > 6.0:
+            for _ in range(min(6, int(hit / 4))):
+                self.debris.append([px, py, vx * 0.5 + rnd.uniform(-5, 5), vy * 0.5 + rnd.uniform(-5, 5),
+                                    0.0, rnd.uniform(0.25, 0.5)])
+
+    def draw_haze(self, screen, world, poses) -> None:
+        """Heat haze behind every fast car: the track in its wake shimmers, more
+        and further the faster it goes.  A car taking a tow sits in it."""
+        cam = self.camera
+        t = world.tick * tuning.DT
+        followers = {}
+        for i, car in enumerate(world.cars):
+            if car.draft > 0.08 and car.draft_source >= 0 and not car.finished:
+                followers.setdefault(car.draft_source, []).append(i)
+        bounds = screen.get_rect()
+        for i, car in enumerate(world.cars):
+            if car.retired or car.finished:
+                continue
+            power = (car.speed / max(1.0, car.params.top_speed) - HAZE_FROM) / (1.0 - HAZE_FROM)
+            if power <= 0.0:
+                continue
+            power = min(1.0, power)
+            x, y, h = poses[i]
+            c, sn = math.cos(h), math.sin(h)
+            length = HAZE_LENGTH * power
+            for j in followers.get(i, ()):          # reach back to the car in the tow
+                fx, fy, _ = poses[j]
+                length = max(length, min(tuning.DRAFT_LENGTH, math.hypot(fx - x, fy - y) + 1.0))
+            steps = max(2, int(length / HAZE_STEP))
+            for k in range(steps):
+                d = 2.0 + k * HAZE_STEP
+                fade = 1.0 - k / steps
+                width = tuning.CAR_WIDTH * (0.9 + 0.5 * d / max(length, 1.0))
+                cx, cy = x - c * d, y - sn * d
+                sx, sy = cam.to_screen(cx, cy)
+                half = max(2, int(width * cam.scale / 2))
+                rect = pygame.Rect(int(sx) - half, int(sy) - half, half * 2, half * 2).clip(bounds)
+                if rect.width < 3 or rect.height < 3:
+                    continue
+                wobble = math.sin(t * 13.0 - d * 0.9 + i) * HAZE_AMPLITUDE * cam.scale * power * fade
+                patch = screen.subsurface(rect).copy()
+                patch.set_alpha(int(150 * fade * power + 40))
+                screen.blit(patch, (rect.x + int(round(-sn * wobble)), rect.y + int(round(c * wobble))))
+            # Shimmer: faint bright ripples drifting back through the wake.
+            spacing = 2.2
+            drift = (t * 14.0) % spacing
+            n = int(length / spacing) + 1
+            for k in range(n):
+                d = 2.4 + k * spacing + drift
+                if d > length + 2.0:
+                    break
+                fade = (1.0 - (d - 2.0) / (length + 2.0)) * power
+                half = tuning.CAR_WIDTH * (0.45 + 0.3 * d / max(length, 1.0))
+                bend = 0.35 + 0.25 * math.sin(t * 9.0 + d + i)
+                pts = []
+                for u in (-1.0, -0.5, 0.0, 0.5, 1.0):
+                    back = d + bend * (1.0 - u * u)          # the middle trails: a soft arc
+                    pts.append(cam.to_screen(x - c * back - sn * u * half, y - sn * back + c * u * half))
+                alpha = int(HAZE_RIPPLE_ALPHA * fade)
+                if alpha > 4:
+                    self.haze_layer.fill((0, 0, 0, 0))
+                    pygame.draw.lines(self.haze_layer, (225, 238, 255, alpha), False, pts,
+                                      max(1, int(cam.scale * 0.22)))
+                    screen.blit(self.haze_layer, (0, 0))
 
     def draw_effects(self, screen, world, poses) -> None:
-        """Slipstream streaks and smoke, drawn over the cars."""
+        """Sparks and smoke, drawn over the cars."""
         cam = self.camera
-        # A tow: dashes streaming from the lead car's tail to the car behind.
-        for i, car in enumerate(world.cars):
-            j = car.draft_source
-            if car.draft <= 0.08 or j < 0 or car.finished:
-                continue
-            lx, ly, lh = poses[j]
-            fx, fy, fh = poses[i]
-            ax, ay = lx - math.cos(lh) * 2.2, ly - math.sin(lh) * 2.2
-            bx, by = fx + math.cos(fh) * 2.0, fy + math.sin(fh) * 2.0
-            dx, dy = bx - ax, by - ay
-            dist = math.hypot(dx, dy)
-            if dist < 0.5:
-                continue
-            nx, ny = -dy / dist, dx / dist
-            phase = (world.tick * 0.035) % 1.0
-            width = max(1, int(cam.scale * (0.18 + 0.25 * car.draft)))
-            for lane in (-0.75, 0.0, 0.75):
-                t = phase * 0.34 - 0.34
-                while t < 1.0:
-                    t0, t1 = max(t, 0.0), min(t + 0.17, 1.0)
-                    if t1 > t0:
-                        spread0 = lane * (0.6 + 0.8 * t0)
-                        spread1 = lane * (0.6 + 0.8 * t1)
-                        p0 = cam.to_screen(ax + dx * t0 + nx * spread0, ay + dy * t0 + ny * spread0)
-                        p1 = cam.to_screen(ax + dx * t1 + nx * spread1, ay + dy * t1 + ny * spread1)
-                        pygame.draw.line(screen, (190, 245, 255) if lane == 0.0 else (110, 215, 255),
-                                         p0, p1, width)
-                    t += 0.34
         for x, y, _, _, age in self.smoke:
             puff = self.puffs[min(int(age / 0.9 * len(self.puffs)), len(self.puffs) - 1)]
             screen.blit(puff, puff.get_rect(center=cam.to_screen(x, y)))
+        # Sparks: short bright streaks along their flight, white-hot to orange.
+        width = max(1, int(cam.scale * 0.26))
+        for x, y, vx, vy, age, life in self.sparks:
+            k = age / life
+            colour = (255, int(250 - 120 * k), int(200 - 190 * k))
+            tail = 0.05
+            pygame.draw.line(screen, colour, cam.to_screen(x - vx * tail, y - vy * tail), cam.to_screen(x, y), width)
+        for x, y, age, size in self.flashes:          # the moment of contact: a quick white-hot flash
+            k = age / FLASH_LIFE
+            r = max(2, int(cam.scale * size * (0.45 + 0.4 * k)))
+            glow = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (255, 200, 90, int(170 * (1 - k))), (r, r), r)
+            pygame.draw.circle(glow, (255, 255, 255, int(255 * (1 - k))), (r, r), max(1, r // 2))
+            screen.blit(glow, glow.get_rect(center=cam.to_screen(x, y)))
 
     def draw_pack(self, screen, world, alpha: float, leader: int) -> None:
         """A whole generation at once: translucent ghosts, the current leader
@@ -508,6 +621,11 @@ class RaceRenderer:
             x = car.prev_x + (car.x - car.prev_x) * alpha
             y = car.prev_y + (car.y - car.prev_y) * alpha
             poses.append((x, y, lerp_angle(car.prev_heading, car.heading, alpha)))
+        self.draw_haze(screen, world, poses)
+        for x, y, _, _, age, size in self.debris:
+            fade = max(0.0, 1.0 - max(0.0, age - DEBRIS_LIFE + 1.0))
+            colour = (int(60 + 40 * fade), int(60 + 40 * fade), int(66 + 40 * fade))
+            pygame.draw.circle(screen, colour, cam.to_screen(x, y), max(1, int(cam.scale * size * 0.5)))
         for x, y, heading in poses:
             sx, sy = cam.to_screen(x, y)
             shadow = pygame.transform.rotate(self.shadow, -math.degrees(heading))

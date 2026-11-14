@@ -513,7 +513,7 @@ class RaceScreen(Screen):
             if news:
                 self.message = " ".join(news)
         if self.race.phase != race_module.COUNTDOWN:
-            self.renderer.on_tick(self.race.world)
+            self.renderer.on_tick(self.race.world, events)
         self.app.audio.handle_events(events)
 
     def update(self, seconds: float) -> None:
