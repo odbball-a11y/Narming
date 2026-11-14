@@ -76,7 +76,7 @@ def test_create_train_upskill_and_partners(dirs):
     assert second.name == "speedy-sue-2"
     quick_train(second)
     scenarios = evolve.load_history(second / "v1")[0]["scenarios"]
-    assert all(r == "p:0" for s in scenarios for r in s["rivals"])
+    assert all(r == "p:0" or r.startswith("wreck:") for s in scenarios for r in s["rivals"])   # (or a wreck)
     # Upskilling carries on from the current brain with a new personality.
     stable.upskill(first, 0.2, 0.9, [{"name": "Itself", "kind": "self"}], 1)
     assert stable.load(first)["caution"] == 0.9 and stable.progress(first)["version"] == 2
