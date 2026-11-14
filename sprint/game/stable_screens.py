@@ -1461,7 +1461,7 @@ class ChampionshipHub(Screen):
             app.show(RaceScreen(app, race, on_over=on_over, on_continue=to_standings,
                                 back=lambda a: ChampionshipHub(a)))
         else:
-            race.run(max_seconds=400)
+            race.run(max_seconds=800)
             on_over(race)
             to_standings()
 

@@ -52,7 +52,7 @@ POPULATION = 80
 SOLO_SHARE = 0.5      # how much of a racer's training score is pure pace (the rest is racing); the Lab default is 0.2
 GENERATION_CHOICES = [10, 20, 30, 40, 50]
 TRAINING_BUDGET = 50    # training generations a racer gets in its whole life (not in the workshop)
-CAREER_RACES = 20       # races before a racer retires to stud
+CAREER_RACES = 50       # races before a racer retires to stud: 10 five-race championships (user request)
 STUD_BREEDINGS = 5      # litters a racer at stud can sire before it dies
 STUD_LIFETIME = 40      # stable races (by anyone) a racer lives for at stud
 

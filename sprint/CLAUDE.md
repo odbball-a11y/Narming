@@ -158,7 +158,7 @@ ones in the workshop.
 - Careers (`ai/stable.py`, not in the workshop: `careers_enabled`):
   `racer["status"]` racing -> stud -> dead. `record_result` ticks the
   stable clock (`stable/stable.json` races) and retires at `CAREER_RACES`
-  (20); `retire` also works early. `can_race`/`can_train` need "racing",
+  (50: ten five-race championships, user request; was 20); `retire` also works early. `can_race`/`can_train` need "racing",
   `can_breed` needs "stud"; `mate` counts `breedings` on both parents;
   `check_deaths` kills studs at `STUD_BREEDINGS` (5) or after
   `STUD_LIFETIME` (40) stable races at stud. `list_racers` hides the dead
@@ -264,7 +264,7 @@ a careful racer that still overtakes.
   (`evolve.train(exam_tracks=)`). `specialty` / `specialty_text`: a specialist
   at a track when more than half of the racer's generations were on it.
   Create and Upskill screens have a TRAINING ON row; the card shows it.
-  Every championship race is `championship.RACE_LAPS` = 5 laps (user request).
+  Every championship race is `championship.RACE_LAPS` = 10 laps (user request; was 5).
 
 Specialist experiment (15 generations each, same personality and car, one
 racer on all tracks, one on the Oval only, `stable.train` from the

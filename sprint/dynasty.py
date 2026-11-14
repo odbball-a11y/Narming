@@ -124,7 +124,7 @@ def run_season(root: Path, log: Log) -> None:
     ch = championship.active(root) or championship.start(root, entrants)
     while not ch.get("done"):
         race = championship.build_race(root, ch)
-        race.run(max_seconds=400)
+        race.run(max_seconds=800)
         championship.finish_race(root, ch, race)
     table = championship.standings(ch)
     names = [ch["entrants"][r["entrant"]]["name"] for r in table]

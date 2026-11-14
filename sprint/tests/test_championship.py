@@ -125,7 +125,7 @@ def test_a_season_has_five_races_the_right_points_and_a_reverse_grid(dirs):
             table = championship.standings(ch)
             assert nxt["grid"][-1] == table[0]["entrant"] and nxt["grid"][0] == table[-1]["entrant"]
         race = championship.build_race(root, ch)
-        assert race.rolling and race.laps == championship.RACE_LAPS == 5
+        assert race.rolling and race.laps == championship.RACE_LAPS == 10
         assert [d.label for d in race.drivers] == [ch["entrants"][e]["name"] for e in nxt["grid"]]
         race.run(max_seconds=400)
         record = championship.finish_race(root, ch, race)
