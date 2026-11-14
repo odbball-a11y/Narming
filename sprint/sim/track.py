@@ -164,7 +164,7 @@ class Track:
 
         # Start grid: two columns, staggered, behind the line.
         self.grid = []
-        for slot in range(int(data.get("grid_slots", 4))):
+        for slot in range(int(data.get("grid_slots", 6))):
             s = -(5.0 + 4.5 * slot)
             idx = int(round(s / self.ds)) % self.n
             lat = self._hw[idx] * 0.42 * (-1.0 if slot % 2 == 0 else 1.0)

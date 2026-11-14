@@ -121,6 +121,7 @@ class SetupScreen(Screen):
     """Track, laps and who drives each of the four cars."""
 
     LAP_CHOICES = [1, 2, 3, 5, 8, 10]
+    CARS = 6                 # cars a race can have (the same as a championship)
 
     def __init__(self, app):
         super().__init__(app)
@@ -129,7 +130,8 @@ class SetupScreen(Screen):
         from ai import stable
         stable.register(app.stable_root)          # house rivals and your racers too
         known = {k for k, _ in driver_types()}
-        app.setup["drivers"] = [k if k in known else None for k in app.setup["drivers"]]
+        drivers = list(app.setup["drivers"]) + [None] * (self.CARS - len(app.setup["drivers"]))
+        app.setup["drivers"] = [k if k in known else None for k in drivers[:self.CARS]]
         self.row = 0
         self.thumb_key = None
         self.thumb = None
@@ -142,7 +144,7 @@ class SetupScreen(Screen):
         return [(None, "None")] + driver_types()
 
     def rows(self) -> list[str]:
-        return ["track", "laps", "grid", 0, 1, 2, 3, "start"]
+        return ["track", "laps", "grid"] + list(range(self.CARS)) + ["start"]
 
     def change(self, row, delta: int) -> None:
         setup = self.setup
@@ -234,16 +236,16 @@ class SetupScreen(Screen):
                         colour if ok else C_HUD_DIM, 8, y, shadow=True)
             else:
                 key = setup["drivers"][row]
-                pygame.draw.rect(screen, CAR_COLOURS[row], ui.rect(8, y + 0.3, 3.2, 3.2))
-                ui.text(screen, "mid", f"CAR {row + 1}", CAR_COLOURS[row], 13, y)
+                pygame.draw.rect(screen, CAR_COLOURS[row % len(CAR_COLOURS)], ui.rect(8, y + 0.3, 3.2, 3.2))
+                ui.text(screen, "mid", f"CAR {row + 1}", CAR_COLOURS[row % len(CAR_COLOURS)], 13, y)
                 ui.text(screen, "mid", f"<  {labels.get(key, '?').upper()}  >",
                         colour if key else C_HUD_DIM, 34, y)
                 if key in bindings:
-                    ui.text(screen, "small", game_input.key_label(bindings[key]), C_HUD_DIM, 13, y + 4.2)
+                    ui.text(screen, "small", game_input.key_label(bindings[key]), C_HUD_DIM, 13, y + 3.5)
                 elif key and key.startswith("pad"):
                     ui.text(screen, "small", "stick steers, right trigger / A go, left trigger / B brake",
-                            C_HUD_DIM, 13, y + 4.2)
-                y += 8.0
+                            C_HUD_DIM, 13, y + 3.5)
+                y += 6.2
         # Track preview
         size = (int(ui.unit * 64), int(ui.unit * 36))
         key = (setup["track"], size)

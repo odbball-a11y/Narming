@@ -34,8 +34,8 @@ C_HUD_BG = (12, 8, 28)
 C_HUD_TEXT = (255, 255, 255)
 C_HUD_DIM = (150, 140, 200)
 C_HUD_ACCENT = (255, 214, 10)
-CAR_COLOURS = [(236, 52, 60), (48, 140, 255), (255, 214, 10), (60, 220, 110)]
-CAR_NAMES = ["RED", "BLUE", "YELLOW", "GREEN"]
+CAR_COLOURS = [(236, 52, 60), (48, 140, 255), (255, 214, 10), (60, 220, 110), (170, 90, 255), (40, 215, 225)]
+CAR_NAMES = ["RED", "BLUE", "YELLOW", "GREEN", "PURPLE", "CYAN"]
 PLACES = ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH", "7TH", "8TH"]
 C_PANEL = (20, 14, 44)
 C_PINK = (255, 64, 160)
@@ -516,7 +516,7 @@ class RaceRenderer:
         for i in sorted(range(len(poses)), key=lambda k: not world.cars[k].retired):
             x, y, heading = poses[i]
             sprite = self.sprite_for(liveries[i] if liveries else
-                                     {"colour": liv.SLOT_COLOURS[world.slots[i] % 4], "trim": "stripe",
+                                     {"colour": liv.SLOT_COLOURS[world.slots[i] % len(liv.SLOT_COLOURS)], "trim": "stripe",
                                       "trim_colour": "white"})
             # Heavy cars are drawn bigger and light cars smaller.
             mass = world.cars[i].params.mass
@@ -553,7 +553,7 @@ class RaceRenderer:
         for place, i in enumerate(order):
             car = world.cars[i]
             slot = world.slots[i]
-            look = liveries[i] if liveries else {"colour": liv.SLOT_COLOURS[slot % 4], "number": slot + 1}
+            look = liveries[i] if liveries else {"colour": liv.SLOT_COLOURS[slot % len(liv.SLOT_COLOURS)], "number": slot + 1}
             colour = liv.rgb(look["colour"])
             x0 = (place // per_column) * col_w + 1.0
             y = 0.5 + (place % per_column) * row_h

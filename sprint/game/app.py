@@ -37,7 +37,7 @@ class App:
             "laps": 3,
             "seed": 0,
             "rolling": True,
-            "drivers": ["human1", "scripted", "scripted", "scripted"],
+            "drivers": ["human1", "scripted", "scripted", "scripted", None, None],
         }
         self.ai_run = None          # training run shown in the AI lab (None = latest)
         self.current = MainMenu(self)

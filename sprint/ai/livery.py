@@ -23,7 +23,7 @@ ORDER = [c for c in PALETTE if c not in RESERVED]
 TRIMS = ("stripe", "twin", "nose", "wing", "band")
 LIGHT_BODIES = ("white", "yellow", "cyan", "lime", "orange", "pink")
 # Colours of the four standard slots, for cars with no livery (human, scripted).
-SLOT_COLOURS = ("red", "blue", "yellow", "green")
+SLOT_COLOURS = ("red", "blue", "yellow", "green", "purple", "cyan")
 FIRST_NUMBER = 10
 
 
@@ -85,7 +85,7 @@ def resolve(drivers: list, slots: list[int]) -> list[dict]:
         if own:
             out.append(dict(own))
             continue
-        colour = SLOT_COLOURS[slots[i] % 4]
+        colour = SLOT_COLOURS[slots[i] % len(SLOT_COLOURS)]
         if colour in used:
             colour = next(c for c in list(PALETTE) if c not in used)
         used.add(colour)

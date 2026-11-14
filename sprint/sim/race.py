@@ -32,7 +32,7 @@ class Race:
                  rolling: bool = False):
         """`entries` is a list of (slot, driver) for the cars taking part,
         where driver is a registry key such as "scripted" or a Driver object.
-        Slot (0-3) picks the grid position, colour and parameter set.  With
+        Slot (0-5) picks the grid position, colour and parameter set.  With
         `rolling` the cars start in single file at speed, slot 0 leading."""
         self.rolling = rolling
         self.track = track if isinstance(track, Track) else Track.load(track)

@@ -91,15 +91,15 @@ def test_checkpoints_and_grid(track):
     assert len(track.checkpoints) >= 8
     assert track.checkpoint_indices[0] == 0
     assert track.checkpoint_indices == sorted(track.checkpoint_indices)
-    assert len(track.grid) == 4
+    assert len(track.grid) == 6                         # six cars, as in a championship
     for x, y, heading in track.grid:
         idx, s, lat = track.locate(x, y)
         assert s > track.length / 2                    # behind the line
         assert abs(lat) < track.half_width[idx] - 1.5  # on the tarmac
         assert abs(track.heading_error(heading, s)) < 0.2
     # Grid slots do not overlap.
-    for a in range(4):
-        for b in range(a + 1, 4):
+    for a in range(6):
+        for b in range(a + 1, 6):
             assert math.dist(track.grid[a][:2], track.grid[b][:2]) > 3.6
 
 
