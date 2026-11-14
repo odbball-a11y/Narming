@@ -962,17 +962,18 @@ def notes_of(racer_dir) -> dict:
 
 
 def house_notes(rival_id: str, generations: int, tracks: list | None = None, workers: int = 0,
-                population: int = 40, on_generation=None) -> dict:
+                population: int = 40, on_generation=None, full: bool = False) -> dict:
     """Teach a house rival the tracks without changing how it drives: a camp
     in which only its track notes evolve (its network is frozen), on all the
-    graduate's tracks or `tracks`.  The camp is a run in training/ that carries
+    graduate's tracks or `tracks`.  With `full`, its whole brain trains (with
+    the lap traces' reference notes, like any training), from where it is.  The camp is a run in training/ that carries
     on each time this is called, so the rival's notes keep evolving.  The
     best driver's notes are written back to the rival.  Returns its card."""
     card_path = RIVALS_DIR / f"{rival_id}.json"
     card = _read(card_path)
     grad = graduate()
     arch = with_notes(card.get("arch") or grad["arch"])
-    run = f"house-{rival_id}-notes"
+    run = f"house-{rival_id}-{'train' if full else 'notes'}"   # full: the whole brain trains, not just its notes
     evolve.train(run=run, generations=generations, population=population, seed=len(rival_id),
                  tracks=list(tracks or grad["tracks"]), exam_tracks=list(grad["tracks"]), arch=arch,
                  races_per_track=grad["races_per_track"], race_bonuses=False,
@@ -980,12 +981,13 @@ def house_notes(rival_id: str, generations: int, tracks: list | None = None, wor
                  race_weights=sliders_to_weights(card.get("aggression", 0.5), card.get("caution", 0.5)),
                  partners=[{"name": "Scripted car", "kind": "scripted"}, {"name": "Itself", "kind": "self"}],
                  name=card.get("name"), workers=workers, car=card.get("traits"), solo_share=SOLO_SHARE,
-                 notes_only=True, on_generation=on_generation, log=lambda m: None)
+                 notes=True, notes_only=not full, on_generation=on_generation, log=lambda m: None)
     run_dir = evolve.RUNS_DIR / run
     best = evolve.load_generation(run_dir, evolve.list_generations(run_dir)[-1])["pop"][:1]
     np.savez_compressed(RIVALS_DIR / f"{rival_id}.npz", pop=best.astype(np.float32))
     card["arch"] = arch
-    card["notes_generations"] = card.get("notes_generations", 0) + generations
+    key = "generations" if full else "notes_generations"
+    card[key] = card.get(key, 0) + generations
     _write(card_path, card)
     return card
 
@@ -1001,6 +1003,8 @@ def main(argv=None) -> int:
     h.add_argument("--generations", type=int, default=20)
     h.add_argument("--tracks", nargs="*", default=None)
     h.add_argument("--workers", type=int, default=max(1, min(4, os.cpu_count() or 2)))
+    h.add_argument("--full", action="store_true", help="train the whole brain (with its notes), not just the notes")
+    h.add_argument("--population", type=int, default=40)
     b = sub.add_parser("breed", help="make a foal's litter and pick the best foal")
     b.add_argument("racer_dir")
     b.add_argument("--workers", type=int, default=max(1, min(3, (os.cpu_count() or 2) - 1)))
@@ -1015,8 +1019,10 @@ def main(argv=None) -> int:
 
         def show(entry):
             print(f"gen {entry['gen']} best {entry['best']:.2f}", flush=True)
-        card = house_notes(rival["id"], args.generations, args.tracks, args.workers, on_generation=show)
-        print(f"{card['name']} now has {card['notes_generations']} generations of track notes", flush=True)
+        card = house_notes(rival["id"], args.generations, args.tracks, args.workers, population=args.population,
+                           on_generation=show, full=args.full)
+        print(f"{card['name']}: {card.get('generations', 0)} generations of training, "
+              f"{card.get('notes_generations', 0)} of notes only", flush=True)
         return 0
     if args.command == "breed":
         cert = breed(args.racer_dir, workers=args.workers)
