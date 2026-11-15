@@ -406,7 +406,8 @@ def _mean_metrics(runs: list[dict]) -> dict:
     return out
 
 
-def evaluate(weights, arch, traits, driver_id: str, split: str = "both", repeats: int | None = None) -> dict:
+def evaluate(weights, arch, traits, driver_id: str, split: str = "both", repeats: int | None = None,
+             only: list | None = None) -> dict:
     """Every challenge, on its seen and/or unseen variants, each run `repeats`
     times.  {challenge id: {"seen": [variant result, ...], "unseen": [...]}};
     a variant result is {"metrics": averages over the runs, "passed": the share
@@ -414,6 +415,8 @@ def evaluate(weights, arch, traits, driver_id: str, split: str = "both", repeats
     repeats = repeats or REPEATS
     out = {}
     for c in challenges_for(driver_id):
+        if only and c["id"] not in only:
+            continue
         row = {}
         for part in (["seen", "unseen"] if split == "both" else [split]):
             row[part] = []
@@ -475,11 +478,15 @@ def lesson_scenario(config: dict, gen: int, start: int, rng) -> dict:
     stage = min(1.0, max(0.0, (gen - start) / total))
     ids = config.get("academy_challenges") or [c["id"] for c in CHALLENGES]
     pool = [BY_ID[i] for i in ids]
+    emphasis = config.get("academy_emphasis") or {}
+    modules = sorted({c["module"] for c in pool})
     weights = []
     for c in pool:
-        centre = (c["module"] - 1) / 7.0
+        # the curriculum runs through the modules in the pool, first to last
+        centre = modules.index(c["module"]) / max(1, len(modules) - 1)
         level_cap = 1 + 3 * stage + 0.5
-        weights.append((math.exp(-((stage - centre) / 0.3) ** 2) + 0.15) * (1.0 if c["level"] <= level_cap else 0.2))
+        weights.append((math.exp(-((stage - centre) / 0.3) ** 2) + 0.15) * (1.0 if c["level"] <= level_cap else 0.2)
+                       * float(emphasis.get(str(c["module"]), 1.0)))
     weights = np.array(weights) / sum(weights)
     c = pool[int(rng.choice(len(pool), p=weights))]
     v = c["seen"][int(rng.integers(0, len(c["seen"])))]
@@ -547,11 +554,14 @@ def original(driver_id: str) -> tuple[np.ndarray, dict, dict]:
 
 
 def train(driver_id: str, generations: int = GENERATIONS, population: int = POPULATION, workers: int = 4,
-          log=print) -> Path:
+          log=print, where: Path | None = None, challenges: list | None = None, lesson_share: float | None = None,
+          emphasis: dict | None = None, planned: int | None = None) -> Path:
     """Train the candidate (resumable): a copy of the original, its own
-    personality's scoring, Academy lessons plus normal racing."""
+    personality's scoring, Academy lessons plus normal racing.  A focused
+    course (`focus_course`) trains in its own folder (`where`) on a subset of
+    the challenges, with more lessons and some modules weighted up."""
     w, arch, info = original(driver_id)
-    d = folder(driver_id)
+    d = Path(where) if where else folder(driver_id)
     run_arch = with_notes(arch)
     start_file = d / "start.npz"
     if not start_file.exists():
@@ -566,7 +576,8 @@ def train(driver_id: str, generations: int = GENERATIONS, population: int = POPU
                         race_weights=stable.sliders_to_weights(info["aggression"], info["caution"]),
                         partners=partners, car=info["traits"], solo_share=0.35, notes=True, workers=workers,
                         record_laps=False, log=lambda m: log(m),
-                        academy={"driver": driver_id, "partners": partners_ids, "generations": generations},
+                        academy={"driver": driver_id, "partners": partners_ids, "generations": planned or generations,
+                                 "challenges": challenges, "lesson_share": lesson_share, "emphasis": emphasis},
                         on_generation=lambda e: log(f"  gen {e['gen']}: fitness {e['best']:.2f}"))
 
 
@@ -811,6 +822,189 @@ def promote(name: str) -> str:
     return f"{spec['name']} now races with the Academy candidate (earlier versions kept)"
 
 
+# ---------------------------------------------------------- focused courses
+
+LEGEND = 0.85        # share of a focused course's scenarios passed for legend status
+
+
+def focus_course(name: str, modules=(1, 2, 3, 4), tag: str = "grip", target: float = LEGEND,
+                 max_generations: int = 120, chunk: int = 10, population: int = POPULATION, workers: int = 4,
+                 emphasis: dict | None = None, log=print) -> dict:
+    """Train a copy of the driver on a few modules only, in blocks of `chunk`
+    generations, testing after each block, until it passes `target` of those
+    modules' seen scenarios ("legend status") or reaches `max_generations`.
+    Its own folder (academy/<id>-<tag>/); the original and the main course
+    are untouched.  Keeps the best block; then tests it, seen and unseen."""
+    migrate.ensure()
+    spec = driver_spec(name)
+    main = prepare(spec)                         # (the original's copy lives in the main folder)
+    fd = ACADEMY_DIR / f"{spec['id']}-{tag}"
+    fd.mkdir(parents=True, exist_ok=True)
+    ids = [c["id"] for c in CHALLENGES if c["module"] in modules]
+    w0, arch0, info = original(spec["id"])
+    progress = _load(fd / "progress.json") or {"blocks": []}
+    _save(fd / "course.json", {"driver": spec["id"], "name": spec["name"], "modules": list(modules), "tag": tag,
+                               "target": target, "challenges": ids})
+    best = max(progress["blocks"], key=lambda b: (b["seen"], b["gen"])) if progress["blocks"] else None
+    while True:
+        done = len(evolve.list_generations(fd / "run"))
+        if (best and best["seen"] >= target) or done >= max_generations:
+            break
+        log(f"  {spec['name']} {tag} course: generations {done + 1}-{done + chunk}")
+        train(spec["id"], chunk, population, workers, log=lambda m: None, where=fd, challenges=ids,
+              lesson_share=0.85, emphasis=emphasis or {2: 2.5}, planned=max_generations)
+        gen = evolve.list_generations(fd / "run")[-1]
+        w, arch = _gen_weights(fd, gen)
+        res = evaluate(w, arch, info["traits"], spec["id"], "seen", repeats=2, only=ids)
+        block = {"gen": gen, "seen": round(pass_rate(res, "seen"), 4),
+                 "modules": {str(m): round(pass_rate(res, "seen", m), 3) for m in modules}}
+        progress["blocks"].append(block)
+        _save(fd / "progress.json", progress)
+        log(f"  after gen {gen}: {block['seen']:.0%} of the course's seen scenarios "
+            + " ".join(f"m{m} {v:.0%}" for m, v in block["modules"].items()))
+        if best is None or block["seen"] >= best["seen"]:
+            best = block
+    _save(fd / "selected.json", best)
+    if not (fd / "after.json").exists():
+        w, arch = _gen_weights(fd, best["gen"])
+        log(f"  testing the best block (gen {best['gen']}) on every challenge ...")
+        _save(fd / "before_course.json", evaluate(w0, arch0, info["traits"], spec["id"], "both", only=ids))
+        _save(fd / "after.json", evaluate(w, arch, info["traits"], spec["id"]))
+    return {"best": best, "legend": best["seen"] >= target}
+
+
+def _gen_weights(where: Path, gen: int) -> tuple[np.ndarray, dict]:
+    run = Path(where) / "run"
+    return evolve.load_generation(run, gen)["pop"][0].astype(np.float64), evolve.load_config(run)["arch"]
+
+
+def simulate_championships(field: dict, count: int = 20, seed: int = 1) -> dict:
+    """Full championships to the game's rules: every track in TRACK_ORDER, ten
+    laps, race 1 drawn, then reverse standings (the leader starts last), points
+    10-7-5-3-2-1 and one for the fastest lap among finishers, damage reset each
+    race.  `field`: {label: function returning a fresh Driver}.  Returns per
+    label: titles, points, wins, podiums, average finish, damage, DNFs."""
+    from . import championship
+    names = list(field)
+    tally = {n: {"titles": 0, "points": 0, "wins": 0, "podiums": 0, "places": [], "damage": 0.0, "dnf": 0,
+                 "races": 0, "positions": []} for n in names}
+    rng = np.random.default_rng(seed)
+    for k in range(count):
+        points = {n: 0 for n in names}
+        order = list(rng.permutation(names))
+        for r, track in enumerate(championship.TRACK_ORDER):
+            if r:                                   # reverse championship order: the leader starts last
+                order = sorted(names, key=lambda n: (points[n], names.index(n)))
+            drivers = {n: field[n]() for n in names}
+            race = Race(track, [(slot, drivers[n]) for slot, n in enumerate(order)], laps=championship.RACE_LAPS,
+                        seed=seed * 1000 + k * 10 + r, rolling=True).run(max_seconds=1200)
+            rows = race.results()
+            finishers = [row for row in rows if row["finished"] and row.get("best_lap")]
+            fastest = min(finishers, key=lambda row: row["best_lap"])["car"] if finishers else None
+            for row in rows:
+                n = order[row["car"]]
+                t = tally[n]
+                got = championship.POINTS[min(row["place"], len(championship.POINTS)) - 1] if row["finished"] else 0
+                got += championship.FASTEST_LAP_POINT if row["car"] == fastest else 0
+                points[n] += got
+                t["points"] += got
+                t["races"] += 1
+                t["wins"] += row["place"] == 1
+                t["podiums"] += row["place"] <= 3
+                t["places"].append(row["place"])
+                t["dnf"] += not row["finished"]
+                t["damage"] += race.world.cars[row["car"]].damage
+        standings = sorted(names, key=lambda n: -points[n])
+        tally[standings[0]]["titles"] += 1
+        for pos, n in enumerate(standings, start=1):
+            tally[n]["positions"].append(pos)
+    for t in tally.values():
+        t["avg_place"] = round(float(np.mean(t["places"])), 2)
+        t["avg_place_se"] = round(float(np.std(t["places"]) / math.sqrt(len(t["places"]))), 2)
+        t["avg_championship_pos"] = round(float(np.mean(t["positions"])), 2)
+        t["points_per_season"] = round(t["points"] / count, 1)
+        t["damage"] = round(t["damage"] / max(1, t["races"]), 3)
+        del t["places"]
+    return tally
+
+
+def grip_field(driver_id: str, tag: str = "grip") -> dict:
+    """The original and the focus-course candidate with the four other house rivals."""
+    w0, arch0, info = original(driver_id)
+    fd = ACADEMY_DIR / f"{driver_id}-{tag}"
+    sel = _load(fd / "selected.json")
+    w1, arch1 = _gen_weights(fd, sel["gen"])
+    car = cartraits.params_for(info["traits"])
+
+    def make(w, arch, label):
+        def f():
+            d = NeuralDriver(w, arch, label)
+            d.car_params = car
+            d.livery = None
+            return d
+        return f
+    field = {f"{info['name']} ({tag} course)": make(w1, arch1, f"{info['name']} ({tag})"),
+             f"{info['name']} (original)": make(w0, arch0, info["name"])}
+    for c in stable.house_rivals():
+        if c["id"] != driver_id:
+            field[c["name"]] = (lambda rid=c["id"]: stable.house_driver(rid))
+    return dict(list(field.items())[:6])
+
+
+def focus_report(driver_id: str, tag: str = "grip") -> Path:
+    fd = ACADEMY_DIR / f"{driver_id}-{tag}"
+    course, progress, sel = _load(fd / "course.json"), _load(fd / "progress.json"), _load(fd / "selected.json")
+    before_full = _load(folder(driver_id) / "before.json") or {}
+    before, after = _load(fd / "before_course.json") or {}, _load(fd / "after.json") or {}
+    champs = _load(fd / "championships.json")
+    mods = course["modules"]
+    legend = sel and sel["seen"] >= course["target"]
+    lines = [f"# {course['name']}: {tag} course (modules {', '.join(map(str, mods))})", "",
+             f"Focused Academy course: only modules {', '.join(MODULES[m] for m in mods)}; "
+             f"module 2 (braking, cornering and the grip limit) weighted most. Trained in blocks of 10 generations "
+             f"until {course['target']:.0%} of the course's seen scenarios passed (legend status) or 120 generations. "
+             f"Personality kept (aggression {_load(folder(driver_id) / 'driver.json')['aggression']}).", "",
+             "## Training", "", "| After generation | Course seen pass rate | " + " | ".join(f"Module {m}" for m in mods) + " |",
+             "|---|---|" + "---|" * len(mods)]
+    for b in progress["blocks"]:
+        lines.append(f"| {b['gen']} | {b['seen']:.0%} | " + " | ".join(f"{b['modules'][str(m)]:.0%}" for m in mods) + " |")
+    lines += ["", f"Best block: generation {sel['gen']} ({sel['seen']:.0%}). "
+              + ("**Legend status reached.**" if legend else f"**Legend status not reached** (target {course['target']:.0%})."), "",
+              "## Course modules, before and after (3 runs per scenario)", "",
+              "| Module | Seen before | Seen after | Unseen before | Unseen after | Unseen change |", "|---|---|---|---|---|---|"]
+    for m in mods:
+        lines.append(f"| {m}. {MODULES[m]} | {pass_rate(before, 'seen', m):.0%} | {pass_rate(after, 'seen', m):.0%} | "
+                     f"{pass_rate(before, 'unseen', m):.0%} | {pass_rate(after, 'unseen', m):.0%} | "
+                     f"{change_text(before, after, 'unseen', m)} |")
+    lines += ["", "## Side effects on the other modules (unseen)", "", "| Module | Before | After | Change |", "|---|---|---|---|"]
+    for m in MODULES:
+        if m in mods or not before_full:
+            continue
+        lines.append(f"| {m}. {MODULES[m]} | {pass_rate(before_full, 'unseen', m):.0%} | {pass_rate(after, 'unseen', m):.0%} | "
+                     f"{change_text(before_full, after, 'unseen', m)} |")
+    vb, va = _metric_avg(before, "pace", (1, 2)), _metric_avg(after, "pace", (1, 2))
+    lb, la = _metric_avg(before, "limit_use", (2, 2)), _metric_avg(after, "limit_use", (2, 2))
+    sb, sa = _metric_avg(before, "slide", (2, 4)), _metric_avg(after, "slide", (2, 4))
+    lines += ["", "## Skill measures (unseen)", "",
+              f"- Lap pace v the scripted car: {vb:.3f} -> {va:.3f} (lower is quicker)" if vb and va else "- Lap pace: -",
+              f"- Corner time at the grip limit: {lb:.0%} -> {la:.0%}" if lb is not None and la is not None else "",
+              f"- Time sliding: {sb:.1%} -> {sa:.1%}" if sb is not None and sa is not None else "", ""]
+    if champs:
+        lines += ["## Six-car championships (simulated)", "",
+                  f"{champs['count']} championships, each 5 races of 10 laps (Oval, Speedway, Esses, Technical, Grand Prix), "
+                  "race 1 drawn, then reverse grid; points 10-7-5-3-2-1 + 1 for the fastest lap; both versions of "
+                  f"{course['name']} in the same field.", "",
+                  "| Driver | Titles | Points per season | Avg championship position | Wins | Podiums | Avg race place | Damage | DNFs |",
+                  "|---|---|---|---|---|---|---|---|---|"]
+        for n, t in sorted(champs["tally"].items(), key=lambda kv: -kv[1]["points"]):
+            lines.append(f"| {n} | {t['titles']} | {t['points_per_season']} | {t['avg_championship_pos']:.2f} | {t['wins']} | "
+                         f"{t['podiums']} | {t['avg_place']:.2f} +- {t['avg_place_se']:.2f} | {t['damage']:.0%} | {t['dnf']} |")
+    path = REPORT_DIR / f"{driver_id}-{tag}.md"
+    REPORT_DIR.mkdir(exist_ok=True)
+    path.write_text("\n".join(line for line in lines if line is not None) + "\n", encoding="utf-8")
+    return path
+
+
 # --------------------------------------------------------------------- report
 
 KEY_METRICS = [("pace", "lap pace v scripted", "lower", 1, 2), ("line_error", "distance from the ideal line", "lower", 1, 1),
@@ -972,6 +1166,13 @@ def main() -> int:
     p = sub.add_parser("promote")
     p.add_argument("driver")
     sub.add_parser("report")
+    f = sub.add_parser("focus", help="a focused course on some modules, then simulated championships")
+    f.add_argument("driver")
+    f.add_argument("--modules", type=int, nargs="+", default=[1, 2, 3, 4])
+    f.add_argument("--tag", default="grip")
+    f.add_argument("--max-generations", type=int, default=120)
+    f.add_argument("--championships", type=int, default=20)
+    f.add_argument("--workers", type=int, default=4)
     sub.add_parser("list")
     args = ap.parse_args()
     if args.cmd == "list":
@@ -982,6 +1183,20 @@ def main() -> int:
         for d in sorted(ACADEMY_DIR.glob("*/driver.json")):
             write_report(d.parent.name)
         print(write_summary())
+        return 0
+    if args.cmd == "focus":
+        log = lambda m: print(f"{time.strftime('%H:%M')} {m}", flush=True)
+        spec = driver_spec(args.driver)
+        out = focus_course(args.driver, tuple(args.modules), args.tag, max_generations=args.max_generations,
+                           workers=args.workers, log=log)
+        log(f"best block gen {out['best']['gen']}: {out['best']['seen']:.0%}, legend: {out['legend']}")
+        fd = ACADEMY_DIR / f"{spec['id']}-{args.tag}"
+        if not (fd / "championships.json").exists():
+            log(f"  simulating {args.championships} six-car championships ...")
+            _save(fd / "championships.json", {"count": args.championships,
+                                              "tally": simulate_championships(grip_field(spec["id"], args.tag),
+                                                                              args.championships)})
+        print(focus_report(spec["id"], args.tag), flush=True)
         return 0
     if args.cmd == "retest":
         names = [c["name"] for c in stable.house_rivals()] if args.driver == "all" else [args.driver]

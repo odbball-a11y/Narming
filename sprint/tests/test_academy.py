@@ -179,3 +179,25 @@ def test_the_stable_screen_copes_with_an_academy_course_running(tmp_path):
     app.draw()                                          # used to raise FileNotFoundError
     assert background_job(str(job)) == "Racing Academy: Brick Top"
     app.trainer = None
+
+
+def test_a_focused_course_trains_to_a_target_then_races_championships(small_academy, monkeypatch):
+    from ai import championship
+    rivals = small_academy / "rivals"
+    shutil.copytree(stable.RIVALS_DIR, rivals)
+    monkeypatch.setattr(stable, "RIVALS_DIR", rivals)
+    before = (rivals / "dangerous-dave.npz").read_bytes()
+    out = academy.focus_course("Dangerous Dave", (1, 3), max_generations=2, chunk=1, population=4, workers=1,
+                               target=1.01, log=lambda m: None)
+    fd = academy.ACADEMY_DIR / "dangerous-dave-grip"
+    assert len(json.loads((fd / "progress.json").read_text())["blocks"]) == 2      # stopped at the cap
+    assert out["legend"] is False and (fd / "after.json").exists()
+    assert (rivals / "dangerous-dave.npz").read_bytes() == before                   # the original is untouched
+    monkeypatch.setattr(championship, "TRACK_ORDER", ["oval", "oval"])
+    monkeypatch.setattr(championship, "RACE_LAPS", 1)
+    tally = academy.simulate_championships(academy.grip_field("dangerous-dave"), count=1)
+    assert len(tally) == 6 and sum(t["titles"] for t in tally.values()) == 1
+    assert all(t["races"] == 2 for t in tally.values())
+    academy._save(fd / "championships.json", {"count": 1, "tally": tally})
+    text = academy.focus_report("dangerous-dave").read_text()
+    assert "## Six-car championships" in text and "Legend status not reached" in text

@@ -865,7 +865,8 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
         from . import academy
         lesson_rng = np.random.default_rng([config["seed"], gen, 31])
         scenarios = [academy.lesson_scenario(config, gen, start, lesson_rng)
-                     if lesson_rng.random() < academy.LESSON_SHARE else s for s in scenarios]
+                     if lesson_rng.random() < (config.get("academy_lesson_share") or academy.LESSON_SHARE)
+                     else s for s in scenarios]
     return scenarios
 
 
@@ -946,7 +947,11 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "drill_prior": list(drill_prior or []),
                   **({"academy": True, "academy_driver": academy.get("driver"),
                       "academy_partners": list(academy.get("partners") or []),
-                      "academy_generations": int(academy.get("generations") or 30)} if academy else {}),
+                      "academy_generations": int(academy.get("generations") or 30),
+                      "academy_challenges": academy.get("challenges"),
+                      "academy_lesson_share": academy.get("lesson_share"),
+                      "academy_emphasis": {str(k): v for k, v in (academy.get("emphasis") or {}).items()}}
+                   if academy else {}),
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
