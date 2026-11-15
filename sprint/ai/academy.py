@@ -282,8 +282,29 @@ def _rival_driver(spec: str, slot: int):
 
 # ----------------------------------------------------------------- the tests
 
-def run_variant(weights, arch, traits, variant: dict) -> dict:
-    """Drive one challenge variant with the driver's brain; return its metrics."""
+REPEATS = 3          # runs per variant, each with the cars nudged differently at the start
+
+
+def _nudge(world, rep: int) -> None:
+    """Repeat `rep` > 0 of a variant: every car starts a little to one side,
+    by a fixed amount for that repeat, so the run plays out differently (a
+    single run of a chaotic race says little)."""
+    if rep <= 0:
+        return
+    rng = np.random.default_rng([rep, len(world.cars), int(world.track.length)])
+    track = world.track
+    for car in world.cars:
+        shift = rng.uniform(-0.3, 0.3) * track._hw[car.idx]
+        nx, ny = track.normal[car.idx]
+        car.x += nx * shift
+        car.y += ny * shift
+        car.prev_x, car.prev_y = car.x, car.y
+        world._relocate(car, car.idx)
+
+
+def run_variant(weights, arch, traits, variant: dict, rep: int = 0) -> dict:
+    """Drive one challenge variant with the driver's brain; return its metrics.
+    `rep` > 0 runs it again from slightly different starting positions."""
     track = Track.load(variant["track"])
     rivals = variant["rivals"]
     slot = variant["slot"]
@@ -299,7 +320,13 @@ def run_variant(weights, arch, traits, variant: dict) -> dict:
     world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True, params=params)
     for i, d in enumerate(drivers):
         d.reset(world, i)
-    lessons.place(world, 0, variant.get("start"))
+    _nudge(world, rep)
+    start = variant.get("start")
+    if start and rep > 0:                      # a slightly different moment of trouble each repeat
+        sign = 1 if rep % 2 else -1
+        start = dict(start, heading=start.get("heading", 0.0) * (1 + 0.12 * sign * ((rep + 1) // 2)),
+                     slide=start.get("slide", 0.0) * (1 - 0.1 * sign), before=start.get("before", 22.0) + 3 * rep)
+    lessons.place(world, 0, start)
     stats = evolve.RaceStats(world)
     off, curv = track.ideal()
     plan = my_params.grip * GRIP_PLAN
@@ -312,7 +339,7 @@ def run_variant(weights, arch, traits, variant: dict) -> dict:
     line_sum = 0.0
     walls = 0
     steady, recovered = 0.0, None
-    started = variant.get("start") is not None
+    started = start is not None
     for tick in range(ticks):
         controls = [d.act(world, i) for i, d in enumerate(drivers)]
         events = world.step(controls)
@@ -371,31 +398,71 @@ def meets(metrics: dict, objectives) -> list[bool]:
     return out
 
 
-def evaluate(weights, arch, traits, driver_id: str, split: str = "both") -> dict:
-    """Every challenge, on its seen and/or unseen variants.
-    {challenge id: {"seen": [{"metrics", "passed"}...], "unseen": [...]}}."""
+def _mean_metrics(runs: list[dict]) -> dict:
+    out = {}
+    for key in runs[0]:
+        vals = [r[key] for r in runs if r.get(key) is not None]
+        out[key] = round(float(np.mean(vals)), 4) if vals else None
+    return out
+
+
+def evaluate(weights, arch, traits, driver_id: str, split: str = "both", repeats: int | None = None) -> dict:
+    """Every challenge, on its seen and/or unseen variants, each run `repeats`
+    times.  {challenge id: {"seen": [variant result, ...], "unseen": [...]}};
+    a variant result is {"metrics": averages over the runs, "passed": the share
+    of runs that met every objective, "runs": [passed or not, per run]}."""
+    repeats = repeats or REPEATS
     out = {}
     for c in challenges_for(driver_id):
         row = {}
         for part in (["seen", "unseen"] if split == "both" else [split]):
             row[part] = []
             for v in c[part]:
-                m = run_variant(weights, arch, traits, v)
-                row[part].append({"metrics": m, "passed": all(meets(m, c["objectives"]))})
+                runs = [run_variant(weights, arch, traits, v, rep) for rep in range(repeats)]
+                ok = [all(meets(m, c["objectives"])) for m in runs]
+                row[part].append({"metrics": _mean_metrics(runs), "passed": sum(ok) / len(ok), "runs": ok})
         out[c["id"]] = row
     return out
 
 
+def runs_of(results: dict, part: str, module: int | None = None) -> list[bool]:
+    """Every single run's pass or fail (older results, one run per variant, count as one)."""
+    out = []
+    for cid, row in results.items():
+        if part not in row or (module is not None and BY_ID[cid]["module"] != module):
+            continue
+        for r in row[part]:
+            out += r.get("runs") or [bool(r["passed"])]
+    return out
+
+
+def margin(results: dict, part: str, module: int | None = None) -> float:
+    """Standard error of the pass rate (from the number of runs)."""
+    runs = runs_of(results, part, module)
+    if not runs:
+        return 0.0
+    p = sum(runs) / len(runs)
+    return math.sqrt(max(p * (1 - p), 0.25 / len(runs)) / len(runs))
+
+
+def change_text(before: dict, after: dict, part: str = "unseen", module: int | None = None) -> str:
+    """'+12% (real)' or '-3% (within noise)': a change counts as real when it is
+    more than twice its standard error."""
+    d = pass_rate(after, part, module) - pass_rate(before, part, module)
+    se = math.sqrt(margin(before, part, module) ** 2 + margin(after, part, module) ** 2)
+    return f"{d:+.0%} ({'real' if abs(d) > 2 * se else 'within noise'})"
+
+
 def pass_rate(results: dict, part: str, module: int | None = None) -> float:
-    tried = [r["passed"] for cid, row in results.items() if part in row
-             and (module is None or BY_ID[cid]["module"] == module) for r in row[part]]
-    return sum(tried) / len(tried) if tried else 0.0
+    """Share of all runs passed."""
+    runs = runs_of(results, part, module)
+    return sum(runs) / len(runs) if runs else 0.0
 
 
 def completed(results: dict, cid: str, part: str = "unseen") -> bool:
-    """A challenge is completed when at least half its variants pass."""
-    runs = results.get(cid, {}).get(part, [])
-    return bool(runs) and sum(r["passed"] for r in runs) * 2 >= len(runs)
+    """A challenge is completed when at least half its runs pass."""
+    runs = runs_of({cid: results.get(cid, {})}, part) if cid in results else []
+    return bool(runs) and sum(runs) * 2 >= len(runs)
 
 
 # ------------------------------------------------------------- training lessons
@@ -540,7 +607,7 @@ def select(driver_id: str, log=print) -> dict:
 
 
 RACE_PANEL_TRACKS = TRACKS
-RACE_PANEL_PER_TRACK = 2
+RACE_PANEL_PER_TRACK = 4
 
 
 def race_panel(driver_id: str) -> dict:
@@ -579,11 +646,13 @@ def race_panel(driver_id: str) -> dict:
                 t["races"] += 1
                 t["wins"] += row["place"] == 1
                 t["place"] += row["place"]
+                t.setdefault("places", []).append(row["place"])
                 t["finished"] += bool(row["finished"])
                 t["damage"] += race.world.cars[row["car"]].damage
             k += 1
     for t in tally.values():
         t["place"] = round(t["place"] / max(1, t["races"]), 2)
+        t["place_se"] = round(float(np.std(t["places"]) / math.sqrt(len(t["places"]))), 2) if t.get("places") else 0.0
         t["damage"] = round(t["damage"] / max(1, t["races"]), 3)
     return tally
 
@@ -618,6 +687,17 @@ def run(name: str, generations: int = GENERATIONS, population: int = POPULATION,
     log(f"  report: {REPORT_DIR / (spec['id'] + '.md')}")
     return {"before": pass_rate(_load(d / "before.json"), "unseen"),
             "after": pass_rate(_load(d / "after.json"), "unseen")}
+
+
+def retest(name: str, log=print) -> dict:
+    """Redo every test (before, checkpoint choice, after, races) with the
+    current method, keeping the training."""
+    spec = driver_spec(name)
+    d = folder(spec["id"])
+    for f in ("before.json", "selected.json", "after.json", "races.json", "candidate.npz"):
+        (d / f).unlink(missing_ok=True)
+    done = len(evolve.list_generations(d / "run"))
+    return run(name, generations=done, log=log)
 
 
 def promote(name: str) -> str:
@@ -702,8 +782,9 @@ def report_text(driver_id: str) -> str:
     lines += ["## Summary", "",
               f"- Training: {len(hist)} generations; candidate = generation {sel['gen'] if sel else '-'} "
               f"(chosen on the seen scenarios only).",
-              f"- Pass rate on UNSEEN scenarios: **{b_un:.0%} -> {a_un:.0%}** "
-              f"(seen: {b_seen:.0%} -> {a_seen:.0%}).",
+              f"- Pass rate on UNSEEN scenarios: **{b_un:.0%} -> {a_un:.0%}**, change "
+              f"{change_text(before, after) if after else '-'} (each +-{margin(before, 'unseen'):.0%}; "
+              f"{len(runs_of(before, 'unseen'))} runs). Seen: {b_seen:.0%} -> {a_seen:.0%}.",
               f"- Challenges completed (unseen, at least half the variants passed): {n_done_b} -> {n_done_a} of {len(CHALLENGES)}.",
               f"- Overall assessment: **{_grade(a_un if after else b_un)}** (before: {_grade(b_un)}).", ""]
     lines += ["## By module (unseen pass rate)", "", "| Module | Before | After | Change |", "|---|---|---|---|"]
@@ -711,17 +792,17 @@ def report_text(driver_id: str) -> str:
     for m, title in MODULES.items():
         pb, pa = pass_rate(before, "unseen", m), pass_rate(after, "unseen", m)
         module_after[m] = pa if after else pb
-        lines.append(f"| {m}. {title} | {pb:.0%} | {pa:.0%} | {pa - pb:+.0%} |")
+        lines.append(f"| {m}. {title} | {pb:.0%} | {pa:.0%} | {change_text(before, after, 'unseen', m) if after else '-'} |")
     lines += ["", "## Challenges", "",
-              "Unseen variants passed (of 2), before -> after. Seen variants in brackets.", "",
+              "Share of unseen runs passed, before -> after (seen in brackets).", "",
               "| Challenge | Level | Objectives | Before | After |", "|---|---|---|---|---|"]
     for c in CHALLENGES:
         def cell(res):
             if not res or c["id"] not in res:
                 return "-"
-            un = sum(r["passed"] for r in res[c["id"]].get("unseen", []))
-            se = sum(r["passed"] for r in res[c["id"]].get("seen", []))
-            return f"{un}/2 ({se}/2)"
+            un = runs_of({c["id"]: res[c["id"]]}, "unseen")
+            se = runs_of({c["id"]: res[c["id"]]}, "seen")
+            return f"{sum(un)}/{len(un)} ({sum(se)}/{len(se)})"
         obj = ", ".join(f"{m} {op} {v}" for m, op, v in c["objectives"])
         lines.append(f"| {c['id'].upper()} {c['title']} | {LEVELS[c['level']]} | {obj} | {cell(before)} | {cell(after)} |")
     lines += ["", "## Skill measures (unseen scenarios, averages)", "", "| Measure | Modules | Before | After |",
@@ -739,7 +820,8 @@ def report_text(driver_id: str) -> str:
         lines += ["| Driver | Races | Wins | Avg place | Damage |", "|---|---|---|---|---|"]
         for n, t in sorted(races.items(), key=lambda kv: kv[1]["place"]):
             label = {"Original": f"**{info['name']} (original)**", "Candidate": f"**{info['name']} (Academy candidate)**"}
-            lines.append(f"| {label.get(n, n)} | {t['races']} | {t['wins']} | {t['place']:.2f} | {t['damage']:.0%} |")
+            lines.append(f"| {label.get(n, n)} | {t['races']} | {t['wins']} | {t['place']:.2f} +- {t.get('place_se', 0):.2f} "
+                         f"| {t['damage']:.0%} |")
     else:
         lines.append("Not raced yet.")
     ranked = sorted(module_after.items(), key=lambda kv: -kv[1])
@@ -755,8 +837,9 @@ def report_text(driver_id: str) -> str:
               + (", ".join(failed[:10]) + (" ..." if len(failed) > 10 else "") if failed else "none") + "."]
     if races and "Candidate" in races:
         o, c = races["Original"], races["Candidate"]
-        verdict = ("races better" if c["place"] < o["place"] - 0.1 else
-                   "races worse" if c["place"] > o["place"] + 0.1 else "races about the same")
+        noise = 2 * math.hypot(o.get("place_se", 0.3), c.get("place_se", 0.3))
+        verdict = ("races better" if c["place"] < o["place"] - noise else
+                   "races worse" if c["place"] > o["place"] + noise else "races about the same (within noise)")
         lines.append(f"- In races the candidate {verdict} than the original (avg place {c['place']:.2f} v "
                      f"{o['place']:.2f}, wins {c['wins']} v {o['wins']}).")
     lines += ["", "The original brain is unchanged; `python -m ai.academy promote "
@@ -811,6 +894,8 @@ def main() -> int:
     r.add_argument("--generations", type=int, default=GENERATIONS)
     r.add_argument("--population", type=int, default=POPULATION)
     r.add_argument("--workers", type=int, default=4)
+    t = sub.add_parser("retest", help="redo the tests (not the training) with the current method")
+    t.add_argument("driver", help='a driver name, or "all"')
     p = sub.add_parser("promote")
     p.add_argument("driver")
     sub.add_parser("report")
@@ -824,6 +909,12 @@ def main() -> int:
         for d in sorted(ACADEMY_DIR.glob("*/driver.json")):
             write_report(d.parent.name)
         print(write_summary())
+        return 0
+    if args.cmd == "retest":
+        names = [c["name"] for c in stable.house_rivals()] if args.driver == "all" else [args.driver]
+        for name in names:
+            r = retest(name, log=lambda m: print(f"{time.strftime('%H:%M')} {m}", flush=True))
+            print(f"{name}: unseen pass rate {r['before']:.0%} -> {r['after']:.0%}", flush=True)
         return 0
     if args.cmd == "promote":
         print(promote(args.driver))

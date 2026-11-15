@@ -108,3 +108,18 @@ def test_the_whole_course_runs_keeps_the_original_and_writes_a_report(small_acad
     assert (rivals / "careful-keith.npz").read_bytes() != before
     assert list((rivals / "old").glob("careful-keith-*.npz"))
     assert json.loads((rivals / "careful-keith.json").read_text())["academy"]["gen"] in (1, 2)
+
+
+def test_repeats_differ_and_margins_say_what_is_noise():
+    spec = academy.driver_spec("Zappy Zoe")
+    for cid in ("m3l2", "m6l3", "m1l2"):
+        v = academy.BY_ID[cid]["unseen"][0]
+        a = academy.run_variant(spec["weights"], spec["arch"], spec["traits"], dict(v, seconds=8.0), rep=0)
+        b = academy.run_variant(spec["weights"], spec["arch"], spec["traits"], dict(v, seconds=8.0), rep=1)
+        assert a != b, cid                                           # a repeat is a different run
+    res = {"m1l1": {"unseen": [{"passed": 2 / 3, "runs": [True, True, False]},
+                               {"passed": 1.0, "runs": [True, True, True]}]}}
+    assert academy.pass_rate(res, "unseen") == 5 / 6 and academy.completed(res, "m1l1")
+    assert 0 < academy.margin(res, "unseen") < 0.3
+    worse = {"m1l1": {"unseen": [{"passed": 0.0, "runs": [False] * 3}] * 2}}
+    assert "real" in academy.change_text(res, worse) and "noise" in academy.change_text(res, res)
