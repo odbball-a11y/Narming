@@ -99,12 +99,19 @@ PHASE1_DAMAGE = 0.05
 SCRIPTED_ONLY_GENS = 10
 RIVAL_MIX = (("scripted", 0.4), ("recent", 0.4), ("hall", 0.2))
 TRAFFIC_CHANCE = 0.3     # share of racing-school races that are traffic drills (user request)
-DRILL_FIELD = 8          # cars in a drill: the learner at the back of seven slower ones
+DRILL_FIELD = 8          # cars in a full drill: the learner at the back of seven slower ones
+# Drills get harder as the driver copes (drill_level, 0..1, from its recent traffic
+# tests): from 2 very slow cars keeping to the racing line to 7 cars, some defending
+# or wandering, at DRILL_PACE.  (A driver new to traffic drove worse behind a queue
+# than alone and never caught it, so the full drill taught it nothing.)
+DRILL_EASY = (0.60, 0.68)   # backmarkers' share of top speed at level 0 (about 25-35% slower)
+DRILL_LEVEL_PASSES = 3.0    # clean passes per traffic test that count as level 1
+REACH_GAP = 6.0             # getting this close behind a car counts as reaching it
 DRILL_LAPS = 2.5         # drill length in scripted laps
 DRILL_PACE = (0.70, 0.82)  # backmarkers' share of top speed: about 9-18% slower a lap than a good AI
                            # (0.86-0.98 was only 3-6% slower: nobody could get by, so nobody tried)
 CLEAN_TICKS = 2 * 120    # a pass is clean with no contact with that car this long before or after
-DRILL_WEIGHTS = {"clean_pass": 0.6, "place": 0.5, "suffered": 0.1}
+DRILL_WEIGHTS = {"clean_pass": 0.6, "reach": 0.15, "place": 0.5, "suffered": 0.1}
 FIELD = 4                # cars in a training race unless a run's config says otherwise ("field")
 WRECK_CHANCE = 0.25      # share of racing-school races where one rival crashes out and sits on track
 RECENT_GENS = 6          # "recent" = champions of the last few generations
@@ -266,6 +273,7 @@ class RaceStats:
         self.ticks = 0
         self.ahead = {j: self._diff(j) > 0.0 for j in self.others}
         self.contact_tick = {j: -10 ** 9 for j in self.others}
+        self.reached: set = set()             # cars it has caught up with (within REACH_GAP behind)
         self.pass_log: list[list] = []        # [car passed, tick, still clean]
 
     def _diff(self, j: int) -> float:
@@ -300,6 +308,8 @@ class RaceStats:
         if world.tick % DECISION_TICKS == 0:
             for j in self.others:
                 d = self._diff(j)
+                if not self.ahead[j] and -REACH_GAP < d and world.cars[j].speed > 5.0:
+                    self.reached.add(j)
                 if not self.ahead[j] and d > self.MARGIN:
                     self.ahead[j] = True
                     self.overtakes += 1
@@ -401,6 +411,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         "walls": [s.walls for s in stats],
         "overtakes": [s.overtakes for s in stats],
         "clean_passes": [s.clean_passes for s in stats],
+        "reached": [len(s.reached) for s in stats],
         "passed": [s.passed for s in stats],
         "draft": [s.draft_share() for s in stats],
     }
@@ -463,7 +474,7 @@ def drill_score(result: dict, weights: dict | None = None) -> np.ndarray:
     alongside costs a little; places count for half."""
     w = weights or RACE_WEIGHTS
     r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
-    return (DRILL_WEIGHTS["clean_pass"] * r["clean_passes"]
+    return (DRILL_WEIGHTS["clean_pass"] * r["clean_passes"] + DRILL_WEIGHTS["reach"] * r.get("reached", 0.0)
             + DRILL_WEIGHTS["place"] * place_points(r["place"], r.get("field"), w["place"])
             + w["laps"] * r["laps"] - w["damage"] * r["damage"] - max(w["fault"], 0.25) * r["fault"]
             - DRILL_WEIGHTS["suffered"] * r["suffered"] - w["walls"] * r["walls"])
@@ -738,6 +749,15 @@ def car_for(config: dict, gen: int) -> dict | None:
     return car
 
 
+def drill_level(history: list[dict]) -> float:
+    """How hard the traffic drills are (0..1): the clean passes of the last ten
+    traffic tests, against DRILL_LEVEL_PASSES."""
+    tests = [h["traffic"] for h in history[-10:] if h.get("traffic")]
+    if not tests:
+        return 0.0
+    return round(min(1.0, sum(t["clean_passes"] for t in tests) / len(tests) / DRILL_LEVEL_PASSES), 2)
+
+
 def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) -> list[dict]:
     """The racing-school races for generation `gen` (the same for every
     driver in it).  Rivals are "scripted" or the generation number of a
@@ -757,12 +777,17 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
     for k in range(count):
         if rng.random() < TRAFFIC_CHANCE:      # a traffic drill: from the back of a queue of slower cars
             name = tracks[k % len(tracks)]
+            level = float(config.get("drill_level", 1.0))
+            n = 2 + int(round((DRILL_FIELD - 3) * level))
+            lo = DRILL_EASY[0] + (DRILL_PACE[0] - DRILL_EASY[0]) * level
+            hi = DRILL_EASY[1] + (DRILL_PACE[1] - DRILL_EASY[1]) * level
             backmarkers = []
-            for _ in range(DRILL_FIELD - 1):
-                style = traffic.STYLES[int(rng.choice(3, p=[0.6, 0.25, 0.15]))]
-                backmarkers.append(f"traffic:{rng.uniform(*DRILL_PACE):.2f}:{style}")
-            scenarios.append({"track": name, "slot": DRILL_FIELD - 1, "rivals": backmarkers, "drill": True,
-                              "car": car_for(config, gen), "rival_cars": [None] * (DRILL_FIELD - 1),
+            for _ in range(n):
+                odd = 0.4 * level                    # defending and wandering cars come with the level
+                style = traffic.STYLES[int(rng.choice(3, p=[1.0 - odd, odd * 0.625, odd * 0.375]))]
+                backmarkers.append(f"traffic:{rng.uniform(lo, hi):.2f}:{style}")
+            scenarios.append({"track": name, "slot": n, "rivals": backmarkers, "drill": True,
+                              "level": round(level, 2), "car": car_for(config, gen), "rival_cars": [None] * n,
                               "seconds": round(LAP_SECONDS.get(name, DEFAULT_SECONDS / 2) * DRILL_LAPS, 1)})
             continue
         rivals = []
@@ -942,6 +967,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             racing = start is not None and gen >= start
             scenarios, resolved, bonus = [], None, 0.0
             if racing:
+                config["drill_level"] = drill_level(history)
                 scenarios = make_scenarios(config, gen, start, [h["gen"] for h in history])
                 resolved = [dict(s, rivals=[champion_of(r) if isinstance(r, int) or str(r).startswith("p:") else r
                                             for r in s["rivals"]])

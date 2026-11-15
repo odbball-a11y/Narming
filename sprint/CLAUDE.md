@@ -566,6 +566,14 @@ podium): `record_result(..., finished=)`.
   First camp (Clara, 60 gens, backmarkers 0.86-0.98, only 3-6% slower than her):
   she learned never to try (0/0, 8th): the queue could not be passed, so sitting
   behind scored best.
+- Gradual drills: `drill_level(history)` (0..1 = the last ten traffic tests'
+  average clean passes / `DRILL_LEVEL_PASSES` 3), set in the config before each
+  generation's scenarios: level 0 = 2 backmarkers at `DRILL_EASY` 0.60-0.68 all on
+  the racing line, level 1 = 7 at `DRILL_PACE` with 40% defending/wandering.
+  `RaceStats.reached` (cars it got within `REACH_GAP` 6 behind) earns
+  `DRILL_WEIGHTS["reach"]` 0.15 each in a drill. Why: in camp 2 (backmarkers
+  0.70-0.82) Clara drove worse behind the queue than alone (ran wide, 9-13 speed
+  v their 24) and never caught it; 0 clean passes after 40 gens.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

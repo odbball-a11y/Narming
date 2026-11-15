@@ -58,3 +58,22 @@ def test_the_traffic_test_reports_clean_passes():
     weights = np.random.default_rng(2).normal(0, 0.3, n_weights(DEFAULT_ARCH))
     r = evolve.traffic_test(weights, DEFAULT_ARCH)
     assert r["of"] == 8 and 1 <= r["place"] <= 8 and 0 <= r["clean_passes"] <= r["passes"]
+
+
+def test_drills_start_easy_and_get_harder():
+    base = {"seed": 5, "tracks": ["oval"], "races_per_track": 20, "partners": None, "car": None}
+    easy = [s for s in evolve.make_scenarios(dict(base, drill_level=0.0), 30, 1, list(range(1, 30))) if s.get("drill")]
+    hard = [s for s in evolve.make_scenarios(dict(base, drill_level=1.0), 30, 1, list(range(1, 30))) if s.get("drill")]
+    assert easy and hard
+    assert all(len(s["rivals"]) == 2 and s["slot"] == 2 for s in easy)
+    assert all(r.endswith(":line") and float(r.split(":")[1]) <= evolve.DRILL_EASY[1] for s in easy for r in s["rivals"])
+    assert all(len(s["rivals"]) == evolve.DRILL_FIELD - 1 for s in hard)
+    assert evolve.drill_level([]) == 0.0
+    tests = [{"traffic": {"clean_passes": 3}}] * 10
+    assert evolve.drill_level(tests) == 1.0
+
+
+def test_catching_a_car_counts_towards_a_drill():
+    base = {"place": [3], "field": [3], "laps": [2.0], "damage": [0.0], "fault": [0], "suffered": [0],
+            "walls": [0], "overtakes": [0], "passed": [0], "clean_passes": [0], "draft": [0.0]}
+    assert evolve.drill_score(dict(base, reached=[2]))[0] > evolve.drill_score(dict(base, reached=[0]))[0]
