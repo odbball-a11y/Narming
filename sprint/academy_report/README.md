@@ -7,5 +7,5 @@ Every driver took 32 challenges in 8 modules (beginner to master), each with see
 | [Careful Keith](careful-keith.md) | 34% | 33% | E (novice) | 4.20 -> 4.95 |
 | [Clinical Clara](clinical-clara.md) | 32% | 16% | E (novice) | 3.10 -> 2.50 |
 | [Dangerous Dave](dangerous-dave.md) | 23% | 28% | E (novice) | 4.10 -> 3.15 |
-| [Zappy Zoe](zappy-zoe.md) | 36% | 33% | E (novice) | 1.90 -> 2.90 |
+| [Zappy Zoe](zappy-zoe.md) | 34% | 35% | E (novice) | 2.50 -> 3.00 |
 | [Bold Zoe](zoe-bold.md) | 27% | 34% | E (novice) | 3.10 -> 2.10 |
