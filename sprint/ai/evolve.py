@@ -35,7 +35,7 @@ from sim.track import Track
 from sim.telemetry import LapRecorder
 from sim.world import World
 
-from . import jsonio
+from . import jsonio, lessons
 from .brain import (DECISION_TICKS, DEFAULT_ARCH, N_INPUTS, Brain, NeuralDriver, Population,
                     fit_genomes, genome_size, n_weights, notes_for, notes_mask, observe, random_weights,
                     to_controls, track_reference, with_notes)
@@ -353,8 +353,11 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
     cars = [scenario.get("car")] + list(scenario.get("rival_cars") or [None] * rivals)
     cars += [None] * (rivals + 1 - len(cars))
     params = [cartraits.params_for(c) if c else None for c in cars]
+    if scenario.get("grip"):                    # an adverse, greasy surface for everyone
+        params = [lessons.grip_scaled(p, scenario["grip"]) for p in params]
     for _ in range(count):
         world = World(track, slots=[slot] + others, laps=10 ** 9, rolling=True, params=params)
+        lessons.place(world, 0, scenario.get("start"))   # a lesson may start the learner in trouble
         drivers = {}
         for k, rival in enumerate(scenario["rivals"]):
             if isinstance(rival, str) and rival.startswith("wreck:"):
@@ -385,6 +388,8 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         world.end_tick = ticks
     mine = [Controls()] * count
     theirs = {k: [Controls()] * count for k in brains}
+    off_track, sliding = [0] * count, [0] * count
+    samples = max(1, (ticks + DECISION_TICKS - 1) // DECISION_TICKS)
     for tick in range(ticks):
         if tick % DECISION_TICKS == 0:
             for p in progress:
@@ -399,6 +404,9 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
             for k in range(1, rivals + 1):
                 controls.append(theirs[k][n] if k in brains else scripted[n][k].act(world, k))
             stats[n].on_tick(world.step(controls))
+            if tick % DECISION_TICKS == 0:
+                off_track[n] += world.cars[0].surface != 0
+                sliding[n] += bool(world.cars[0].sliding)
     for p in progress:
         p.update(retire=False)
     return {
@@ -412,6 +420,8 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         "overtakes": [s.overtakes for s in stats],
         "clean_passes": [s.clean_passes for s in stats],
         "reached": [len(s.reached) for s in stats],
+        "offtrack": [g / samples for g in off_track],
+        "slide": [g / samples for g in sliding],
         "passed": [s.passed for s in stats],
         "draft": [s.draft_share() for s in stats],
     }
@@ -465,6 +475,16 @@ def place_points(place, field, table) -> np.ndarray:
     field = np.full_like(place, len(table)) if field is None else np.asarray(field, dtype=float)
     frac = np.where(field > 1, (place - 1) / np.maximum(field - 1, 1), 0.0)
     return np.interp(np.clip(frac, 0, 1) * (len(table) - 1), np.arange(len(table)), table)
+
+
+def lesson_score(result: dict, weights: dict | None = None) -> np.ndarray:
+    """Score of a solo Academy lesson (control, limits, recovery, surfaces):
+    distance covered, less damage, wall hits, time off the tarmac and time
+    sliding."""
+    w = weights or RACE_WEIGHTS
+    r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
+    return (r["laps"] - w["damage"] * r["damage"] - 0.05 * r["walls"]
+            - 1.0 * r.get("offtrack", 0.0) - 0.3 * r.get("slide", 0.0))
 
 
 def drill_score(result: dict, weights: dict | None = None) -> np.ndarray:
@@ -555,7 +575,13 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
     totals: dict = {}
     for scenario in scenarios:
         part = merged(k)
-        race += drill_score(part, weights) if scenario.get("drill") else race_score(part, bonus, weights)
+        lesson = scenario.get("lesson")
+        if lesson == "solo":
+            race += lesson_score(part, weights)
+        elif scenario.get("drill") or lesson == "traffic":
+            race += drill_score(part, weights)
+        else:
+            race += race_score(part, bonus, weights)
         for key in ("place", "damage", "fault", "overtakes", "passed", "draft", "clean_passes"):
             totals[key] = totals.get(key, 0.0) + np.asarray(part[key], dtype=float)
         k += len(pieces)
@@ -835,6 +861,11 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
                               tracks[k % len(tracks)], DEFAULT_SECONDS)})
         if k % field == field - 1:
             slots = list(rng.permutation(field))
+    if config.get("academy"):                   # Racing Academy: most races become lessons
+        from . import academy
+        lesson_rng = np.random.default_rng([config["seed"], gen, 31])
+        scenarios = [academy.lesson_scenario(config, gen, start, lesson_rng)
+                     if lesson_rng.random() < academy.LESSON_SHARE else s for s in scenarios]
     return scenarios
 
 
@@ -847,7 +878,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           race_seconds: dict | None = None, partners: list | None = None, car=None,
           driving_school: bool = False, exam_tracks: list | None = None,
           solo_share: float | None = None, notes: bool = False, notes_only: bool = False,
-          record_laps: bool = True, field: int | None = None, drill_prior: list | None = None) -> Path:
+          record_laps: bool = True, field: int | None = None, drill_prior: list | None = None,
+          academy: dict | None = None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -912,6 +944,9 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "partners": partners, "car": car, "exam_tracks": exam_tracks, "solo_share": solo_share,
                   "notes_only": bool(notes_only), "field": int(field or FIELD),
                   "drill_prior": list(drill_prior or []),
+                  **({"academy": True, "academy_driver": academy.get("driver"),
+                      "academy_partners": list(academy.get("partners") or []),
+                      "academy_generations": int(academy.get("generations") or 30)} if academy else {}),
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
