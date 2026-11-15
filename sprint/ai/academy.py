@@ -666,27 +666,92 @@ def run(name: str, generations: int = GENERATIONS, population: int = POPULATION,
     d = prepare(spec)
     log(f"== {spec['name']} ({spec['id']})")
     w0, arch0, info = original(spec["id"])
+    note = lambda stage: _save(d / "status.json", {"stage": stage, "generations": generations})
     if not (d / "before.json").exists():
+        note("testing the original")
         log("  testing the original on every challenge ...")
         _save(d / "before.json", evaluate(w0, arch0, info["traits"], spec["id"]))
     done = len(evolve.list_generations(d / "run"))
     if done < generations:
+        note("training")
         log(f"  training the candidate: generations {done + 1}-{generations}")
         train(spec["id"], generations - done, population, workers, log)
     if not (d / "selected.json").exists():
+        note("choosing the best checkpoint")
         select(spec["id"], log)
     if not (d / "after.json").exists():
         sel = _load(d / "selected.json")
         w1, arch1 = candidate_weights(spec["id"], sel["gen"])
+        note("testing the candidate")
         log(f"  testing the candidate (gen {sel['gen']}) on every challenge ...")
         _save(d / "after.json", evaluate(w1, arch1, info["traits"], spec["id"]))
     if not (d / "races.json").exists():
+        note("race panel")
         log("  race panel: original v candidate v the house rivals ...")
         _save(d / "races.json", race_panel(spec["id"]))
     write_report(spec["id"])
+    note("finished")
     log(f"  report: {REPORT_DIR / (spec['id'] + '.md')}")
     return {"before": pass_rate(_load(d / "before.json"), "unseen"),
             "after": pass_rate(_load(d / "after.json"), "unseen")}
+
+
+def status(driver_id: str) -> dict:
+    """Where a driver is in the course, for the game:
+    {"stage": "not enrolled" | "testing the original" | "training" | ... | "finished",
+     "done": generations trained, "of": generations planned}."""
+    d = folder(driver_id)
+    info = _load(d / "status.json") or {}
+    done = len(evolve.list_generations(d / "run")) if (d / "run").exists() else 0
+    stage = info.get("stage") or ("not enrolled" if not (d / "driver.json").exists() else "enrolled")
+    if (d / "races.json").exists():
+        stage = "finished"
+    return {"stage": stage, "done": done, "of": info.get("generations", GENERATIONS)}
+
+
+def promotable(driver_id: str) -> tuple[bool, str]:
+    """Whether the candidate has really improved (more than the noise) on
+    unseen scenarios or in the race panel; and why."""
+    d = folder(driver_id)
+    before, after, races = _load(d / "before.json"), _load(d / "after.json"), _load(d / "races.json")
+    if not (before and after and races):
+        return False, "the course is not finished"
+    diff = pass_rate(after, "unseen") - pass_rate(before, "unseen")
+    se = math.hypot(margin(before, "unseen"), margin(after, "unseen"))
+    o, c = races["Original"], races["Candidate"]
+    noise = 2 * math.hypot(o.get("place_se", 0.3), c.get("place_se", 0.3))
+    if diff > 2 * se:
+        return True, f"unseen pass rate up {diff:+.0%}, more than the noise"
+    if c["place"] < o["place"] - noise:
+        return True, f"races better: avg place {c['place']:.2f} v {o['place']:.2f}"
+    return False, (f"no real improvement (unseen {diff:+.0%}, races {c['place']:.2f} v {o['place']:.2f}): "
+                   "promotion not offered")
+
+
+def summary(driver_id: str) -> dict | None:
+    """What the game's report page shows."""
+    d = folder(driver_id)
+    info, before = _load(d / "driver.json"), _load(d / "before.json")
+    if not (info and before):
+        return None
+    after, races, sel = _load(d / "after.json") or {}, _load(d / "races.json"), _load(d / "selected.json")
+    modules = []
+    for m, title in MODULES.items():
+        modules.append({"module": m, "title": title, "before": pass_rate(before, "unseen", m),
+                        "after": pass_rate(after, "unseen", m) if after else None,
+                        "change": change_text(before, after, "unseen", m) if after else "-"})
+    ranked = sorted(modules, key=lambda r: -(r["after"] if r["after"] is not None else r["before"]))
+    ok, why = promotable(driver_id)
+    return {"name": info["name"], "aggression": info["aggression"], "caution": info["caution"],
+            "before": pass_rate(before, "unseen"), "after": pass_rate(after, "unseen") if after else None,
+            "margin": margin(before, "unseen"), "change": change_text(before, after) if after else "-",
+            "grade_before": _grade(pass_rate(before, "unseen")),
+            "grade_after": _grade(pass_rate(after, "unseen")) if after else None,
+            "completed_before": sum(completed(before, c["id"]) for c in CHALLENGES),
+            "completed_after": sum(completed(after, c["id"]) for c in CHALLENGES) if after else None,
+            "modules": modules, "strengths": [r["title"] for r in ranked[:2]],
+            "weaknesses": [r["title"] for r in ranked[-2:]], "races": races, "gen": sel["gen"] if sel else None,
+            "promotable": ok, "why": why}
 
 
 def retest(name: str, log=print) -> dict:
@@ -723,6 +788,11 @@ def promote(name: str) -> str:
         (rivals / f"{spec['id']}.json").write_text(json.dumps(card, indent=1), encoding="utf-8")
         return f"{spec['name']} now races with the Academy candidate (old brain in house/rivals/old/)"
     racer_dir = Path(spec["source"][6:])
+    if not stable.can_race(racer_dir):
+        raise ValueError(f"{spec['name']} no longer races")
+    left = stable.progress(racer_dir)
+    if left["done"] < left["target"]:
+        raise ValueError(f"{spec['name']} still has training to finish")
     racer = stable.load(racer_dir)
     version = {"run": f"v{len(racer['versions']) + 1}", "generations": 0, "aggression": racer["aggression"],
                "caution": racer["caution"], "partners": [], "track": racer["versions"][-1].get("track", "speedway"),
@@ -735,6 +805,8 @@ def promote(name: str) -> str:
     hist = [h for h in evolve.load_history(run_dir) if h["gen"] <= sel["gen"]]
     (dest / "history.json").write_text(json.dumps(hist), encoding="utf-8")
     racer["versions"].append(version)
+    racer["academy"] = {"gen": sel["gen"], "date": stamp,
+                        "unseen_pass_rate": round(pass_rate(_load(d / "after.json") or {}, "unseen"), 3)}
     stable.save(racer_dir, racer)
     return f"{spec['name']} now races with the Academy candidate (earlier versions kept)"
 
@@ -894,6 +966,7 @@ def main() -> int:
     r.add_argument("--generations", type=int, default=GENERATIONS)
     r.add_argument("--population", type=int, default=POPULATION)
     r.add_argument("--workers", type=int, default=4)
+    r.add_argument("--report-dir", default=None, help="where the reports go (default academy_report/)")
     t = sub.add_parser("retest", help="redo the tests (not the training) with the current method")
     t.add_argument("driver", help='a driver name, or "all"')
     p = sub.add_parser("promote")
@@ -919,6 +992,9 @@ def main() -> int:
     if args.cmd == "promote":
         print(promote(args.driver))
         return 0
+    if args.report_dir:
+        global REPORT_DIR
+        REPORT_DIR = Path(args.report_dir)
     names = [c["name"] for c in stable.house_rivals()] if args.driver == "all" else [args.driver]
     for name in names:
         result = run(name, args.generations, args.population, args.workers,

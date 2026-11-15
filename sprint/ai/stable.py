@@ -171,14 +171,18 @@ def livery_of(racer_dir) -> dict:
 def shown_name(data: dict) -> str:
     """A racer's or house rival's name, with a * when it has had extra
     training in track school (data = racer.json or a house card)."""
-    return data["name"] + (" *" if data.get("track_school") else "")
+    return data["name"] + (" *" if data.get("track_school") or data.get("academy") else "")
 
 
 def track_school_text(data: dict) -> str | None:
     """'* track school: Esses (gen 46, 13.42 s)' or None."""
     done = data.get("track_school")
-    if not done:
+    academy = data.get("academy")
+    if not done and not academy:
         return None
+    if not done:
+        return f"* Racing Academy graduate (gen {academy.get('gen')}, unseen pass rate " \
+               f"{academy.get('unseen_pass_rate', 0):.0%})"
     parts = [f"{TRACK_NAMES.get(t['track'], t['track'])} (gen {t['gen']}"
              + (f", {t['lap']:.2f} s)" if t.get("lap") else ")") for t in done]
     return "* extra training in track school: " + ", ".join(parts)

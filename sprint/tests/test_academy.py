@@ -123,3 +123,33 @@ def test_repeats_differ_and_margins_say_what_is_noise():
     assert 0 < academy.margin(res, "unseen") < 0.3
     worse = {"m1l1": {"unseen": [{"passed": 0.0, "runs": [False] * 3}] * 2}}
     assert "real" in academy.change_text(res, worse) and "noise" in academy.change_text(res, res)
+
+
+def test_the_academy_screen_shows_reports_and_only_offers_real_improvements(small_academy, monkeypatch):
+    import os
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+    from game.academy_screen import AcademyScreen
+    from game.app import App
+    from game.audio import Audio
+    rivals = small_academy / "rivals"
+    shutil.copytree(stable.RIVALS_DIR, rivals)
+    monkeypatch.setattr(stable, "RIVALS_DIR", rivals)
+    academy.run("Careful Keith", generations=1, population=4, workers=1, log=lambda m: None)
+    assert academy.status("careful-keith")["stage"] == "finished"
+    pygame.display.init()
+    pygame.font.init()
+    app = App(pygame.display.set_mode((960, 540)), Audio())
+    view = AcademyScreen(app)
+    app.show(view)
+    app.draw()
+    view.row = next(k for k, d in enumerate(view.list) if d["id"] == "careful-keith")
+    view.open_report()
+    assert view.mode == "report"
+    app.draw()
+    ok, why = academy.promotable("careful-keith")
+    before = (rivals / "careful-keith.npz").read_bytes()
+    view.promote()
+    view.promote()
+    changed = (rivals / "careful-keith.npz").read_bytes() != before
+    assert changed == ok                                    # promoted only if the improvement was real

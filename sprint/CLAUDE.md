@@ -586,6 +586,39 @@ podium): `record_result(..., finished=)`.
   the racer's last ten from earlier versions, so an upskill continues at its level.
   Clinical Clara is also a house stud (`HOUSE_STUDS` = zappy-zoe, clinical-clara)
   so her traffic training can be bred into foals.
+- Racing Academy (`ai/academy.py`, `ai/lessons.py`; user: "complete Racing
+  Academy ... progressive challenges ... separate candidate brains ... unseen
+  scenarios ... Academy Report for each driver"). `CHALLENGES`: 8 modules x 4
+  levels, each with objectives (metric, <= or >=, value) and 2 seen + 2 unseen
+  variants `{"track", "seconds", "rivals" ("scripted", "traffic:..", "wreck:..",
+  "house:<id>[:boost]"), "slot", "start", "grip"}`. `lessons.place` starts a car
+  in trouble (corner, heading, slide, yaw, grass), `lessons.grip_scaled` a greasy
+  surface. `run_variant(w, arch, traits, variant, rep)` runs it on a real World and
+  measures laps, pace, offtrack, slide, line_error, limit_use, recovered, walls,
+  damage, fault/contacts, passes/clean_passes/clean_ratio, reached, place;
+  `evaluate` runs every variant `REPEATS` (3) times (`_nudge`: every car starts a
+  little to one side; recovery starts vary) and keeps the share of runs passed;
+  `margin` / `change_text` say whether a change is real (> 2 standard errors).
+  Pass marks were calibrated on the five house rivals (beginner ~most pass,
+  master ~few). Training: `evolve.train(academy=...)` (config `academy*`):
+  `make_scenarios` turns `LESSON_SHARE` (70%) of races into `lesson_scenario`s
+  from the seen variants, weighted by a curriculum (module 1 early .. 8 late);
+  `test_race` handles `start` and `grip`, returns `offtrack` / `slide`;
+  `lesson_score` scores solo lessons. `run(name)`: copy the original
+  (`academy/<id>/original.npz`, git-ignored), test it, train the candidate with
+  its own personality (30 gens, population 32), pick the best of 3 checkpoints on
+  the seen variants, test it, 20-race six-car panel (original and candidate in
+  the same field), report (`academy_report/<id>.md` + README). Resumable;
+  `retest` redoes the tests, `promote` makes the candidate the driver (old brain
+  kept; card / racer gets `academy`, shown with a *). Game: main menu ACADEMY
+  (`game/academy_screen.py`): enrol (runs `python -m ai.academy run` in the
+  background, `App.start_academy`), progress, in-game report, P twice promotes
+  only when `promotable` (a real unseen improvement or races better beyond noise).
+  First results (single runs per scenario, before the robust testing): Keith
+  36% -> 33% unseen, races 4.30 -> 5.40 (worse); Clara 36% -> 27%, races 2.30 ->
+  3.60 (worse); Dave 23% -> 27%. Near-identical copies of Keith scored 33-41%:
+  single runs were too noisy, hence `REPEATS`. The candidates improved on the
+  practised (seen) scenarios but not on unseen ones: overfitting.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

@@ -101,6 +101,21 @@ class App:
         """Breed a foal's litter and pick the best, in a separate process."""
         self._start_job("breed", foal_dir)
 
+    def start_academy(self, driver_name: str, folder) -> None:
+        """Put a driver through the Racing Academy in a separate process; its
+        reports stay in its academy folder."""
+        from ai import evolve
+        if self.training_dir():
+            raise RuntimeError("already training")
+        folder = Path(folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        workers = max(1, min(3, (os.cpu_count() or 2) - 1))
+        log = open(folder / "academy.log", "a", encoding="utf-8")
+        proc = subprocess.Popen([sys.executable, "-m", "ai.academy", "run", driver_name, "--workers", str(workers),
+                                 "--report-dir", str(folder.parent / "reports")],
+                                cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT, **_own_group())
+        self.trainer = {"proc": proc, "dir": str(folder), "log": log}
+
     def start_trackschool(self, school_dir) -> None:
         """Train a track-school copy in a separate process."""
         self._start_job(None, school_dir, module="ai.trackschool")
