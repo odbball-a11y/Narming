@@ -694,6 +694,15 @@ def record_race(race, defer_retire: bool = False) -> list[str]:
     return news
 
 
+def _arch_of(vector: np.ndarray, like: dict) -> dict:
+    """The arch a stored vector really has (notes layout and input version),
+    even when `like` (the graduate's card) is at an older input version."""
+    from .brain import stored_version
+    arch = arch_for_vector(vector, like)
+    v = stored_version(len(vector), arch)
+    return dict(arch, inputs=v) if v else arch
+
+
 def publish(racer_dir) -> Path:
     """Make a workshop racer a house rival: copy its brain and card into
     house/rivals/, which ships with the game."""
@@ -707,7 +716,7 @@ def publish(racer_dir) -> Path:
     np.savez_compressed(RIVALS_DIR / f"{racer['id']}.npz", pop=best)
     card = {"name": racer["name"], "aggression": racer["aggression"], "caution": racer["caution"],
             "traits": traits_of(racer_dir), "livery": livery_of(racer_dir),
-            "arch": arch_for_vector(best, graduate()["arch"]), "created": racer["created"],
+            "arch": _arch_of(best[0], graduate()["arch"]), "created": racer["created"],
             "generations": sum(v["generations"] for v in racer["versions"]),
             "exam": latest_exam(racer_dir)}
     _write(RIVALS_DIR / f"{racer['id']}.json", card)
