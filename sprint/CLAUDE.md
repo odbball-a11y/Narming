@@ -543,6 +543,30 @@ podium): `record_result(..., finished=)`.
   Pace about scripted (0-3% either way); in training races she wins (place 1.0-1.6,
   1-1.6 passes) but in the exam from last v three scripted she finishes 4th with
   ~0.2 passes: she cannot fight through a pack. Candidate for traffic drills.
+- Traffic drills (user: "train with loads of traffic ... manoeuvring without
+  contact, reward overtaking"). `evolve.TRAFFIC_CHANCE` (30%) of racing-school
+  races are drills: the learner at the back of `DRILL_FIELD` (8) cars, the rest
+  `"traffic:<pace>:<style>"` = `sim/traffic.py` `TrafficDriver` (scripted, held to
+  0.86-0.98 of its top speed; styles line 60% / defend 25% / wander 15%),
+  `DRILL_LAPS` 2.5 scripted laps. `drill_score`: `DRILL_WEIGHTS["clean_pass"]`
+  (0.6) per clean pass + half the place points + laps - the driver's damage and
+  fault weights (fault at least 0.25) - 0.1 per hit suffered - walls.
+  `RaceStats.clean_passes`: a pass of a moving car with no contact with it for
+  `CLEAN_TICKS` (2 s) before or after and not passed straight back (5 s).
+  `traffic_test` (every generation, `entry["traffic"]`): `TRAFFIC_TEST`, Speedway,
+  from the back of seven fixed backmarkers, 3 laps; clean passes, passes,
+  contacts, place, damage; the racer card shows "traffic passes"
+  (`stable.latest_traffic` / `traffic_text`). Inputs version 8 (60 inputs): the
+  gap to the nearest car ahead in the left and right half of the track, and a
+  third car ahead (gap, side). Baseline traffic test, house rivals before any
+  drills: Clara 0 clean / 0 passes (8th), Zappy Zoe 0/1 (6 contacts, 4th), Bold
+  Zoe 1/4 (8 contacts, 8th), Dave 1/4 (7 contacts, 8th), Keith 0/0 (6th).
+- Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
+  track notes (it compared against `n_weights` only), so cards and run configs
+  were moved to new inputs while their weights were not (house rivals failed to
+  load). `brain.stored_version` / `brain.align` detect the version a vector was
+  really stored at; `migrate` now repairs such cards and runs (968 files here),
+  and `stable.house_driver` aligns on load.
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`

@@ -417,6 +417,22 @@ def history(racer_dir) -> list[dict]:
     return out
 
 
+def latest_traffic(racer_dir) -> dict | None:
+    """The latest traffic test (evolve.traffic_test), or None if never taken."""
+    if load(racer_dir).get("house_stud"):
+        return None
+    for h in reversed(history(racer_dir)):
+        if h.get("traffic"):
+            return h["traffic"]
+    return None
+
+
+def traffic_text(t: dict | None) -> str:
+    if not t:
+        return "-"
+    return f"{t['clean_passes']} clean of {t['passes']}"
+
+
 def latest_exam(racer_dir) -> dict | None:
     racer = load(racer_dir)
     if racer.get("house_stud"):
@@ -613,7 +629,9 @@ def house_driver(rival_id: str) -> NeuralDriver:
     meta = next((r for r in house_rivals() if r["id"] == rival_id), None) or _read(RIVALS_DIR / f"{rival_id}.json")
     with np.load(RIVALS_DIR / f"{rival_id}.npz") as data:
         weights = data["pop"][0].astype(np.float64)
-    driver = NeuralDriver(weights, meta["arch"], shown_name(meta))
+    from .brain import align
+    weights, arch = align(weights, meta["arch"])        # whatever version the file was stored at
+    driver = NeuralDriver(weights, arch, shown_name(meta))
     driver.car_params = cartraits.params_for(meta.get("traits") or cartraits.default())
     driver.livery = meta.get("livery")
     return driver
@@ -739,8 +757,8 @@ def brain(racer_dir) -> np.ndarray:
     if racer.get("house_stud"):
         card = _read(RIVALS_DIR / f"{racer['house_stud']}.json")
         if card.get("arch"):
-            from .brain import upgrade
-            weights, _ = upgrade(weights, card["arch"])
+            from .brain import align
+            weights, _ = align(weights, card["arch"])
     return weights
 
 

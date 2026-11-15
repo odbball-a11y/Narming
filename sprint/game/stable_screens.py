@@ -750,7 +750,8 @@ class RacerScreen(Screen):
             e = stable.exam_average(exam)
             items = [("pace", stable.pace_text(stable.pace(exam))), ("avg place", f"{e['race_place']:.1f}"),
                      ("passes", f"{e['race_overtakes']:.1f}"), ("hits caused", f"{e['race_fault']:.1f}"),
-                     ("damage", f"{e['race_damage'] * 100:.0f}%"), ("in a tow", f"{e['race_draft'] * 100:.0f}%")]
+                     ("damage", f"{e['race_damage'] * 100:.0f}%"),
+                     ("traffic passes", stable.traffic_text(stable.latest_traffic(self.racer_dir)))]
             x = 6
             for k, (label, value) in enumerate(items):
                 ui.text(screen, "small", label, C_HUD_DIM, x, y + 3)

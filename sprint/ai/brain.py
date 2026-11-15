@@ -63,9 +63,12 @@ _INPUTS_V6 = _INPUTS_V5 + ["front load", "rear load"]
 # Version 7, surface sensing: how far onto the grass, the grip of the surface
 # under the car, and the room to the tarmac edge on each side.
 _INPUTS_V7 = _INPUTS_V6 + ["on grass", "surface grip", "room to tarmac edge left", "room to tarmac edge right"]
+# Version 8, traffic: the nearest car ahead in each half of the track (which
+# side is clear for a pass) and a third car ahead (a queue forming).
+_INPUTS_V8 = _INPUTS_V7 + ["ahead in left lane gap", "ahead in right lane gap", "ahead3 gap", "ahead3 side"]
 INPUT_VERSIONS = {1: _INPUTS_V1, 2: _INPUTS_V2, 3: _INPUTS_V3, 4: _INPUTS_V4, 5: _INPUTS_V5, 6: _INPUTS_V6,
-                  7: _INPUTS_V7}
-INPUT_VERSION = 7
+                  7: _INPUTS_V7, 8: _INPUTS_V8}
+INPUT_VERSION = 8
 
 # Distances ahead (units) scanned for the corner that limits speed, and the
 # braking the car is assumed to use to reach it (a fraction of full braking).
@@ -258,6 +261,17 @@ def observe(world, i: int) -> list[float]:
     obs.append(tuning.GRASS_GRIP if car.surface == GRASS else 1.0)
     obs.append(max(-1.0, min(2.0, (edge + car.lateral) / 6.0)))             # negative = already off on that side
     obs.append(max(-1.0, min(2.0, (edge - car.lateral) / 6.0)))
+
+    # ---- input version 8: traffic ----
+    lanes = [1.0, 1.0]                                      # gap to the nearest car ahead, left / right half
+    for gap, side, _ in ahead:
+        lane = 0 if car.lateral + side < 0.0 else 1
+        lanes[lane] = min(lanes[lane], gap / AHEAD_RANGE)
+    obs += lanes
+    if len(ahead) > 2:
+        obs += [ahead[2][0] / AHEAD_RANGE, ahead[2][1] / 5.0]
+    else:
+        obs += [1.0, 0.0]
     return obs
 
 
@@ -271,6 +285,27 @@ def layer_sizes(arch: dict) -> list[int]:
     m = int(arch.get("memory", 0))
     n_in = len(INPUT_VERSIONS[input_version(arch)])
     return [n_in + m] + [int(h) for h in arch["hidden"]] + [N_CONTROLS + m]
+
+
+def stored_version(length: int, arch: dict) -> int | None:
+    """The input version a stored vector of `length` numbers was made for,
+    given the rest of its arch (hidden layers, memory, notes), or None."""
+    for v in sorted(INPUT_VERSIONS, reverse=True):
+        a = dict(arch, inputs=v)
+        if length in (n_weights(a), genome_size(a)):
+            return v
+    return None
+
+
+def align(weights: np.ndarray, arch: dict) -> tuple[np.ndarray, dict]:
+    """Weights and arch that agree, at the current input version, whatever
+    version the weights were really stored at (a file whose arch was updated
+    without its weights is repaired here)."""
+    weights = np.asarray(weights, dtype=np.float64)
+    v = stored_version(weights.shape[-1], arch)
+    if v is None:
+        return weights, arch
+    return upgrade(weights, dict(arch, inputs=v))
 
 
 def upgrade(weights: np.ndarray, arch: dict) -> tuple[np.ndarray, dict]:

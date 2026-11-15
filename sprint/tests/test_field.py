@@ -12,7 +12,8 @@ def test_place_points_spread_over_any_field_and_match_four_car_races():
     assert all(a > b for a, b in zip(eight, eight[1:]))                              # every place counts
 
 
-def test_training_races_can_have_any_number_of_cars():
+def test_training_races_can_have_any_number_of_cars(monkeypatch):
+    monkeypatch.setattr(evolve, "TRAFFIC_CHANCE", 0.0)      # (drills have their own fixed field)
     config = {"seed": 1, "tracks": ["oval"], "races_per_track": 8, "partners": None, "car": None, "field": 8}
     scenarios = evolve.make_scenarios(config, 30, 1, list(range(1, 30)))
     assert all(len(s["rivals"]) == 7 for s in scenarios)

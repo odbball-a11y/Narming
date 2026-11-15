@@ -708,6 +708,9 @@ class LabScreen(Screen):
             if str(rival).startswith("wreck:"):              # a rival that crashes out (training races)
                 from sim import wreck
                 entries.append((slot, wreck.WreckDriver(slot=slot, **wreck.parse(rival))))
+            elif str(rival).startswith("traffic:"):          # a backmarker in a traffic drill
+                from sim import traffic
+                entries.append((slot, traffic.TrafficDriver(slot=slot, **traffic.parse(rival))))
             else:
                 entries.append((slot, "scripted" if rival == "scripted" else roster.champion(run, rival, f"Gen {rival}")))
         self.start_race(sc["track"], entries, 2)

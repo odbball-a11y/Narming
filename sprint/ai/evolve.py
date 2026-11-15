@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 import sim.scripted  # noqa: F401
-from sim import cartraits, tuning, wreck
+from sim import cartraits, traffic, tuning, wreck
 from sim.driver import Controls, create_driver
 from sim.track import Track
 from sim.telemetry import LapRecorder
@@ -98,6 +98,11 @@ PHASE1_DAMAGE = 0.05
 # then a mix.  Chances for each rival seat once the mix starts:
 SCRIPTED_ONLY_GENS = 10
 RIVAL_MIX = (("scripted", 0.4), ("recent", 0.4), ("hall", 0.2))
+TRAFFIC_CHANCE = 0.3     # share of racing-school races that are traffic drills (user request)
+DRILL_FIELD = 8          # cars in a drill: the learner at the back of seven slower ones
+DRILL_LAPS = 2.5         # drill length in scripted laps
+CLEAN_TICKS = 2 * 120    # a pass is clean with no contact with that car this long before or after
+DRILL_WEIGHTS = {"clean_pass": 0.6, "place": 0.5, "suffered": 0.1}
 FIELD = 4                # cars in a training race unless a run's config says otherwise ("field")
 WRECK_CHANCE = 0.25      # share of racing-school races where one rival crashes out and sits on track
 RECENT_GENS = 6          # "recent" = champions of the last few generations
@@ -258,6 +263,8 @@ class RaceStats:
         self.draft_ticks = 0
         self.ticks = 0
         self.ahead = {j: self._diff(j) > 0.0 for j in self.others}
+        self.contact_tick = {j: -10 ** 9 for j in self.others}
+        self.pass_log: list[list] = []        # [car passed, tick, still clean]
 
     def _diff(self, j: int) -> float:
         w = self.world
@@ -273,7 +280,12 @@ class RaceStats:
             if event[0] == "wall" and event[1] == me:
                 self.walls += 1
             elif event[0] == "car" and me in event[1:3]:
-                other = world.cars[event[2] if event[1] == me else event[1]]
+                j = event[2] if event[1] == me else event[1]
+                other = world.cars[j]
+                self.contact_tick[j] = world.tick
+                for p in self.pass_log:           # touching a car just passed makes that pass unclean
+                    if p[0] == j and world.tick - p[1] <= CLEAN_TICKS:
+                        p[2] = False
                 half = world.track.length / 2.0
                 gap = (other.s - car.s + half) % world.track.length - half
                 if gap > 1.5:          # I ran into the back of them
@@ -289,9 +301,20 @@ class RaceStats:
                 if not self.ahead[j] and d > self.MARGIN:
                     self.ahead[j] = True
                     self.overtakes += 1
+                    moving = world.cars[j].speed > 5.0                # a stopped wreck is no pass
+                    self.pass_log.append([j, world.tick, moving and world.tick - self.contact_tick[j] > CLEAN_TICKS])
                 elif self.ahead[j] and d < -self.MARGIN:
                     self.ahead[j] = False
                     self.passed += 1
+                    for p in self.pass_log:       # passed straight back: that pass did not stick
+                        if p[0] == j and world.tick - p[1] <= 5 * tuning.TICK_RATE:
+                            p[2] = False
+
+    @property
+    def clean_passes(self) -> int:
+        """Passes with no contact with that car for CLEAN_TICKS either side,
+        of a moving car, and not passed straight back."""
+        return sum(1 for p in self.pass_log if p[2])
 
     def place(self) -> int:
         """1 = leading.  Ties count against me."""
@@ -324,6 +347,9 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         for k, rival in enumerate(scenario["rivals"]):
             if isinstance(rival, str) and rival.startswith("wreck:"):
                 drivers[k + 1] = wreck.WreckDriver(slot=others[k], **wreck.parse(rival))
+                drivers[k + 1].reset(world, k + 1)
+            elif isinstance(rival, str) and rival.startswith("traffic:"):
+                drivers[k + 1] = traffic.TrafficDriver(slot=others[k], **traffic.parse(rival))
                 drivers[k + 1].reset(world, k + 1)
             elif isinstance(rival, str):
                 drivers[k + 1] = create_driver(rival, slot=others[k])
@@ -372,6 +398,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         "suffered": [s.suffered for s in stats],
         "walls": [s.walls for s in stats],
         "overtakes": [s.overtakes for s in stats],
+        "clean_passes": [s.clean_passes for s in stats],
         "passed": [s.passed for s in stats],
         "draft": [s.draft_share() for s in stats],
     }
@@ -425,6 +452,19 @@ def place_points(place, field, table) -> np.ndarray:
     field = np.full_like(place, len(table)) if field is None else np.asarray(field, dtype=float)
     frac = np.where(field > 1, (place - 1) / np.maximum(field - 1, 1), 0.0)
     return np.interp(np.clip(frac, 0, 1) * (len(table) - 1), np.arange(len(table)), table)
+
+
+def drill_score(result: dict, weights: dict | None = None) -> np.ndarray:
+    """Score of a traffic drill: clean passes are what count.  A pass with
+    contact, of a wreck, or straight back earns nothing; contact costs as in
+    a race (the driver's own damage and fault weights) and being hit while
+    alongside costs a little; places count for half."""
+    w = weights or RACE_WEIGHTS
+    r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
+    return (DRILL_WEIGHTS["clean_pass"] * r["clean_passes"]
+            + DRILL_WEIGHTS["place"] * place_points(r["place"], r.get("field"), w["place"])
+            + w["laps"] * r["laps"] - w["damage"] * r["damage"] - max(w["fault"], 0.25) * r["fault"]
+            - DRILL_WEIGHTS["suffered"] * r["suffered"] - w["walls"] * r["walls"])
 
 
 def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.ndarray:
@@ -500,10 +540,10 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
         return solo, {}
     race = np.zeros(len(pop))
     totals: dict = {}
-    for _ in scenarios:
+    for scenario in scenarios:
         part = merged(k)
-        race += race_score(part, bonus, weights)
-        for key in ("place", "damage", "fault", "overtakes", "passed", "draft"):
+        race += drill_score(part, weights) if scenario.get("drill") else race_score(part, bonus, weights)
+        for key in ("place", "damage", "fault", "overtakes", "passed", "draft", "clean_passes"):
             totals[key] = totals.get(key, 0.0) + np.asarray(part[key], dtype=float)
         k += len(pieces)
     race /= len(scenarios)
@@ -541,6 +581,34 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
 
 
 # ------------------------------------------------------------------- exams
+
+TRAFFIC_TEST = {"track": "speedway", "laps": 3,
+                "backmarkers": [(0.95, "line"), (0.93, "defend"), (0.97, "line"), (0.90, "wander"),
+                                (0.96, "line"), (0.92, "defend"), (0.94, "line")]}
+
+
+def traffic_test(weights: np.ndarray, arch: dict, car: dict | None = None) -> dict:
+    """The same traffic drill every generation: from the back of seven slower
+    cars (TRAFFIC_TEST), three laps.  Clean passes, all passes, contacts,
+    place, damage."""
+    from sim.race import FINISHED, Race
+    spec = TRAFFIC_TEST
+    learner = NeuralDriver(weights, arch, "Evolved")
+    learner.car_params = cartraits.params_for(car) if car else None
+    back = len(spec["backmarkers"])
+    entries = [(back, learner)] + [(k, traffic.TrafficDriver(slot=k, pace=pace, style=style))
+                                   for k, (pace, style) in enumerate(spec["backmarkers"])]
+    race = Race(spec["track"], entries, laps=spec["laps"], rolling=True)
+    stats = RaceStats(race.world)
+    limit = int(150.0 * tuning.TICK_RATE)
+    while race.phase != FINISHED and race.world.tick < limit:
+        events = race.step()
+        if race.phase != "countdown" and not race.world.cars[0].finished:
+            stats.on_tick(events)
+    return {"clean_passes": stats.clean_passes, "passes": stats.overtakes, "passed": stats.passed,
+            "contacts": round(stats.fault + stats.suffered, 1), "place": stats.place(),
+            "of": back + 1, "damage": round(race.world.cars[0].damage, 3)}
+
 
 def exam(weights: np.ndarray, arch: dict, tracks: list[str], car: dict | None = None,
          label: str | None = None, submit: bool = True) -> dict:
@@ -684,6 +752,16 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
     partners = config.get("partners")
     own = recent + [g for g in hall if g not in recent]
     for k in range(count):
+        if rng.random() < TRAFFIC_CHANCE:      # a traffic drill: from the back of a queue of slower cars
+            name = tracks[k % len(tracks)]
+            backmarkers = []
+            for _ in range(DRILL_FIELD - 1):
+                style = traffic.STYLES[int(rng.choice(3, p=[0.6, 0.25, 0.15]))]
+                backmarkers.append(f"traffic:{rng.uniform(0.86, 0.98):.2f}:{style}")
+            scenarios.append({"track": name, "slot": DRILL_FIELD - 1, "rivals": backmarkers, "drill": True,
+                              "car": car_for(config, gen), "rival_cars": [None] * (DRILL_FIELD - 1),
+                              "seconds": round(LAP_SECONDS.get(name, DEFAULT_SECONDS / 2) * DRILL_LAPS, 1)})
+            continue
         rivals = []
         for _ in range(field - 1):
             if partners:
@@ -862,7 +940,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             scenarios, resolved, bonus = [], None, 0.0
             if racing:
                 scenarios = make_scenarios(config, gen, start, [h["gen"] for h in history])
-                resolved = [dict(s, rivals=[r if r == "scripted" or str(r).startswith("wreck:") else champion_of(r)
+                resolved = [dict(s, rivals=[champion_of(r) if isinstance(r, int) or str(r).startswith("p:") else r
                                             for r in s["rivals"]])
                             for s in scenarios]
                 if config["race_bonuses"]:
@@ -890,6 +968,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                              submit=record_laps,
                              car=config.get("car") if isinstance(config.get("car"), dict) else None),
             }
+            entry["traffic"] = traffic_test(pop[0], arch,
+                                            car=config.get("car") if isinstance(config.get("car"), dict) else None)
             if racing:
                 best = order[0]
                 entry["training"] = {key: round(float(values[best]), 3) for key, values in averages.items()}

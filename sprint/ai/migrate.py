@@ -29,16 +29,32 @@ def _write(path: Path, data) -> None:
 
 
 def _upgrade_npz(path: Path, arch: dict) -> bool:
+    """Bring a saved population to the current inputs, whatever version it was
+    really stored at (track notes and all).  False if it already is."""
+    from .brain import align, stored_version
     with np.load(path) as data:
         arrays = {k: data[k] for k in data.files}
     pop = arrays["pop"]
-    from .brain import n_weights
-    if pop.shape[-1] != n_weights(arch):
-        return False                      # already upgraded (or not this layout)
-    new, _ = upgrade(pop.astype(np.float64), arch)
+    v = stored_version(pop.shape[-1], arch)
+    if v is None or v == INPUT_VERSION:
+        return False                      # already current (or not this layout)
+    new, _ = align(pop.astype(np.float64), arch)
     arrays["pop"] = new.astype(np.float32)
     np.savez_compressed(path, **arrays)
     return True
+
+
+def _needs_repair(run_dir: Path, arch: dict) -> bool:
+    """A run whose config is current but whose latest generation is not (the
+    old upgrade skipped populations that carry track notes)."""
+    gens = sorted(run_dir.glob("gen_*.npz"))
+    if not gens:
+        return False
+    from .brain import stored_version
+    with np.load(gens[-1]) as data:
+        length = data["pop"].shape[-1]
+    v = stored_version(length, arch)
+    return v is not None and v != INPUT_VERSION
 
 
 def _upgrade_run(run_dir: Path) -> int:
@@ -46,7 +62,7 @@ def _upgrade_run(run_dir: Path) -> int:
     config_path = run_dir / "config.json"
     config = _read(config_path)
     arch = config.get("arch")
-    if not arch or input_version(arch) == INPUT_VERSION:
+    if not arch or (input_version(arch) == INPUT_VERSION and not _needs_repair(run_dir, arch)):
         return 0
     count = sum(_upgrade_npz(p, arch) for p in sorted(run_dir.glob("gen_*.npz")))
     config["arch"] = dict(arch, inputs=INPUT_VERSION)
@@ -58,10 +74,11 @@ def _upgrade_run(run_dir: Path) -> int:
 def _upgrade_card(card_path: Path, npz_path: Path) -> int:
     card = _read(card_path)
     arch = card.get("arch")
-    if not arch or input_version(arch) == INPUT_VERSION:
+    if not arch:
         return 0
-    if npz_path.exists():
-        _upgrade_npz(npz_path, arch)
+    fixed = _upgrade_npz(npz_path, arch) if npz_path.exists() else False   # also repairs a mismatched file
+    if input_version(arch) == INPUT_VERSION and not fixed:
+        return 0
     card["arch"] = dict(arch, inputs=INPUT_VERSION)
     _write(card_path, card)
     return 1
