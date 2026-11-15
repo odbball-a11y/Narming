@@ -153,3 +153,29 @@ def test_the_academy_screen_shows_reports_and_only_offers_real_improvements(smal
     view.promote()
     changed = (rivals / "careful-keith.npz").read_bytes() != before
     assert changed == ok                                    # promoted only if the improvement was real
+
+
+def test_the_stable_screen_copes_with_an_academy_course_running(tmp_path):
+    """Regression: the stable screen read the background job's folder as a racer's."""
+    import io
+    import os
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+    from game.app import App
+    from game.audio import Audio
+    from game.stable_screens import StableScreen, background_job
+    pygame.display.init()
+    pygame.font.init()
+    app = App(pygame.display.set_mode((960, 540)), Audio())
+    job = tmp_path / "academy" / "brick-top"
+    job.mkdir(parents=True)
+    (job / "driver.json").write_text(json.dumps({"name": "Brick Top"}))
+
+    class Running:
+        def poll(self):
+            return None
+    app.trainer = {"proc": Running(), "dir": str(job), "log": io.StringIO()}
+    app.show(StableScreen(app))
+    app.draw()                                          # used to raise FileNotFoundError
+    assert background_job(str(job)) == "Racing Academy: Brick Top"
+    app.trainer = None

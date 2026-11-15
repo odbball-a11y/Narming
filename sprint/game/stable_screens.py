@@ -6,6 +6,8 @@ published into house/rivals/, which ships with the game.
 """
 from __future__ import annotations
 
+import json
+
 import math
 from pathlib import Path
 
@@ -110,6 +112,19 @@ def status_text(app, racer_dir) -> tuple[str, tuple]:
     if not stable.careers_enabled(Path(racer_dir).parent):
         return "READY TO RACE", C_HUD_ACCENT
     return f"RACING: race {racer['career']['races']} of {stable.CAREER_RACES}", C_HUD_ACCENT
+
+
+def background_job(path: str) -> str:
+    """What is training in the background when it is not a stable racer."""
+    folder = Path(path)
+    for name, label in (("driver.json", "Racing Academy"), ("school.json", "Track school")):
+        f = folder / name
+        if f.exists():
+            try:
+                return f"{label}: {json.loads(f.read_text(encoding='utf-8'))['name']}"
+            except (OSError, ValueError, KeyError):
+                return label
+    return "Training in the background"
 
 
 class StableScreen(Screen):
@@ -285,11 +300,14 @@ class StableScreen(Screen):
         if not self.rivals:
             ui.text(screen, "small", "none yet", C_HUD_DIM, 107, y)
         training = self.app.training_dir()
-        if training:
+        if training and (Path(training) / "racer.json").exists():
             p = stable.progress(training)
             ui.text(screen, "small", f"Training {stable.load(training)['name']}: gen {p['done']}/{p['target']}. "
                     "It stops if you quit the game and carries on when you resume it.", C_CYAN, 6, 88.6,
                     "bottomleft")
+        elif training:                                 # an Academy course or a track-school session
+            ui.text(screen, "small", background_job(training) + ". It stops if you quit the game and carries "
+                    "on when you resume it.", C_CYAN, 6, 88.6, "bottomleft")
 
 
 class CreateScreen(Screen):
