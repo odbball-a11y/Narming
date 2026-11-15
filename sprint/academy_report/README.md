@@ -5,7 +5,7 @@ Every driver took 32 challenges in 8 modules (beginner to master), each with see
 | Driver | Unseen pass rate before | After | Grade | Race avg place original -> candidate |
 |---|---|---|---|---|
 | [Careful Keith](careful-keith.md) | 34% | 33% | E (novice) | 4.20 -> 4.95 |
-| [Clinical Clara](clinical-clara.md) | 36% | 27% | E (novice) | 2.30 -> 3.60 |
+| [Clinical Clara](clinical-clara.md) | 32% | 16% | E (novice) | 3.10 -> 2.50 |
 | [Dangerous Dave](dangerous-dave.md) | 23% | 27% | E (novice) | 3.90 -> 3.30 |
 | [Zappy Zoe](zappy-zoe.md) | 36% | 33% | E (novice) | 1.90 -> 2.90 |
 | [Bold Zoe](zoe-bold.md) | 27% | 34% | E (novice) | 3.10 -> 2.10 |
