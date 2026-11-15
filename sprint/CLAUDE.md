@@ -547,7 +547,8 @@ podium): `record_result(..., finished=)`.
   contact, reward overtaking"). `evolve.TRAFFIC_CHANCE` (30%) of racing-school
   races are drills: the learner at the back of `DRILL_FIELD` (8) cars, the rest
   `"traffic:<pace>:<style>"` = `sim/traffic.py` `TrafficDriver` (scripted, held to
-  0.86-0.98 of its top speed; styles line 60% / defend 25% / wander 15%),
+  `DRILL_PACE` 0.70-0.82 of its top speed, about 9-18% slower a lap than a good AI;
+  styles line 60% / defend 25% / wander 15%),
   `DRILL_LAPS` 2.5 scripted laps. `drill_score`: `DRILL_WEIGHTS["clean_pass"]`
   (0.6) per clean pass + half the place points + laps - the driver's damage and
   fault weights (fault at least 0.25) - 0.1 per hit suffered - walls.
@@ -559,8 +560,12 @@ podium): `record_result(..., finished=)`.
   (`stable.latest_traffic` / `traffic_text`). Inputs version 8 (60 inputs): the
   gap to the nearest car ahead in the left and right half of the track, and a
   third car ahead (gap, side). Baseline traffic test, house rivals before any
-  drills: Clara 0 clean / 0 passes (8th), Zappy Zoe 0/1 (6 contacts, 4th), Bold
-  Zoe 1/4 (8 contacts, 8th), Dave 1/4 (7 contacts, 8th), Keith 0/0 (6th).
+  drills, backmarkers 0.72-0.82 (place from `race.results()`, not progress: cars
+  that finished stop at the line): Dave 5 clean of 7 (11 contacts, 5th), Zappy
+  Zoe 3/4 (2, 5th), Bold Zoe 3/8 (15, 4th), Clara 0/4 (11, 6th), Keith 0/0 (8th).
+  First camp (Clara, 60 gens, backmarkers 0.86-0.98, only 3-6% slower than her):
+  she learned never to try (0/0, 8th): the queue could not be passed, so sitting
+  behind scored best.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

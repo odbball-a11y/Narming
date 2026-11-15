@@ -101,6 +101,8 @@ RIVAL_MIX = (("scripted", 0.4), ("recent", 0.4), ("hall", 0.2))
 TRAFFIC_CHANCE = 0.3     # share of racing-school races that are traffic drills (user request)
 DRILL_FIELD = 8          # cars in a drill: the learner at the back of seven slower ones
 DRILL_LAPS = 2.5         # drill length in scripted laps
+DRILL_PACE = (0.70, 0.82)  # backmarkers' share of top speed: about 9-18% slower a lap than a good AI
+                           # (0.86-0.98 was only 3-6% slower: nobody could get by, so nobody tried)
 CLEAN_TICKS = 2 * 120    # a pass is clean with no contact with that car this long before or after
 DRILL_WEIGHTS = {"clean_pass": 0.6, "place": 0.5, "suffered": 0.1}
 FIELD = 4                # cars in a training race unless a run's config says otherwise ("field")
@@ -583,8 +585,8 @@ def breed(sorted_pop: np.ndarray, rng: np.random.Generator, size: int, elites: i
 # ------------------------------------------------------------------- exams
 
 TRAFFIC_TEST = {"track": "speedway", "laps": 3,
-                "backmarkers": [(0.95, "line"), (0.93, "defend"), (0.97, "line"), (0.90, "wander"),
-                                (0.96, "line"), (0.92, "defend"), (0.94, "line")]}
+                "backmarkers": [(0.80, "line"), (0.76, "defend"), (0.82, "line"), (0.72, "wander"),
+                                (0.78, "line"), (0.74, "defend"), (0.80, "line")]}
 
 
 def traffic_test(weights: np.ndarray, arch: dict, car: dict | None = None) -> dict:
@@ -605,8 +607,9 @@ def traffic_test(weights: np.ndarray, arch: dict, car: dict | None = None) -> di
         events = race.step()
         if race.phase != "countdown" and not race.world.cars[0].finished:
             stats.on_tick(events)
+    row = next(r for r in race.results() if r["car"] == 0)      # the real finishing order
     return {"clean_passes": stats.clean_passes, "passes": stats.overtakes, "passed": stats.passed,
-            "contacts": round(stats.fault + stats.suffered, 1), "place": stats.place(),
+            "contacts": round(stats.fault + stats.suffered, 1), "place": row["place"],
             "of": back + 1, "damage": round(race.world.cars[0].damage, 3)}
 
 
@@ -757,7 +760,7 @@ def make_scenarios(config: dict, gen: int, start: int, history_gens: list[int]) 
             backmarkers = []
             for _ in range(DRILL_FIELD - 1):
                 style = traffic.STYLES[int(rng.choice(3, p=[0.6, 0.25, 0.15]))]
-                backmarkers.append(f"traffic:{rng.uniform(0.86, 0.98):.2f}:{style}")
+                backmarkers.append(f"traffic:{rng.uniform(*DRILL_PACE):.2f}:{style}")
             scenarios.append({"track": name, "slot": DRILL_FIELD - 1, "rivals": backmarkers, "drill": True,
                               "car": car_for(config, gen), "rival_cars": [None] * (DRILL_FIELD - 1),
                               "seconds": round(LAP_SECONDS.get(name, DEFAULT_SECONDS / 2) * DRILL_LAPS, 1)})
