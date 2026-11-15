@@ -574,6 +574,13 @@ podium): `record_result(..., finished=)`.
   `DRILL_WEIGHTS["reach"]` 0.15 each in a drill. Why: in camp 2 (backmarkers
   0.70-0.82) Clara drove worse behind the queue than alone (ran wide, 9-13 speed
   v their 24) and never caught it; 0 clean passes after 40 gens.
+- Clara's traffic camps (workshop, aggression 1.0 caution 0.45, 280 more gens:
+  camp 1 backmarkers too quick, she learned to sit behind; camp 2 slower
+  backmarkers, she never caught them; camps 3-4 gradual drills: clean passes 0 ->
+  ~0.6 per traffic test). Six-car five-lap races, 30, rotating grid: Clara final
+  10 wins / avg place 2.43 / 37% damage, Zappy Zoe 8 / 2.37 / 50%, Dave 5 / 3.83,
+  published Clara (before camps) 3 / 4.70. The final Clara was published over the
+  house Clinical Clara (user request).
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to
