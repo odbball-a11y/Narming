@@ -581,6 +581,11 @@ podium): `record_result(..., finished=)`.
   10 wins / avg place 2.43 / 37% damage, Zappy Zoe 8 / 2.37 / 50%, Dave 5 / 3.83,
   published Clara (before camps) 3 / 4.70. The final Clara was published over the
   house Clinical Clara (user request).
+- Drill level carries over (user): `evolve.train(drill_prior=)` (stored in the
+  run's config) adds earlier traffic tests to `drill_level`; `stable.train` passes
+  the racer's last ten from earlier versions, so an upskill continues at its level.
+  Clinical Clara is also a house stud (`HOUSE_STUDS` = zappy-zoe, clinical-clara)
+  so her traffic training can be bred into foals.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

@@ -321,6 +321,7 @@ def test_same_parents_and_name_breed_the_same_foal(dirs):
 
 def test_breed_through_the_screens(app, monkeypatch):
     from game.stable_screens import BreedScreen, CertificateScreen, RacerScreen, StableScreen
+    monkeypatch.setattr(stable, "HOUSE_STUDS", ["zappy-zoe"])   # (two house studs could breed with each other)
     root = stable.STABLE_DIR
     app.show(StableScreen(app))
     app.current.row = app.current.rows().index("breed")
@@ -501,11 +502,11 @@ def test_zappy_zoe_stands_at_stud_for_ever(tmp_path, monkeypatch):
     zoe = root / "house-zappy-zoe"
     assert zoe in studs and stable.can_breed(zoe) and not stable.can_race(zoe)
     assert stable.load(zoe)["name"] == "Zappy Zoe"
-    with np.load(stable.RIVALS_DIR / "zappy-zoe.npz") as data:
-        assert np.allclose(stable.brain(zoe), data["pop"][0])        # her current house brain
+    assert np.allclose(stable.brain(zoe), stable.house_driver("zappy-zoe").weights)   # her current house brain
     assert stable.latest_exam(zoe) is not None
     stable.ensure_house_studs(root)                                  # idempotent
-    assert len([d for d in stable.list_racers(root) if stable.is_house_stud(d)]) == 1
+    assert len([d for d in stable.list_racers(root) if stable.is_house_stud(d)]) == len(stable.HOUSE_STUDS)
+    assert (root / "house-clinical-clara") in studs
     racer = stable.load(zoe)
     racer["breedings"] = 50                                          # far past the limit for other studs
     stable.save(zoe, racer)

@@ -56,7 +56,7 @@ CAREER_RACES = 50       # races before a racer retires to stud: 10 five-race cha
 STUD_BREEDINGS = 5      # litters a racer at stud can sire before it dies
 STUD_LIFETIME = 40      # stable races (by anyone) a racer lives for at stud
 TRAIN_FIELD = 4         # cars in a stable racer's training races (championships race 6)
-HOUSE_STUDS = ["zappy-zoe"]   # house rivals that also stand at stud in the stable, for ever (user request)
+HOUSE_STUDS = ["zappy-zoe", "clinical-clara"]   # house rivals that also stand at stud in the stable, for ever (user request)
 
 # Personality sliders, each 0..1, and the race scoring at their ends.
 # (0, 0) is the balanced scoring; aggression 1 is Dangerous Dave's upbringing,
@@ -573,8 +573,11 @@ def train(racer_dir, workers: int = 0, on_generation=None, population: int = POP
     # The same effort either way: a single track gets as many races per
     # generation as all five together, so it trains harder on that track.
     races = grad["races_per_track"] * len(grad["tracks"]) // len(tracks)
+    # Its traffic tests from earlier training, so the drills carry on at its level
+    # instead of starting again with two slow cars.
+    prior = [h["traffic"] for h in history(racer_dir) if h.get("traffic") and h.get("version", 0) <= index][-10:]
     evolve.train(run=v["run"], root=racer_dir, generations=remaining, population=population,
-                 field=TRAIN_FIELD,
+                 field=TRAIN_FIELD, drill_prior=prior,
                  seed=index, tracks=tracks, exam_tracks=list(grad["tracks"]), arch=grad["arch"],
                  races_per_track=races,
                  race_bonuses=False, start_file=str(start), race_seconds=dict(grad["race_seconds"]),

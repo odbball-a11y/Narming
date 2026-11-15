@@ -847,7 +847,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
           race_seconds: dict | None = None, partners: list | None = None, car=None,
           driving_school: bool = False, exam_tracks: list | None = None,
           solo_share: float | None = None, notes: bool = False, notes_only: bool = False,
-          record_laps: bool = True, field: int | None = None) -> Path:
+          record_laps: bool = True, field: int | None = None, drill_prior: list | None = None) -> Path:
     """Train (or continue) a run.  Writes one file per generation plus
     history.json into training/<run>/, which the game reads while this runs.
 
@@ -911,6 +911,7 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                   "race_weights": race_weights or style_weights(style), "race_seconds": race_seconds,
                   "partners": partners, "car": car, "exam_tracks": exam_tracks, "solo_share": solo_share,
                   "notes_only": bool(notes_only), "field": int(field or FIELD),
+                  "drill_prior": list(drill_prior or []),
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}
         _write_json(config_path, config)
@@ -967,7 +968,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
             racing = start is not None and gen >= start
             scenarios, resolved, bonus = [], None, 0.0
             if racing:
-                config["drill_level"] = drill_level(history)
+                config["drill_level"] = drill_level(
+                    [{"traffic": t} for t in config.get("drill_prior") or []] + history)   # earlier training counts
                 scenarios = make_scenarios(config, gen, start, [h["gen"] for h in history])
                 resolved = [dict(s, rivals=[champion_of(r) if isinstance(r, int) or str(r).startswith("p:") else r
                                             for r in s["rivals"]])

@@ -77,3 +77,14 @@ def test_catching_a_car_counts_towards_a_drill():
     base = {"place": [3], "field": [3], "laps": [2.0], "damage": [0.0], "fault": [0], "suffered": [0],
             "walls": [0], "overtakes": [0], "passed": [0], "clean_passes": [0], "draft": [0.0]}
     assert evolve.drill_score(dict(base, reached=[2]))[0] > evolve.drill_score(dict(base, reached=[0]))[0]
+
+
+def test_drill_level_carries_on_from_earlier_training(tmp_path, monkeypatch):
+    monkeypatch.setattr(evolve, "RUNS_DIR", tmp_path)
+    seen = []
+    real = evolve.make_scenarios
+    monkeypatch.setattr(evolve, "make_scenarios", lambda config, *a: seen.append(config["drill_level"]) or real(config, *a))
+    prior = [{"clean_passes": 3}] * 10
+    evolve.train(run="later", generations=1, population=4, elites=1, tracks=["oval"], phase2_from=1,
+                 races_per_track=1, record_laps=False, log=lambda m: None, drill_prior=prior)
+    assert seen == [1.0]                                    # not back to the easy drills
