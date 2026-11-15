@@ -536,6 +536,13 @@ podium): `record_result(..., finished=)`.
   `test_race` handles any number of rivals and returns `field`; `place_points`
   spreads the four-car `place` table over any field (first and last unchanged,
   four-car races score exactly as before). The exam stays four cars.
+- Clinical Clara (user: full aggression, caution then dialled to 0.45, race
+  conditions on all tracks until plateau): `house_rival.py "Clinical Clara"
+  --aggression 1.0 --caution 0.45`, 100 gens from the graduate (four-car races,
+  wrecks, no draft reward), plateau after gen 4; published as a house rival.
+  Pace about scripted (0-3% either way); in training races she wins (place 1.0-1.6,
+  1-1.6 passes) but in the exam from last v three scripted she finishes 4th with
+  ~0.2 passes: she cannot fight through a pack. Candidate for traffic drills.
 - Smoothness: `PackRun` measures input jumps between decisions and the share
   of decisions sliding; the solo score pays `SMOOTH_WEIGHT` (0.1) x (jitter +
   slide); exams report `solo_jitter` / `solo_slide`; `stable.smoothness(exam)`
