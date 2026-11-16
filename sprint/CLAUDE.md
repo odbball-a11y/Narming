@@ -619,6 +619,20 @@ podium): `record_result(..., finished=)`.
   3.60 (worse); Dave 23% -> 27%. Near-identical copies of Keith scored 33-41%:
   single runs were too noisy, hence `REPEATS`. The candidates improved on the
   practised (seen) scenarios but not on unseen ones: overfitting.
+- Focused courses and guests (user: "train Dave on driving on the edge ... legend
+  status ... then simulate six-car championships"; "view him in a practice race,
+  not pushed as the house"). `academy.focus_course(name, modules, tag)` (CLI
+  `python -m ai.academy focus NAME`): trains only those modules (config
+  `academy_challenges` / `academy_emphasis` / `academy_lesson_share` 0.85) in
+  10-generation blocks in `academy/<id>-<tag>/` until `LEGEND` (85%) of their seen
+  scenarios pass or 120 gens; `simulate_championships(field, count)` runs whole
+  championships to the game's rules; `focus_report`. `make_guest` / `python -m
+  ai.academy guest NAME` ships the candidate to `house/guests/` (`stable.guests`,
+  key `guest:<id>`): pickable in practice races only, never a house rival.
+  Dave's grip course (modules 1-4): stalled at 64% seen (no legend), but unseen
+  module 2 25% -> 58% and module 3 42% -> 71% (both real), pace 0.96 -> 0.90; in
+  20 championships grip Dave 22.0 points a season / 24 wins / 2 titles v original
+  17.2 / 11 / 0 (Clara 27.8, 11 titles; Zappy 26.4, 7). Shipped as guest "Grip Dave".
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to
