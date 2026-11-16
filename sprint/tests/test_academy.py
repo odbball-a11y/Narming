@@ -201,3 +201,21 @@ def test_a_focused_course_trains_to_a_target_then_races_championships(small_acad
     academy._save(fd / "championships.json", {"count": 1, "tally": tally})
     text = academy.focus_report("dangerous-dave").read_text()
     assert "## Six-car championships" in text and "Legend status not reached" in text
+
+
+def test_a_guest_driver_can_practise_but_is_not_a_house_rival(tmp_path, monkeypatch):
+    from sim.driver import driver_types, make_driver
+    from sim.race import Race
+    guests = tmp_path / "guests"
+    guests.mkdir()
+    shutil.copy(stable.RIVALS_DIR / "zappy-zoe.npz", guests / "test-guest.npz")
+    card = json.loads((stable.RIVALS_DIR / "zappy-zoe.json").read_text())
+    (guests / "test-guest.json").write_text(json.dumps(dict(card, name="Test Guest")))
+    monkeypatch.setattr(stable, "GUESTS_DIR", guests)
+    assert "guest:test-guest" in stable.register()
+    assert ("guest:test-guest", "Test Guest") in driver_types()
+    assert "test-guest" not in [r["id"] for r in stable.house_rivals()]
+    race = Race("oval", [(0, make_driver("guest:test-guest")), (1, "scripted")], laps=1, seed=1).run(max_seconds=60)
+    assert len(race.results()) == 2
+    monkeypatch.setattr(stable, "GUESTS_DIR", tmp_path / "none")
+    stable.register()

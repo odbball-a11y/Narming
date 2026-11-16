@@ -951,6 +951,22 @@ def grip_field(driver_id: str, tag: str = "grip") -> dict:
     return dict(list(field.items())[:6])
 
 
+def make_guest(driver_id: str, tag: str = "grip") -> Path:
+    """Ship a focused course's candidate as a guest driver (house/guests/):
+    pickable in a practice race, never a house rival, the original untouched."""
+    _, _, info = original(driver_id)
+    fd = ACADEMY_DIR / f"{driver_id}-{tag}"
+    w, arch = _gen_weights(fd, _load(fd / "selected.json")["gen"])
+    card = next(c for c in stable.house_rivals() if c["id"] == driver_id) if info.get("kind", "house") == "house" else {}
+    livery = dict(card.get("livery") or {}, trim_colour="yellow")
+    stable.GUESTS_DIR.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(stable.GUESTS_DIR / f"{driver_id}-{tag}.npz", pop=w[None].astype(np.float32))
+    _save(stable.GUESTS_DIR / f"{driver_id}-{tag}.json",
+          {"name": f"{tag.capitalize()} {info['name'].split()[-1]}", "aggression": info.get("aggression"), "caution": info.get("caution"),
+           "traits": info["traits"], "livery": livery, "arch": arch, "from": driver_id})
+    return stable.GUESTS_DIR / f"{driver_id}-{tag}.json"
+
+
 def focus_report(driver_id: str, tag: str = "grip") -> Path:
     fd = ACADEMY_DIR / f"{driver_id}-{tag}"
     course, progress, sel = _load(fd / "course.json"), _load(fd / "progress.json"), _load(fd / "selected.json")
@@ -1166,6 +1182,9 @@ def main() -> int:
     p = sub.add_parser("promote")
     p.add_argument("driver")
     sub.add_parser("report")
+    g = sub.add_parser("guest", help="ship a focused course's candidate as a guest driver for practice races")
+    g.add_argument("driver")
+    g.add_argument("--tag", default="grip")
     f = sub.add_parser("focus", help="a focused course on some modules, then simulated championships")
     f.add_argument("driver")
     f.add_argument("--modules", type=int, nargs="+", default=[1, 2, 3, 4])
@@ -1183,6 +1202,9 @@ def main() -> int:
         for d in sorted(ACADEMY_DIR.glob("*/driver.json")):
             write_report(d.parent.name)
         print(write_summary())
+        return 0
+    if args.cmd == "guest":
+        print(make_guest(driver_spec(args.driver)["id"], args.tag))
         return 0
     if args.cmd == "focus":
         log = lambda m: print(f"{time.strftime('%H:%M')} {m}", flush=True)

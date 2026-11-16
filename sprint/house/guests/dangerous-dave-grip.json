@@ -1,0 +1,54 @@
+{
+ "name": "Grip Dave",
+ "aggression": 1.0,
+ "caution": 0.0,
+ "traits": {
+  "top_speed": 3,
+  "accel": 3,
+  "handling": 3,
+  "braking": 3,
+  "weight": "medium"
+ },
+ "livery": {
+  "colour": "red",
+  "trim": "stripe",
+  "trim_colour": "yellow",
+  "number": 13
+ },
+ "arch": {
+  "hidden": [
+   24,
+   16
+  ],
+  "memory": 4,
+  "inputs": 8,
+  "notes": [
+   [
+    "esses",
+    9,
+    "4e911b9a5559e957"
+   ],
+   [
+    "grandprix",
+    9,
+    "cc67893c5a62f5e1"
+   ],
+   [
+    "oval",
+    4,
+    "013dc500ef767b91"
+   ],
+   [
+    "speedway",
+    5,
+    "6a236c863f55517b"
+   ],
+   [
+    "technical",
+    7,
+    "49d3b277bcb65c92"
+   ]
+  ]
+ },
+ "from": "dangerous-dave"
+}

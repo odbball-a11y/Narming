@@ -44,6 +44,7 @@ from .brain import (NOTE_FIELDS, NeuralDriver, arch_for_vector, fit_genomes, lay
 
 HOUSE_DIR = evolve.PROJECT / "house"
 RIVALS_DIR = HOUSE_DIR / "rivals"
+GUESTS_DIR = HOUSE_DIR / "guests"      # shipped drivers for practice races only: never a championship or training rival
 GRADUATE = HOUSE_DIR / "graduate"
 STABLE_DIR = evolve.PROJECT / "stable"
 WORKSHOP_DIR = evolve.PROJECT / "workshop"
@@ -632,9 +633,25 @@ def house_rivals() -> list[dict]:
     return cards
 
 
-def house_driver(rival_id: str) -> NeuralDriver:
-    meta = next((r for r in house_rivals() if r["id"] == rival_id), None) or _read(RIVALS_DIR / f"{rival_id}.json")
-    with np.load(RIVALS_DIR / f"{rival_id}.npz") as data:
+def guests() -> list[dict]:
+    """Guest drivers (house/guests/): you can pick them in a practice race,
+    but they are not house rivals, so they never enter championships,
+    training fields or the Academy.  E.g. an Academy experiment to watch."""
+    out = []
+    for meta in sorted(GUESTS_DIR.glob("*.json")) if GUESTS_DIR.exists() else []:
+        out.append(dict(_read(meta), id=meta.stem, file=meta.with_suffix(".npz")))
+    return out
+
+
+def guest_driver(guest_id: str) -> NeuralDriver:
+    return house_driver(guest_id, GUESTS_DIR)
+
+
+def house_driver(rival_id: str, where: Path | None = None) -> NeuralDriver:
+    where = where or RIVALS_DIR
+    meta = (next((r for r in house_rivals() if r["id"] == rival_id), None) if where == RIVALS_DIR else None) \
+        or _read(where / f"{rival_id}.json")
+    with np.load(where / f"{rival_id}.npz") as data:
         weights = data["pop"][0].astype(np.float64)
     from .brain import align
     weights, arch = align(weights, meta["arch"])        # whatever version the file was stored at
@@ -736,10 +753,15 @@ def register(root: Path | None = None) -> list[str]:
     are included, for practice races (never for championships)."""
     unregister_drivers("house:")
     unregister_drivers("racer:")
+    unregister_drivers("guest:")
     keys = []
     for rival in house_rivals():
         key = f"house:{rival['id']}"
         register_driver(key, shown_name(rival), lambda slot=0, r=rival["id"]: house_driver(r))
+        keys.append(key)
+    for g in guests():
+        key = f"guest:{g['id']}"
+        register_driver(key, g["name"], lambda slot=0, r=g["id"]: guest_driver(r))
         keys.append(key)
     for d in list_racers(root, include_dead=True) if root else []:
         if brain_file(d) is None or is_breeding(d):
