@@ -783,7 +783,33 @@ CAMP_GENERATIONS = 3    # length of each mini-camp
 CAMP_POPULATION = 16
 TEMPERAMENT_SPREAD = 0.08   # how far a foal's personality strays from its parents' average
 CRITERIA = {"fastest": "Fastest pace over the five tracks after its mini-camp",
-            "learner": "Quickest learner: fewest generations to match its parents' pace"}
+            "learner": "Quickest learner: fewest generations to match its parents' pace",
+            "academy": "Best Racing Academy test score; the winner then takes the Academy course"}
+ACADEMY_TEST_REPEATS = 2      # runs of every unseen Academy scenario when the Academy picks the foal
+
+
+def _academy_score(job) -> dict:
+    """One finalist's Academy tests (unseen scenarios): overall and per-module pass rates."""
+    weights, arch, traits, driver_id, repeats = job
+    from . import academy
+    res = academy.evaluate(weights, arch, traits, driver_id, "unseen", repeats=repeats)
+    return {"score": round(academy.pass_rate(res, "unseen"), 4),
+            "modules": {str(m): round(academy.pass_rate(res, "unseen", m), 3) for m in academy.MODULES}}
+
+
+def academy_course(foal_dir, workers: int = 3, log=print, generations: int | None = None,
+                   population: int | None = None) -> str:
+    """Put a bred foal through the Racing Academy course; the Academy brain
+    becomes the foal's driver only if it really improved (else the foal stays
+    as it was born).  Returns what happened."""
+    from . import academy
+    foal_dir = Path(foal_dir)
+    academy.run(foal_dir.name, generations or academy.GENERATIONS, population or academy.POPULATION,
+                workers=workers, log=log)
+    ok, why = academy.promotable(foal_dir.name)
+    if not ok:
+        return f"Academy course finished: not promoted ({why})"
+    return academy.promote(foal_dir.name)
 
 
 def brain(racer_dir) -> np.ndarray:
@@ -1106,8 +1132,25 @@ def breed(foal_dir, workers: int = 0, litter: int = LITTER, shortlist: int = SHO
                            "hits": round(last["race_fault"], 1), "damage": round(last["race_damage"], 3),
                            "run": run})
 
+    if info["criterion"] == "academy":         # the finalists sit the Academy tests (not the course)
+        _progress(foal_dir, stage="academy", done=0, of=len(candidates))
+        jobs = []
+        for c in candidates:
+            run_dir = litter_dir / c["run"]
+            best = evolve.load_generation(run_dir, evolve.list_generations(run_dir)[-1])["pop"][0].astype(np.float64)
+            jobs.append((best, evolve.load_config(run_dir)["arch"], traits, foal_dir.name, ACADEMY_TEST_REPEATS))
+        if workers > 1:
+            with ProcessPoolExecutor(min(workers, len(jobs))) as ex:
+                scores = list(ex.map(_academy_score, jobs))
+        else:
+            scores = [_academy_score(j) for j in jobs]
+        for c, sc in zip(candidates, scores):
+            c["academy"], c["academy_modules"] = sc["score"], sc["modules"]
+
     def key(c):
         p = c["pace"] or 9.0
+        if info["criterion"] == "academy":
+            return (-c["academy"], p)
         if info["criterion"] == "learner":
             return (c["gens_to_target"] or 99, p)
         return (p, -c["trial_score"])
@@ -1253,6 +1296,12 @@ def main(argv=None) -> int:
         w = cert["winner"]
         print(f"picked foal {w['foal']} of {cert['litter']}: pace {w['pace']}, "
               f"generations to target {w['gens_to_target']}", flush=True)
+        if cert["criterion"] == "academy":      # the winner then takes the Academy course
+            print(f"Academy test score {w['academy']:.0%}; starting the Academy course", flush=True)
+            try:
+                print(academy_course(args.racer_dir, workers=args.workers), flush=True)
+            except Exception as e:                 # the foal is already born: a failed course must not lose it
+                print(f"Academy course stopped: {e}", flush=True)
         return 0
     if args.command == "train":
         def report(entry):

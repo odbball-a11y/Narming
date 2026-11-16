@@ -86,6 +86,7 @@ def bar(ui, screen, x, y, w, value, colour) -> None:
 
 STAGES = {"waiting": "waiting to start", "litter": "breeding the litter",
           "trial": "round 1: trialling all the foals", "camp": "round 2: mini-camps",
+          "academy": "round 3: Academy tests",
           "done": "done"}
 
 
@@ -978,7 +979,7 @@ class BreedScreen(Screen):
         self.parents = [d for d in stable.list_racers(app.stable_root) if stable.can_breed(d)]
         self.sire, self.dam = 0, 1
         self.name = ""
-        self.criterion = "fastest"
+        self.criterion = "academy"
         self.row = 0
         self.message = ""
         pygame.key.start_text_input()
@@ -1021,7 +1022,8 @@ class BreedScreen(Screen):
             if row in ("sire", "dam"):
                 self.cycle(row, step)
             elif row == "criterion":
-                self.criterion = "learner" if self.criterion == "fastest" else "fastest"
+                kinds = list(stable.CRITERIA)
+                self.criterion = kinds[(kinds.index(self.criterion) + step) % len(kinds)]
         elif key in ACCEPT:
             if row == "start":
                 self.start()
@@ -1072,8 +1074,8 @@ class BreedScreen(Screen):
                 y += 7
             elif row == "criterion":
                 ui.text(screen, "mid", "PICK BY", C_HUD_DIM, 7, y)
-                ui.text(screen, "mid", "<  FASTEST LAP  >" if self.criterion == "fastest"
-                        else "<  QUICKEST LEARNER  >", colour, 40, y)
+                ui.text(screen, "mid", {"fastest": "<  FASTEST LAP  >", "learner": "<  QUICKEST LEARNER  >",
+                                        "academy": "<  ACADEMY TESTS  >"}[self.criterion], colour, 40, y)
                 ui.text(screen, "small", stable.CRITERIA[self.criterion], C_HUD_DIM, 40, y + 4.2)
                 y += 10
             elif row == "start":
@@ -1166,7 +1168,9 @@ class CertificateScreen(Screen):
                 "neuron": "neuron by neuron"}.get(cert.get("method", "neuron"), cert.get("method", ""))
         ui.text(screen, "small", f"THE LITTER: {cert['litter']} foals ({made}), {cert['shortlist']} to camp.", C_HUD_ACCENT, 7, y)
         y += 3.4
-        ui.text(screen, "small", f"Picked by: {cert['criterion_text']} ({target})", C_HUD_TEXT, 7, y)
+        score = cert["winner"].get("academy")
+        ui.text(screen, "small", f"Picked by: {cert['criterion_text']} "
+                + (f"(score {score:.0%})" if score is not None else f"({target})"), C_HUD_TEXT, 7, y)
         trial = cert.get("trial")
         if trial:
             y += 3.4

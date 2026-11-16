@@ -345,6 +345,8 @@ def test_breed_through_the_screens(app, monkeypatch):
     screen.row = screen.ROWS.index("name")
     type_text(app, "Little Lucky")
     screen.row = screen.ROWS.index("criterion")
+    assert screen.criterion == "academy"                    # the default: the Academy tests pick the foal
+    press(app, pygame.K_RIGHT)
     press(app, pygame.K_RIGHT)
     assert screen.criterion == "learner"
     screen.row = screen.ROWS.index("start")
@@ -524,3 +526,25 @@ def test_a_foal_can_be_bred_from_the_house_stud(dirs):
     cert = small_breed(foal)
     assert cert["sire"]["name"] == "Zappy Zoe" and stable.brain_file(foal) is not None
     assert stable.status(zoe) == "stud" and stable.check_deaths(root) == []
+
+
+def test_the_academy_tests_can_pick_the_foal_which_then_takes_the_course(dirs, tmp_path, monkeypatch):
+    from ai import academy
+    monkeypatch.setattr(academy, "ACADEMY_DIR", tmp_path / "academy")
+    monkeypatch.setattr(academy, "REPORT_DIR", tmp_path / "report")
+    few = [dict(c, seen=[dict(v, seconds=5.0) for v in c["seen"]], unseen=[dict(v, seconds=5.0) for v in c["unseen"]])
+           for c in academy.CHALLENGES if c["id"] in ("m1l1", "m3l1")]
+    monkeypatch.setattr(academy, "CHALLENGES", few)
+    monkeypatch.setattr(academy, "RACE_PANEL_TRACKS", ["oval"])
+    monkeypatch.setattr(academy, "RACE_PANEL_PER_TRACK", 1)
+    root = stable.STABLE_DIR
+    betty, sam = two_trained(root)
+    foal = stable.mate(root, betty, sam, "Clever Clogs", "academy")
+    cert = small_breed(foal)
+    assert cert["criterion"] == "academy" and all(0.0 <= c["academy"] <= 1.0 for c in cert["candidates"])
+    assert cert["winner"]["academy"] == max(c["academy"] for c in cert["candidates"])
+    versions = len(stable.load(foal)["versions"])
+    said = stable.academy_course(foal, workers=1, log=lambda m: None, generations=1, population=4)
+    assert (academy.folder(foal.name) / "after.json").exists()
+    promoted = len(stable.load(foal)["versions"]) > versions
+    assert promoted == ("not promoted" not in said)             # promoted only when it really improved

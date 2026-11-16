@@ -639,6 +639,15 @@ podium): `record_result(..., finished=)`.
   start). `render.make_car_sprite(..., number=)` hands over to `carart.draw` unless
   classic; same sprite size and 2 px margin; all five trims and the livery number
   are drawn. Sprite and chip caches are keyed by style. Pictures in `mockups/`.
+- Breeding by Academy tests (user: "a new foal goes through the Academy ... take
+  the best one, with highest scores from Academy tests", then "the winner then
+  goes through the Academy"). `CRITERIA["academy"]` (the Breed screen's default;
+  `mate`'s default stays "fastest"): after the camps the finalists sit the unseen
+  Academy scenarios (`_academy_score`, `ACADEMY_TEST_REPEATS` 2, one process
+  each; stage "academy"), the highest pass rate wins (pace breaks ties;
+  `academy` / `academy_modules` on each candidate). `python -m ai.stable breed`
+  then runs `academy_course(foal_dir)`: the full Academy course, promoted only
+  when `academy.promotable` (otherwise the foal stays as born).
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to
