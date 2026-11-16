@@ -63,9 +63,12 @@ def text_width(ui, font: str, string: str) -> float:
 def draw_chip(ui, screen, livery, x, y, width=6.0) -> None:
     """A small picture of a racer's car in its livery (grey if it has none)."""
     look = livery or {"colour": "white", "trim": "stripe", "trim_colour": "dark"}
-    key = (look["colour"], look.get("trim"), look.get("trim_colour"), round(ui.unit, 2), width)
+    from . import carart
+    key = (look["colour"], look.get("trim"), look.get("trim_colour"), round(ui.unit, 2), width, look.get("number"),
+           carart.STYLE)
     if key not in _chips:
-        sprite = make_car_sprite(liv.rgb(look["colour"]), ui.unit, look.get("trim", "stripe"), liv.trim_rgb(look))
+        sprite = make_car_sprite(liv.rgb(look["colour"]), ui.unit, look.get("trim", "stripe"), liv.trim_rgb(look),
+                                 look.get("number"))
         w = max(4, int(width * ui.unit))
         _chips[key] = pygame.transform.smoothscale(sprite, (w, max(2, int(w * sprite.get_height() / sprite.get_width()))))
     screen.blit(_chips[key], ui.px(x, y))

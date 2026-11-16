@@ -224,3 +224,23 @@ def test_game_runs_with_no_audio_device():
     assert out.returncode == 0, out.stdout + out.stderr
     assert "audio: disabled" in out.stdout
     assert out.stdout.strip().endswith("ok 0")
+
+
+def test_car_styles_draw_every_trim_at_the_classic_size(tmp_path, monkeypatch):
+    import pygame
+    from game import carart, render
+    pygame.display.init()
+    pygame.display.set_mode((64, 64))
+    monkeypatch.setattr(carart, "SETTINGS", tmp_path / "settings.json")
+    monkeypatch.setattr(carart, "STYLE", "classic")
+    classic = render.make_car_sprite((236, 52, 60), 6.0)
+    seen = {"classic": pygame.image.tobytes(classic, "RGBA")}
+    for _ in range(2):
+        style = carart.cycle()
+        for trim in ("stripe", "twin", "nose", "wing", "band"):
+            sprite = render.make_car_sprite((236, 52, 60), 6.0, trim, (250, 250, 250), 13)
+            assert sprite.get_size() == classic.get_size()
+        seen[style] = pygame.image.tobytes(sprite, "RGBA")
+    assert set(seen) == {"classic", "gt3", "formula"} and len(set(seen.values())) == 3
+    assert carart.load() == "formula"                       # the choice is remembered
+    assert carart.cycle() == "classic"

@@ -110,6 +110,10 @@ class MainMenu(Screen):
                 self.app.show(ReplayScreen(self.app))
             else:
                 self.app.quit()
+        elif event.key == pygame.K_c:                 # car body style: classic / GT3 / formula (looks only)
+            from . import carart
+            carart.cycle()
+            self.app.audio.play("select")
         elif event.key in BACK:
             self.app.quit()
 
@@ -117,6 +121,10 @@ class MainMenu(Screen):
         ui = self.app.ui
         ui.backdrop(screen)
         draw_title(ui, screen)
+        from . import carart
+        from .stable_screens import draw_chip
+        ui.text(screen, "small", f"C  car style: {carart.NAMES[carart.STYLE]}", C_HUD_DIM, 8, 80)
+        draw_chip(ui, screen, {"colour": "red", "trim": "stripe", "trim_colour": "white", "number": 13}, 8, 68, 16.0)
         items = ["WORKSHOP" if i == "STABLE" and self.app.workshop else i for i in self.ITEMS]
         draw_list(ui, screen, items, self.selected, 66, 30, 6.2)
         ui.text(screen, "small", "ARROWS move    ENTER select    ESC back    F11 fullscreen",

@@ -633,6 +633,12 @@ podium): `record_result(..., finished=)`.
   module 2 25% -> 58% and module 3 42% -> 71% (both real), pace 0.96 -> 0.90; in
   20 championships grip Dave 22.0 points a season / 24 wins / 2 titles v original
   17.2 / 11 / 0 (Clara 27.8, 11 titles; Zappy 26.4, 7). Shipped as guest "Grip Dave".
+- Car styles (user: "I like the GT3, but maybe an option we choose on the UI").
+  `game/carart.py`: `STYLE` = classic | gt3 | formula, looks only; C on the main
+  menu cycles it (`cycle`, remembered in `settings.json`, git-ignored; `load` at
+  start). `render.make_car_sprite(..., number=)` hands over to `carart.draw` unless
+  classic; same sprite size and 2 px margin; all five trims and the livery number
+  are drawn. Sprite and chip caches are keyed by style. Pictures in `mockups/`.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

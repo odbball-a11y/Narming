@@ -215,7 +215,7 @@ def render_track(track: Track, camera: Camera) -> pygame.Surface:
 
 
 def make_car_sprite(colour, pixels_per_unit: float, trim: str = "stripe",
-                    trim_colour=(250, 250, 250)) -> pygame.Surface:
+                    trim_colour=(250, 250, 250), number=None) -> pygame.Surface:
     """A little open-wheel racer pointing right (+x), drawn large for rotation.
 
     `trim` is the racer's defining feature (see ai/livery.py): stripe, twin
@@ -223,6 +223,9 @@ def make_car_sprite(colour, pixels_per_unit: float, trim: str = "stripe",
     k = max(pixels_per_unit, 4.0) * 3.0   # oversample; rotozoom scales it down
     length = tuning.CAR_LENGTH * k
     width = tuning.CAR_WIDTH * k
+    from . import carart
+    if carart.STYLE != "classic":         # the player's chosen body style (looks only)
+        return carart.draw(carart.STYLE, colour, length, width, trim, trim_colour, number)
     surf = pygame.Surface((int(length) + 4, int(width) + 4), pygame.SRCALPHA)
     ox, oy = 2, 2
     dark = tuple(int(c * 0.55) for c in colour)
@@ -418,9 +421,12 @@ class RaceRenderer:
         """The car sprite for a livery (cached); None = a plain red car."""
         if livery is None:
             livery = {"colour": "red", "trim": "stripe", "trim_colour": "white"}
-        key = (livery["colour"], livery.get("trim", "stripe"), livery.get("trim_colour", "white"))
+        from . import carart
+        key = (livery["colour"], livery.get("trim", "stripe"), livery.get("trim_colour", "white"),
+               livery.get("number"), carart.STYLE)
         if key not in self.sprite_cache:
-            self.sprite_cache[key] = make_car_sprite(liv.rgb(key[0]), self.camera.scale, key[1], liv.trim_rgb(livery))
+            self.sprite_cache[key] = make_car_sprite(liv.rgb(key[0]), self.camera.scale, key[1], liv.trim_rgb(livery),
+                                                     key[3])
         return self.sprite_cache[key]
 
     def clear_skids(self) -> None:

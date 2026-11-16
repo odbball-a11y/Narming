@@ -208,6 +208,8 @@ def main(argv=None) -> int:
     pygame.font.init()
     pygame.display.set_caption("AI Sprint Racing")
     flags = pygame.RESIZABLE | (pygame.FULLSCREEN if args.fullscreen else 0)
+    from . import carart
+    carart.load()
     screen = pygame.display.set_mode((0, 0) if args.fullscreen else WINDOW_SIZE, flags)
     app = App(screen, Audio(enabled=not args.no_sound), workshop=args.workshop)
     if args.track:
