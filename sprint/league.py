@@ -3,8 +3,8 @@ the house rivals and the guests, in divisions of six.
 
     python league.py [--rounds 10] [--laps 5] [--workers 4]
 
-Each round the drivers are split into divisions of six by rating (random the
-first time), each division races every track once, TrueSkill is updated after
+Each round the drivers are split into divisions of six by the ratings built
+up so far in the run (a random draw only for round 1, when there are none), each division races every track once, TrueSkill is updated after
 every race (non-finishers share last), and the divisions are redrawn, so the
 best end up racing each other.  Nothing in the stable is changed: no careers,
 ratings or records.  Resumable; results in league/league.json and league/TABLE.md.
@@ -99,8 +99,6 @@ def main() -> int:
             rnd = state["round"] + 1
             rng = random.Random(rnd)
             order = sorted(keys, key=lambda k: -state["drivers"][k]["mu"]) if rnd > 1 else rng.sample(keys, len(keys))
-            if rnd > 1 and rnd % 3 == 0:                   # every third round is a random draw, to mix the divisions
-                order = rng.sample(keys, len(keys))
             divisions = [order[i:i + SIZE] for i in range(0, len(order), SIZE)]
             if len(divisions) > 1 and len(divisions[-1]) < 3:      # no tiny last division
                 divisions[-2:] = [divisions[-2] + divisions[-1]]
