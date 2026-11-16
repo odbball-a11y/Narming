@@ -802,7 +802,8 @@ def academy_course(foal_dir, workers: int = 3, log=print, generations: int | Non
     """Put a bred foal through the Racing Academy course; the Academy brain
     becomes the foal's driver only if it really improved (else the foal stays
     as it was born).  Returns what happened."""
-    from . import academy
+    from . import academy, migrate
+    migrate.ensure()                         # saved brains on the current inputs before any are loaded
     foal_dir = Path(foal_dir)
     academy.run(foal_dir.name, generations or academy.GENERATIONS, population or academy.POPULATION,
                 workers=workers, log=log)

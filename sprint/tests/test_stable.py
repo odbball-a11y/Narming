@@ -543,8 +543,30 @@ def test_the_academy_tests_can_pick_the_foal_which_then_takes_the_course(dirs, t
     cert = small_breed(foal)
     assert cert["criterion"] == "academy" and all(0.0 <= c["academy"] <= 1.0 for c in cert["candidates"])
     assert cert["winner"]["academy"] == max(c["academy"] for c in cert["candidates"])
+    # The certificate has a page of Academy scores by module: at birth, then after the course.
+    import os
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+    from game.app import App
+    from game.audio import Audio
+    from game.stable_screens import CertificateScreen
+    pygame.display.init()
+    pygame.font.init()
+    game = App(pygame.display.set_mode((960, 540)), Audio())
+    view = CertificateScreen(game, foal)
+    game.show(view)
+    view.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_a))
+    assert view.page == "academy"
+    born = view.academy_rows()
+    assert len(born["rows"]) == 8 and born["after"] is None and born["birth"] == cert["winner"]["academy"]
+    game.draw()
     versions = len(stable.load(foal)["versions"])
     said = stable.academy_course(foal, workers=1, log=lambda m: None, generations=1, population=4)
+    grown = view.academy_rows()
+    assert grown["after"] is not None and all(r["after"] is not None for r in grown["rows"])
+    game.draw()
+    if os.environ.get("SHOT"):
+        pygame.image.save(game.screen, os.environ["SHOT"])
     assert (academy.folder(foal.name) / "after.json").exists()
     promoted = len(stable.load(foal)["versions"]) > versions
     assert promoted == ("not promoted" not in said)             # promoted only when it really improved

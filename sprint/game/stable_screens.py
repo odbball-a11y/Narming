@@ -1116,10 +1116,71 @@ class CertificateScreen(Screen):
     def __init__(self, app, racer_dir):
         super().__init__(app)
         self.racer_dir = racer_dir
+        self.page = "certificate"
 
     def handle_event(self, event) -> None:
-        if event.type == pygame.KEYDOWN and event.key in ACCEPT + (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key == pygame.K_a and self.academy_rows() is not None:
+            self.page = "academy" if self.page == "certificate" else "certificate"
+        elif event.key in ACCEPT + (pygame.K_ESCAPE, pygame.K_BACKSPACE):
             self.app.show(RacerScreen(self.app, self.racer_dir))
+
+    def academy_rows(self) -> dict | None:
+        """The foal's Academy scores by module: at birth (the tests that picked
+        it) and, once it has taken the course, after it.  None for a foal that
+        was not picked by the Academy tests."""
+        from ai import academy
+        racer = stable.load(self.racer_dir)
+        birth = racer["certificate"]["winner"].get("academy_modules")
+        if birth is None:
+            return None
+        s = academy.summary(Path(self.racer_dir).name)
+        done = bool(s and s["after"] is not None)
+        rows = []
+        for m, title in academy.MODULES.items():
+            after = next(r for r in s["modules"] if r["module"] == m) if done else None
+            rows.append({"module": m, "title": title, "birth": after["before"] if done else birth[str(m)],
+                         "after": after["after"] if done else None, "change": after["change"] if done else ""})
+        stage = academy.status(Path(self.racer_dir).name).get("stage", "not enrolled")
+        return {"rows": rows, "birth": s["before"] if done else racer["certificate"]["winner"]["academy"],
+                "after": s["after"] if done else None, "change": s["change"] if done else "",
+                "stage": stage, "promoted": bool(racer.get("academy")), "why": s["why"] if done else ""}
+
+    def draw_academy(self, screen, racer) -> None:
+        ui = self.app.ui
+        a = self.academy_rows()
+        ui.text(screen, "big", f"ACADEMY SCORES: {racer['name'].upper()}", C_HUD_ACCENT, 80, 4.5, "midtop")
+        ui.text(screen, "small", "Share of the Academy's unseen scenarios passed, by module: when the foal was born, "
+                "and after it took the Academy course.", C_HUD_DIM, 7, 13)
+        y = 20.0
+        for x, head in ((7, "MODULE"), (88, "AT BIRTH"), (106, "AFTER ACADEMY"), (128, "CHANGE")):
+            ui.text(screen, "small", head, C_HUD_DIM, x, y)
+        for r in a["rows"] + [{"title": "OVERALL", "birth": a["birth"], "after": a["after"], "change": a["change"]}]:
+            y += 5.2 if "module" not in r else 4.6
+            name = f"{r['module']}. {r['title']}" if "module" in r else r["title"]
+            ui.text(screen, "mid" if "module" not in r else "small", name, C_HUD_ACCENT if "module" not in r else C_HUD_TEXT, 7, y)
+            ui.text(screen, "small", f"{r['birth']:.0%}", C_HUD_TEXT, 88, y)
+            bar(ui, screen, 95, y + 0.3, 8, r["birth"], C_CYAN)
+            if r["after"] is not None:
+                real = "real" in r["change"]
+                up = r["change"].startswith("+")
+                ui.text(screen, "small", f"{r['after']:.0%}", C_HUD_TEXT, 106, y)
+                bar(ui, screen, 113, y + 0.3, 8, r["after"], C_PINK)
+                ui.text(screen, "small", r["change"], (60, 220, 110) if real and up else (240, 90, 90) if real else C_HUD_DIM,
+                        128, y)
+            else:
+                ui.text(screen, "small", "-", C_HUD_DIM, 106, y)
+        y += 8
+        if a["after"] is None:
+            note = {"not enrolled": "The Academy course has not started yet."}.get(
+                a["stage"], f"The Academy course is under way ({a['stage']}); scores appear here when it finishes.")
+        elif a["promoted"]:
+            note = "The Academy brain was better: it is now this racer's driver (shown with a *)."
+        else:
+            note = f"The foal kept the brain it was born with: {a['why']}."
+        ui.text(screen, "small", note, C_HUD_TEXT, 7, y)
+        ui.text(screen, "small", "A certificate    ENTER or ESC to go back", C_HUD_DIM, 80, 86.5, "midbottom")
 
     def draw(self, screen) -> None:
         ui = self.app.ui
@@ -1127,6 +1188,9 @@ class CertificateScreen(Screen):
         racer = stable.load(self.racer_dir)
         cert = racer["certificate"]
         ui.panel(screen, 3, 2, 154, 86, border=C_HUD_ACCENT)
+        if self.page == "academy":
+            self.draw_academy(screen, racer)
+            return
         ui.text(screen, "big", f"BREEDING CERTIFICATE: {racer['name'].upper()}", C_HUD_ACCENT, 80, 4.5, "midtop")
 
         # Pedigree
@@ -1207,7 +1271,8 @@ class CertificateScreen(Screen):
         for note in cert["expectations"]:
             y += 3.1
             ui.text(screen, "small", "- " + note, C_HUD_TEXT, 7, y)
-        ui.text(screen, "small", "ENTER or ESC to go back", C_HUD_DIM, 80, 86.5, "midbottom")
+        ui.text(screen, "small", ("A Academy scores    " if cert["winner"].get("academy_modules") else "")
+                + "ENTER or ESC to go back", C_HUD_DIM, 80, 86.5, "midbottom")
 
 
 class HallScreen(Screen):

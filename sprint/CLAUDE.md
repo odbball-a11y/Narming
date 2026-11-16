@@ -648,6 +648,8 @@ podium): `record_result(..., finished=)`.
   `academy` / `academy_modules` on each candidate). `python -m ai.stable breed`
   then runs `academy_course(foal_dir)`: the full Academy course, promoted only
   when `academy.promotable` (otherwise the foal stays as born).
+  `CertificateScreen` has a second page (A): Academy pass rates by module at
+  birth and after the course, with the change and whether it was promoted.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to
