@@ -50,3 +50,39 @@ def update(root, track: str, lap: float | None, entrant: dict, season: int) -> b
     p.parent.mkdir(parents=True, exist_ok=True)
     jsonio.write_json(p, dict(records, _physics=PHYSICS))
     return True
+
+
+def reset(root=None, log=print) -> list[str]:
+    """Wipe every lap record: the fastest-laps store (telemetry/) and the
+    championship track records (<root>/records.json).  The old files are kept
+    in a `reset-<n>` folder beside them.  Returns what was moved."""
+    import shutil
+    from . import stable, telemetry
+    root = Path(root or stable.STABLE_DIR)
+    moved = []
+    for folder, files in ((telemetry.DIR, sorted(telemetry.DIR.glob("*.json")) if telemetry.DIR.exists() else []),
+                          (root, [path(root)])):
+        files = [f for f in files if f.exists()]
+        if not files:
+            continue
+        n = 1
+        while (folder / f"reset-{n}").exists():
+            n += 1
+        keep = folder / f"reset-{n}"
+        keep.mkdir(parents=True)
+        for f in files:
+            shutil.move(str(f), str(keep / f.name))
+            moved.append(str(f))
+            log(f"reset {f}  (old one kept in {keep})")
+    telemetry._cache.clear()
+    if not moved:
+        log("no lap records to reset")
+    return moved
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] == ["reset"]:
+        reset()
+    else:
+        print("usage: python -m ai.records reset")

@@ -251,7 +251,8 @@ def train(run_dir, workers: int = 0, generations: int = GENERATIONS, on_generati
                         phase2_from=NEVER, driving_school=True, arch=info["arch"],
                         start_file=str(Path(run_dir) / "start.npz"), notes=True,
                         car=info.get("traits") or cartraits.default(), workers=workers,
-                        on_generation=each, log=print, name=f"{info['name']} (track school)")
+                        on_generation=each, log=print, name=f"{info['name']} (track school)",
+                        record_laps=False)       # a practice copy's laps are not a real car's: no lap records
 
 
 def main() -> None:

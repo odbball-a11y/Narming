@@ -72,3 +72,14 @@ def test_a_car_only_learns_from_laps_in_its_own_kind_of_car():
     assert telemetry.reference(track, far) is None
     kept = {l["type"] for l in telemetry.load("oval")["laps"]}
     assert telemetry.car_type(light) in kept and telemetry.car_type(near) in kept
+
+
+def test_all_lap_records_can_be_reset(tmp_path):
+    from ai import records
+    telemetry.submit_race(race_laps())
+    records.update(tmp_path, "speedway", 12.0, {"name": "A", "livery": None}, 1)
+    assert telemetry.best("speedway") and records.load(tmp_path)
+    moved = records.reset(tmp_path, log=lambda m: None)
+    assert len(moved) == 2 and telemetry.best("speedway") is None and records.load(tmp_path) == {}
+    assert (tmp_path / "reset-1" / "records.json").exists()          # the old ones are kept aside
+    assert records.reset(tmp_path, log=lambda m: None) == []
