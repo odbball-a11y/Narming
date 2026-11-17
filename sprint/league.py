@@ -1,13 +1,19 @@
-"""Rate every brain there is: your stable's racers (racing, retired and dead),
-the house rivals and the guests, in divisions of six.
+"""A league of every brain there is: your stable's racers (racing, retired
+and dead), the house rivals and the guests, in divisions of six with
+promotion and relegation.
 
-    python league.py [--rounds 10] [--laps 5] [--workers 4]
+    python league.py [--rounds 10] [--laps 5] [--workers 4] [--fresh]
 
-Each round the drivers are split into divisions of six by the ratings built
-up so far in the run (a random draw only for round 1, when there are none), each division races every track once, TrueSkill is updated after
-every race (non-finishers share last), and the divisions are redrawn, so the
-best end up racing each other.  Nothing in the stable is changed: no careers,
-ratings or records.  Resumable; results in league/league.json and league/TABLE.md.
+A season: every division races each of the five tracks once (points
+10-7-5-3-2-1).  At the end of the season the top two of each division go up
+and the bottom two go down (the top division has no one above, the bottom
+none below).  The first season's divisions are drawn by rating (at random
+when there is none); a car joining later starts in the bottom division.
+TrueSkill is updated after every race across all divisions, as the fair
+overall measure (it allows for who a car beat); a rating counts as settled
+once its uncertainty is at most SETTLED points, before that it is provisional.
+Nothing in the stable is changed.  Resumable (`--rounds` = seasons to add);
+results in league/league.json and league/TABLE.md.
 """
 from __future__ import annotations
 
@@ -20,6 +26,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "league"
 SIZE = 6
+MOVE = 2               # promoted and relegated per division each season
+SETTLED = 40.0         # a rating's +- (displayed points) at or under which it counts as settled
 
 
 def drivers() -> dict:
@@ -73,23 +81,75 @@ def run_race(job):
     return track, [(keys[r["car"]], r["place"], bool(r["finished"]), r.get("best_lap")) for r in race.results()]
 
 
+def settled(d: dict) -> bool:
+    from ai import rating
+    return rating.SCALE * d["sigma"] <= SETTLED
+
+
+def divisions_of(state: dict, keys: list[str]) -> list[list[str]]:
+    """The divisions for the coming season.  Kept from the last season (cars
+    that left are dropped; new cars join the bottom division), or, the first
+    time, drawn by rating (randomly when everyone is new)."""
+    known = [k for div in state.get("divisions", []) for k in div if k in keys]
+    new = [k for k in keys if k not in known]
+    if not known:
+        rng = random.Random(len(keys))
+        new = rng.sample(new, len(new))
+        new.sort(key=lambda k: -state["drivers"][k]["mu"])
+    order = known + new
+    divs = [order[i:i + SIZE] for i in range(0, len(order), SIZE)]
+    if len(divs) > 1 and len(divs[-1]) < 3:              # no tiny last division
+        divs[-2:] = [divs[-2] + divs[-1]]
+    return divs
+
+
+def promote_relegate(divs: list[list[str]], season_points: dict, wins: dict, places: dict) -> tuple[list, list]:
+    """Standings within each division (points, then wins, then total places),
+    then the top MOVE of each division swap with the bottom MOVE of the one
+    above.  Returns (new divisions, standings per division)."""
+    tables = [sorted(div, key=lambda k: (-season_points.get(k, 0), -wins.get(k, 0), places.get(k, 0), k))
+              for div in divs]
+    new = [list(t) for t in tables]
+    for d in range(len(tables) - 1):
+        n = min(MOVE, len(tables[d]) // 2, len(tables[d + 1]) // 2)
+        down = tables[d][-n:]
+        up = tables[d + 1][:n]
+        new[d] = [k for k in new[d] if k not in down] + up
+        new[d + 1] = down + [k for k in new[d + 1] if k not in up]
+    return new, tables
+
+
 def table(state: dict) -> str:
     from ai import rating
+    L = [f"# League after {state['round']} seasons", ""]
+    last = state.get("seasons", [])[-1] if state.get("seasons") else None
+    if last:
+        for d, rows in enumerate(last["tables"], 1):
+            L += [f"## Division {d} (season {last['season']})", "",
+                  "| Pos | Driver | Season points | Wins | Movement |", "|---|---|---|---|---|"]
+            for pos, k in enumerate(rows, 1):
+                move = "promoted" if k in last["promoted"] else "relegated" if k in last["relegated"] else ""
+                L.append(f"| {pos} | {state['drivers'][k]['name']} | {last['points'].get(k, 0)} | "
+                         f"{last['wins'].get(k, 0)} | {move} |")
+            L.append("")
+    L += ["## Ratings (all seasons)", "", "TrueSkill: allows for who each car raced. Provisional until the +- is at most "
+          f"{SETTLED:.0f}.", "", "| # | Driver | Division | Rating | +- | Races | Wins | Podiums | Points per race | DNFs |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
     rows = sorted(state["drivers"].items(), key=lambda kv: -(kv[1]["mu"] - 3 * kv[1]["sigma"]))
-    lines = [f"# League after {state['round']} rounds", "",
-             "Ranked by the cautious rating (rating minus three times its uncertainty).", "",
-             "| # | Driver | Status | Rating | +- | Races | Wins | Podiums | Avg place | DNFs |", "|---|---|---|---|---|---|---|---|---|---|"]
-    for n, (_, d) in enumerate(rows, start=1):
+    div_of = {k: d + 1 for d, div in enumerate(state.get("divisions", [])) for k in div}
+    for n, (k, d) in enumerate(rows, start=1):
         races = max(1, d["races"])
-        lines.append(f"| {n} | {d['name']} | {d['status']} | {rating.show(d['mu']):.0f} | {rating.SCALE * d['sigma']:.0f} | "
-                     f"{d['races']} | {d['wins']} | {d['podiums']} | {d['places'] / races:.2f} | {d['dnf']} |")
-    return "\n".join(lines) + "\n"
+        shown = f"{rating.show(d['mu']):.0f}" + ("" if settled(d) else " (provisional)")
+        L.append(f"| {n} | {d['name']} | {div_of.get(k, '-')} | {shown} | {rating.SCALE * d['sigma']:.0f} | {d['races']} | "
+                 f"{d['wins']} | {d['podiums']} | {d.get('points', 0) / races:.2f} | {d['dnf']} |")
+    return "\n".join(L) + "\n"
 
 
 def run_league(entries: dict, rounds: int = 10, laps: int = 5, workers: int = 4, save: Path | None = None,
                fresh: bool = False, log=print) -> dict:
-    """Race `entries` ({key: {"name", "status"}}) in divisions of six, re-drawn
-    every round by the ratings so far; resumable from `save`.  Returns the state."""
+    """Race `entries` ({key: {"name", "status"}}) season by season up to
+    `rounds` seasons in all, with promotion and relegation; resumable from `save`.
+    Returns the state."""
     from ai import championship, rating
     save = Path(save or OUT / "league.json")
     save.parent.mkdir(parents=True, exist_ok=True)
@@ -101,19 +161,17 @@ def run_league(entries: dict, rounds: int = 10, laps: int = 5, workers: int = 4,
     keys = [k for k in state["drivers"] if k in entries]
     if len(keys) < 2:
         raise ValueError("need at least two drivers")
-    log(f"{len(keys)} drivers, {rounds} rounds of {len(championship.TRACK_ORDER)} races, {laps} laps")
-    with Pool(workers) as pool:
+    log(f"{len(keys)} drivers, seasons of {len(championship.TRACK_ORDER)} races, {laps} laps")
+    pool = Pool(workers) if workers > 1 else None
+    try:
         while state["round"] < rounds:
-            rnd = state["round"] + 1
-            rng = random.Random(rnd)
-            order = sorted(keys, key=lambda k: -state["drivers"][k]["mu"]) if rnd > 1 else rng.sample(keys, len(keys))
-            divisions = [order[i:i + SIZE] for i in range(0, len(order), SIZE)]
-            if len(divisions) > 1 and len(divisions[-1]) < 3:      # no tiny last division
-                divisions[-2:] = [divisions[-2] + divisions[-1]]
+            season = state["round"] + 1
+            rng = random.Random(season)
+            divs = divisions_of(state, keys)
+            points, wins, places = {}, {}, {}
             for t, track in enumerate(championship.TRACK_ORDER):
-                jobs = [(track, rng.sample(div, len(div)), laps, rnd * 100 + t * 10 + n)
-                        for n, div in enumerate(divisions)]
-                for _, rows in pool.map(run_race, jobs):
+                jobs = [(track, rng.sample(div, len(div)), laps, season * 100 + t * 10 + n) for n, div in enumerate(divs)]
+                for _, rows in (pool.map(run_race, jobs) if pool else map(run_race, jobs)):
                     rows.sort(key=lambda r: r[1])
                     last = max(r[1] for r in rows)
                     ranks = [r[1] if r[2] else last for r in rows]
@@ -122,24 +180,40 @@ def run_league(entries: dict, rounds: int = 10, laps: int = 5, workers: int = 4,
                     for (k, place, fin, _), (new,) in zip(rows, rating.ENV.rate(groups, ranks=ranks)):
                         d = state["drivers"][k]
                         d["mu"], d["sigma"] = new.mu, new.sigma
+                        got = championship.POINTS[min(place, len(championship.POINTS)) - 1] if fin else 0
                         d["races"] += 1
                         d["wins"] += fin and place == 1
                         d["podiums"] += fin and place <= 3
                         d["places"] += place
                         d["dnf"] += not fin
-                        d["points"] = d.get("points", 0) + (championship.POINTS[min(place, len(championship.POINTS)) - 1]
-                                                            if fin else 0)
-            state["round"] = rnd
+                        d["points"] = d.get("points", 0) + got
+                        points[k] = points.get(k, 0) + got
+                        wins[k] = wins.get(k, 0) + (fin and place == 1)
+                        places[k] = places.get(k, 0) + place
+            new_divs, tables = promote_relegate(divs, points, wins, places)
+            before = {k: d for d, div in enumerate(tables) for k in div}
+            after = {k: d for d, div in enumerate(new_divs) for k in div}
+            moved_up = [k for k in after if after[k] < before[k]]
+            moved_down = [k for k in after if after[k] > before[k]]
+            state.setdefault("seasons", []).append({"season": season, "tables": tables, "points": points, "wins": wins,
+                                                    "promoted": moved_up, "relegated": moved_down})
+            state["divisions"] = new_divs
+            state["round"] = season
             save.write_text(json.dumps(state, indent=1))
-            top = sorted(keys, key=lambda k: -state["drivers"][k]["mu"])[:3]
-            log(f"round {rnd}: " + ", ".join(f"{state['drivers'][k]['name']} {rating.show(state['drivers'][k]['mu']):.0f}"
-                                             for k in top))
+            top = tables[0][:3]
+            log(f"season {season}: division 1 won by {state['drivers'][top[0]]['name']}; "
+                f"up: {', '.join(state['drivers'][k]['name'] for k in moved_up) or '-'}; "
+                f"down: {', '.join(state['drivers'][k]['name'] for k in moved_down) or '-'}")
+    finally:
+        if pool:
+            pool.close()
+            pool.join()
     return state
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--rounds", type=int, default=10)
+    ap.add_argument("--rounds", type=int, default=10, help="seasons to add")
     ap.add_argument("--laps", type=int, default=5)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--fresh", action="store_true", help="start the league again")

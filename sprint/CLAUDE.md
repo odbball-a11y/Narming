@@ -703,6 +703,16 @@ podium): `record_result(..., finished=)`.
   Zappy fast and clean; Bold fast and messy; Grip Dave fast everywhere, bumps
   cars he catches. Unreliable here: places lost, recovery time, share of passes
   with contact.
+- League with promotion and relegation (user: TrueSkill from a reliable number
+  of races; tournaments with promotion and relegation). `league.py`: seasons
+  (each division races the five tracks once, points 10-7-5-3-2-1), divisions of
+  `SIZE` 6 kept between seasons (`divisions_of`: first season by rating, new cars
+  join the bottom, a last division under 3 merges), `promote_relegate` swaps the
+  top and bottom `MOVE` 2; TrueSkill across all divisions; a rating is settled at
+  +- `SETTLED` 40 (about 50 races), "provisional" before. `run_league(rounds=)`
+  counts seasons (also used by the curriculum benchmark and `assess.validate`).
+  Dave_weakness: house rival made from Dangerous Dave's second adaptive-curriculum
+  candidate (fixed grid v original 19-11, +0.87 places, p 0.2; 3 DNFs v 11).
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to
