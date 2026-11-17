@@ -128,3 +128,45 @@ def test_the_adaptive_course_places_trains_benchmarks_and_reports(tmp_path, monk
                  "Fixed-grid benchmark", "Head to head", "## Verdicts", "Not promoted"):
         assert part in text
     assert (stable.RIVALS_DIR / "careful-keith.npz").read_bytes() == before            # the original is untouched
+
+
+def test_stall_reasons_remedial_ease_and_recovery_on_retest(tmp_path, monkeypatch):
+    state = curriculum.fresh_state({"id": "x", "name": "X"})
+    state["skills"]["racecraft"]["stage"] = "racecraft-2"
+    while "racecraft-2" not in state["stalled"]:
+        curriculum._advance(state, "racecraft", state["skills"]["racecraft"]["stage"], 0.0)
+    st = state["stages"]["racecraft-2"]
+    assert "easiest setting" in st["stall_reason"] and st["remedial_ease"] == 1.0
+    # remedial lessons use the stage's remedial ease, not full difficulty
+    seen = []
+    make = curriculum.BY_ID["racecraft-2"]["make"]
+    monkeypatch.setitem(curriculum.BY_ID["racecraft-2"], "make", lambda rng, e, ctx=None: (seen.append(e), make(rng, e, ctx))[1])
+    state["skills"] = {k: dict(v, stage=None) for k, v in state["skills"].items()}
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps(dict(state, ctx=CTX)))
+    curriculum.lesson({"academy_curriculum": str(path), "academy_partners": [], "car": None}, np.random.default_rng(0))
+    assert seen == [1.0]
+    # retests step the difficulty back up, and a full-difficulty pass is Recovered, not Mastered
+    assert curriculum.retest(state, "racecraft-2", 0.2) == "failed"
+    steps = [curriculum.retest(state, "racecraft-2", 1.0) for _ in range(4)]   # 1.0 -> 0.66 -> 0.32 -> 0, then full
+    assert steps[:3] == ["passed (easier); harder again"] * 3 and steps[3] == "recovered at full difficulty"
+    assert "racecraft-2" in state["recovered"] and "racecraft-2" not in state["stalled"] + state["mastered"]
+    assert curriculum.status_of(state, "racecraft-2") == "Recovered on retest (after stalling)"
+    assert st["stall_reason"] and len(st["retests"]) == 5                     # the stall history is kept
+    other = curriculum.fresh_state({"id": "y", "name": "Y"})
+    for _ in range(curriculum.STALL_ATTEMPTS):
+        if other["skills"]["grip"]["stage"] != "grip-1":
+            break
+        curriculum._advance(other, "grip", "grip-1", 0.5 if other["skills"]["grip"]["ease"] < 1 else 0.9)
+    assert "grip-1" in other["stalled"] and "limit" in other["stages"]["grip-1"]["stall_reason"]
+
+
+def test_following_lessons_pay_for_following_not_for_getting_past():
+    base = {"damage": 0.0, "fault": 0.0, "suffered": 0.0, "walls": 0, "tailgate": 0.0, "corner_tail": 0.0, "weaves": 0,
+            "clean_passes": 0, "reached": 1, "laps": 2.0, "field": 2}
+    follower = dict(base, close=0.8, place=2)
+    passer = dict(base, close=0.1, place=1, clean_passes=1, laps=2.3)
+    extra = curriculum.BY_ID["racecraft-2"]["extra"]
+    s = evolve.craft_score({k: [v] for k, v in follower.items()}, None, extra)[0]
+    t = evolve.craft_score({k: [v] for k, v in passer.items()}, None, extra)[0]
+    assert s > t

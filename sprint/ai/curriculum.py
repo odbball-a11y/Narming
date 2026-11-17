@@ -279,7 +279,7 @@ CURRICULUM = {
         _stage("racecraft-2", "Safe following distance through corners", "craft",
                lambda e: [("corner_tail", "<=", 0.03 + 0.03 * e), ("contacts", "<=", 0),
                           ("close", ">=", 0.6 - 0.15 * e), ("max_gap_s", "<=", 2.0 + 1.0 * e)],
-               _follow(TIGHT_TRACKS + ["speedway"]), {"close": 0.5, "corner_tail": -1.5, "clean_passes": -0.6}),
+               _follow(TIGHT_TRACKS + ["speedway"]), {"follow": True, "close": 3.0, "corner_tail": -1.5}),
         _stage("racecraft-3", "Spot the chance to pass a slower car", "craft",
                lambda e: [("clean_passes", ">=", 1), ("fault", "<=", 0)],
                _behind(EASY_TRACKS, 1, PASS_PACE, ("line",), 2.5)),
@@ -332,8 +332,9 @@ def objectives(stage_id: str, ease: float = 0.0) -> list:
 # ----------------------------------------------------------------- training
 
 def done_stages(state: dict) -> set:
-    """Stages the driver has shown it can do: passed on entry or mastered."""
-    return set(state.get("entry", [])) | set(state["mastered"])
+    """Stages the driver has shown it can do: passed on entry, mastered, or
+    recovered on retest after stalling."""
+    return set(state.get("entry", [])) | set(state["mastered"]) | set(state.get("recovered", []))
 
 
 def skill_weights(state: dict) -> dict:
@@ -380,7 +381,8 @@ def lesson(config: dict, rng) -> dict:
     review = sorted(done_stages(state))
     roll = rng.random()
     if stalled and (roll < REMEDIAL_SHARE or not (current or review)):
-        sid, ease = stalled[int(rng.integers(0, len(stalled)))], 0.0
+        sid = stalled[int(rng.integers(0, len(stalled)))]
+        ease = state["stages"][sid].get("remedial_ease", 0.0)          # remedial work starts where it failed
     elif review and (not current or rng.random() < REVIEW_SHARE):
         w = np.array([3.0 if i in state.get("forgotten", []) else 1.0 for i in review])
         sid, ease = review[int(rng.choice(len(review), p=w / w.sum()))], 0.0
@@ -458,7 +460,7 @@ def folder(driver_id: str, tag: str = "adaptive") -> Path:
 
 def fresh_state(spec: dict) -> dict:
     return {"driver": spec["id"], "name": spec["name"], "generations": 0, "block": 0, "entry": [], "mastered": [],
-            "stalled": [], "forgotten": [],
+            "stalled": [], "recovered": [], "forgotten": [],
             "skills": {sk: {"stage": stages[0]["id"], "ease": 0.0, "fails": 0, "fails_at_easiest": 0, "attempts": 0}
                        for sk, stages in CURRICULUM.items()},
             "stages": {sid: {"attempts": 0, "passes": [], "mastered_at": None, "stalled_at": None, "ease_used": 0.0,
@@ -508,6 +510,10 @@ def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
         s["fails_at_easiest"] += 1
     if s["fails_at_easiest"] >= STALL_AT_EASIEST or st["attempts"] >= STALL_ATTEMPTS:
         st["stalled_at"] = state["generations"]            # moving on is not passing: never mastered
+        st["stall_reason"] = (f"failed {STALL_AT_EASIEST} checks in a row at the easiest setting"
+                              if s["fails_at_easiest"] >= STALL_AT_EASIEST
+                              else f"reached the {STALL_ATTEMPTS}-check limit without passing at full difficulty")
+        st["remedial_ease"] = s["ease"]                    # remedial lessons and retests start from here
         state["stalled"].append(sid)
         _move_on(state, skill, sid)
         return "stalled; moved on (not mastered)"
@@ -519,11 +525,32 @@ def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
     return "failed; repeat"
 
 
+def retest(state: dict, sid: str, rate: float) -> str:
+    """A stalled stage's periodic retest, at its remedial ease: a pass at an
+    easier setting steps the difficulty back up; a pass at full difficulty
+    makes it Recovered on retest (its stall history is kept); a failure at an
+    easier setting is just repeated."""
+    st = state["stages"][sid]
+    ease = st.get("remedial_ease", 0.0)
+    st["retests"].append({"gen": state["generations"], "pass": rate, "ease": ease})
+    if rate < TARGET:
+        return "failed"
+    if ease > 0:
+        st["remedial_ease"] = round(max(0.0, ease - EASE_STEP), 2)
+        return "passed (easier); harder again"
+    state["stalled"].remove(sid)
+    state.setdefault("recovered", []).append(sid)
+    st["recovered_at"] = state["generations"]
+    return "recovered at full difficulty"
+
+
 def status_of(state: dict, sid: str) -> str:
     if sid in state.get("entry", []):
         return "Passed on entry"
     if sid in state["mastered"]:
         return "Mastered in training"
+    if sid in state.get("recovered", []):
+        return "Recovered on retest (after stalling)"
     if sid in state.get("stalled", []):
         return "Stalled - moved on, competency not demonstrated"
     if any(s["stage"] == sid for s in state["skills"].values()):
@@ -580,10 +607,10 @@ def course(name: str, generations: int = 120, population: int = academy.POPULATI
                 done = [i for i in sorted(done_stages(state)) if BY_ID[i]["skill"] == sk]
                 if done:
                     reviews[sk] = done[int(rng.integers(0, len(done)))]
-            retest = state["stalled"][state["block"] % len(state["stalled"])] if state["stalled"] else None
+            again = state["stalled"][state["block"] % len(state["stalled"])] if state["stalled"] else None
             todo += [(sid, 0.0, REVIEW_RUNS) for sid in reviews.values()]
-            if retest and retest not in [t[0] for t in todo]:
-                todo.append((retest, 0.0, REVIEW_RUNS))
+            if again and again not in [t[0] for t in todo]:          # at its remedial ease, as many runs as a check
+                todo.append((again, state["stages"][again].get("remedial_ease", 0.0), CHECK_RUNS))
             res = check(w, arch, info["traits"], todo, seed=state["block"], pool=pool, ctx=ctx)
             entry = {"block": state["block"], "gen": gen, "weights": state["weights"], "checks": {}, "reviews": {},
                      "retest": None}
@@ -600,16 +627,15 @@ def course(name: str, generations: int = 120, population: int = academy.POPULATI
                 elif not forgot and sid in state["forgotten"]:
                     state["forgotten"].remove(sid)
                 entry["reviews"][sid] = {"pass": rate, "forgotten": forgot}
-            if retest:
-                rate = res[retest]["pass"]
-                state["stages"][retest]["retests"].append({"gen": gen, "pass": rate})
-                entry["retest"] = {"stage": retest, "pass": rate}
+            if again and again in res:
+                rate = res[again]["pass"]
+                entry["retest"] = {"stage": again, "pass": rate, "result": retest(state, again, rate)}
             state["log"].append(entry)
             path.write_text(json.dumps(state, indent=1))
             log(f"  gen {gen}: " + "; ".join(f"{sid} {c['pass']:.0%} {c['result']}" for sid, c in entry["checks"].items())
                 + ("; review " + ", ".join(f"{sid} {r['pass']:.0%}{' FORGOTTEN' if r['forgotten'] else ''}"
                                            for sid, r in entry["reviews"].items()) if entry["reviews"] else "")
-                + (f"; retest {retest} {entry['retest']['pass']:.0%}" if retest else ""))
+                + (f"; retest {again} {entry['retest']['pass']:.0%} {entry['retest']['result']}" if entry["retest"] else ""))
         if "after" not in state and evolve.list_generations(d / "run"):
             w, arch = academy._gen_weights(d, state["generations"])
             log("  testing the candidate on every stage ...")
@@ -795,8 +821,8 @@ def report(driver_id: str, tag: str = "adaptive") -> Path:
             r = state["stages"][st["id"]]
             status = status_of(state, st["id"])
             counts[status] = counts.get(status, 0) + 1
-            if r["retests"] and any(x["pass"] >= TARGET for x in r["retests"]) and st["id"] in state["stalled"]:
-                status += " (later passed on retest)"
+            if r.get("stall_reason"):
+                status += f" - stalled at gen {r['stalled_at']}: {r['stall_reason']}"
             b, a = _rate(before, [st["id"]]), _rate(after, [st["id"]])
             L.append(f"| {SKILLS[sk].split(' ')[0]} {k}: {st['title']} | {status} | {r['attempts']} | {r['ease_used']:.2f} | "
                      f"{'-' if b is None else f'{b:.0%}'} | {'-' if a is None else f'{a:.0%}'} |")
@@ -858,8 +884,10 @@ def report(driver_id: str, tag: str = "adaptive") -> Path:
         v, h = verdicts.get(("new candidate", "original"), ("-", {}))
         L += ["", "## Verdicts", "",
               f"- **A. Competence:** {counts.get('Mastered in training', 0)} stages mastered in training, "
-              f"{counts.get('Passed on entry', 0)} passed on entry, {counts.get('Stalled - moved on, competency not demonstrated', 0)} "
-              f"stalled, {counts.get('Not reached', 0) + counts.get('In training', 0)} not finished.",
+              f"{counts.get('Passed on entry', 0)} passed on entry, "
+              f"{counts.get('Recovered on retest (after stalling)', 0)} recovered on retest after stalling, "
+              f"{counts.get('Stalled - moved on, competency not demonstrated', 0)} still stalled, "
+              f"{counts.get('Not reached', 0) + counts.get('In training', 0)} not finished.",
               f"- **B. Racing (fixed grid, against the original):** {v}"
               + (f" (finished ahead in {h['ahead']} of {h['ahead'] + h['behind']} races, {h['mean']:+.2f} places a race)" if h else "")
               + ".", "- Not promoted: promotion is a separate decision."]

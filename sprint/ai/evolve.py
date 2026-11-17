@@ -512,8 +512,18 @@ def craft_score(result: dict, weights: dict | None = None, extra: dict | None = 
     tailgating, weaving and causing contact cost extra, and the lesson's own
     `extra` terms (e.g. time spent following, places lost) add on."""
     r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
-    score = drill_score(result, weights) - sum(c * r.get(k, 0.0) for k, c in CRAFT.items())
-    for k, c in (extra or {}).items():
+    extra = dict(extra or {})
+    if extra.pop("follow", False):
+        # A following lesson: the test is staying with the car ahead safely, so
+        # place, distance and passing earn nothing here (they would reward getting
+        # past and driving away, which fails the test).  Contact and damage cost
+        # as in a race.
+        w = weights or RACE_WEIGHTS
+        score = (- w["damage"] * r["damage"] - max(w["fault"], 1.0) * r["fault"] - 0.3 * r["suffered"]
+                 - w["walls"] * r["walls"] - sum(c * r.get(k, 0.0) for k, c in CRAFT.items() if k not in ("fault", "suffered")))
+    else:
+        score = drill_score(result, weights) - sum(c * r.get(k, 0.0) for k, c in CRAFT.items())
+    for k, c in extra.items():
         score = score + c * r.get(k, 0.0)
     return score
 
