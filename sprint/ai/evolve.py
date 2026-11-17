@@ -426,7 +426,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         "slide": [g / samples for g in sliding],
         "passed": [s.passed for s in stats],
         "draft": [s.draft_share() for s in stats],
-        **{k: [m.result()[k] for m in meters] for k in ("close", "tailgate", "corner_tail", "weaves")},
+        **{k: [m.result()[k] for m in meters] for k in ("close", "tailgate", "corner_tail", "weaves", "max_gap_s")},
     }
 
 
@@ -524,7 +524,10 @@ def craft_score(result: dict, weights: dict | None = None, extra: dict | None = 
     else:
         score = drill_score(result, weights) - sum(c * r.get(k, 0.0) for k, c in CRAFT.items())
     for k, c in extra.items():
-        score = score + c * r.get(k, 0.0)
+        value = r.get(k, 0.0)
+        if k == "max_gap_s":                      # never caught the car: 99; count it as a 10-second gap
+            value = np.minimum(value, 10.0)
+        score = score + c * value
     return score
 
 

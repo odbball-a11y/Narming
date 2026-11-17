@@ -133,6 +133,15 @@ def rival_pace(track: str, target_lap: float) -> float:
     return float(np.clip(np.interp(target_lap, xs, ys), PACE_GRID[0], PACE_GRID[-1]))
 
 
+def _median_lap(track: str, driver, laps: int = 5) -> float | None:
+    """The driver's typical flying lap (median of laps 2-5), alone."""
+    import sim.scripted  # noqa: F401
+    from sim.race import Race
+    race = Race(track, [(0, driver)], laps=laps, seed=1, rolling=True).run(max_seconds=60 * laps)
+    times = sorted(race.world.cars[0].lap_times[1:])
+    return times[len(times) // 2] if times else None
+
+
 def scripted_lap(track: str, traits) -> float:
     """The scripted driver's flying lap in the learner's own car (same traits)."""
     from sim import cartraits
@@ -279,7 +288,7 @@ CURRICULUM = {
         _stage("racecraft-2", "Safe following distance through corners", "craft",
                lambda e: [("corner_tail", "<=", 0.03 + 0.03 * e), ("contacts", "<=", 0),
                           ("close", ">=", 0.6 - 0.15 * e), ("max_gap_s", "<=", 2.0 + 1.0 * e)],
-               _follow(TIGHT_TRACKS + ["speedway"]), {"follow": True, "close": 3.0, "corner_tail": -1.5}),
+               _follow(TIGHT_TRACKS + ["speedway"]), {"follow": True, "close": 3.0, "corner_tail": -1.5, "max_gap_s": -0.3}),
         _stage("racecraft-3", "Spot the chance to pass a slower car", "craft",
                lambda e: [("clean_passes", ">=", 1), ("fault", "<=", 0)],
                _behind(EASY_TRACKS, 1, PASS_PACE, ("line",), 2.5)),
@@ -438,8 +447,8 @@ def profile(weights, arch, traits, pool=None, runs: int = PROFILE_RUNS, ctx=None
 
 def measure(weights, arch, traits) -> dict:
     """The learner's baseline for pace-relative rivals and fair pace targets:
-    its own best flying lap on every track (driving alone) and the scripted
-    driver's in the same car."""
+    its own typical (median) flying lap on every track, driving alone, and the
+    scripted driver's best lap in the same car."""
     from ai.brain import NeuralDriver
     from sim import cartraits
     laps, scripted = {}, {}
@@ -447,7 +456,7 @@ def measure(weights, arch, traits) -> dict:
         d = NeuralDriver(weights, arch, "Learner")
         d.car_params = cartraits.params_for(traits or cartraits.default())
         scripted[t] = round(scripted_lap(t, traits), 3)
-        mine = _best_lap(t, d)
+        mine = _median_lap(t, d)
         laps[t] = round(mine, 3) if mine else scripted[t]
     return {"laps": laps, "scripted": scripted}
 
@@ -801,7 +810,7 @@ def report(driver_id: str, tag: str = "adaptive") -> Path:
          f"Rivals are matched to the driver's own measured lap pace (following {FOLLOW_PACE:.0%}, overtaking "
          f"{PASS_PACE:.0%}); pace targets compare with the scripted driver in the same car. The original is untouched "
          "and the candidate is not promoted.", "",
-         "## Placement", "", "Measured flying laps (alone) and the scripted driver in the same car:", "",
+         "## Placement", "", "Measured typical (median) flying laps, alone, and the scripted driver's best lap in the same car:", "",
          "| Track | Driver | Scripted, same car |", "|---|---|---|"]
     for t in ALL_TRACKS:
         L.append(f"| {stable.TRACK_NAMES[t]} | {ctx.get('laps', {}).get(t, '-')} s | {ctx.get('scripted', {}).get(t, '-')} s |")

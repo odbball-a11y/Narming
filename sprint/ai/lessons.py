@@ -62,7 +62,7 @@ def place(world, i: int, spec: dict | None) -> None:
     car.prev_x, car.prev_y, car.prev_heading = car.x, car.y, car.heading
 
 
-FOLLOW = 14.0       # within this far behind the car ahead (track distance) counts as following it
+FOLLOW_S = 1.0      # within this many seconds behind the car ahead (at the follower's speed) counts as following it
 TAIL = 4.5          # closer than this, in the same lane, is tailgating
 LANE = 2.6          # lateral distance that counts as the same lane
 DEFEND = 10.0       # a car this close behind means the driver is defending
@@ -105,7 +105,7 @@ class CraftMeter:
         if in_corner:
             self.corner_n += 1
             self.corner_tail += tail
-        if ahead and ahead[0] < FOLLOW:
+        if ahead and ahead[0] / max(car.speed, 5.0) <= FOLLOW_S:
             self.close += 1
             self.caught = True
             if tail:
