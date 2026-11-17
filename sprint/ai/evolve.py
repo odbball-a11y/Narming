@@ -1021,6 +1021,9 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
         if rival not in champions:
             if isinstance(rival, str):            # "p:<i>": a chosen training partner
                 vector = load_pop_file(config["partners"][int(rival[2:])]["file"])[0]
+                if len(vector) < n_weights(arch):     # stored at older inputs: rewire it as races do
+                    from .brain import align
+                    vector = align(vector, arch)[0]
                 if len(vector) < n_weights(arch) or (len(vector) > n_weights(arch) and not arch.get("notes")
                                                      and len(vector) != n_weights(arch)):
                     raise ValueError("training partner has a different network shape")
