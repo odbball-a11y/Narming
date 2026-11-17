@@ -65,6 +65,8 @@ def test_progress_easing_and_stalled_stages_move_on_but_are_never_mastered():
     assert adv(0.2) == "failed; made easier"
     assert adv(0.9).startswith("passed (easier)")
     assert state["skills"]["racecraft"]["stage"] == "racecraft-1"
+    assert adv(0.9) == "passed (1 of 2 in a row)"                  # one pass at full difficulty is not enough
+    assert adv(0.2) == "failed; repeat" and adv(0.9) == "passed (1 of 2 in a row)"   # a failure resets the run
     assert adv(0.9) == "mastered" and state["skills"]["racecraft"]["stage"] == "racecraft-2"
     results = [adv(0.0) for _ in range(20)]
     assert "stalled; moved on (not mastered)" in results
@@ -88,7 +90,7 @@ def test_weights_favour_weak_skills_with_a_cap_and_remedial_lessons(tmp_path):
     config = {"academy_curriculum": str(path), "academy_driver": "careful-keith", "academy_partners": [], "car": None}
     got = [curriculum.lesson(config, np.random.default_rng(k))["challenge"] for k in range(400)]
     remedial = got.count("recovery-4") / len(got)
-    assert 0.17 < remedial < 0.33                                         # about one in four
+    assert 0.05 < remedial < 0.16                                         # about one in ten
     from ai.brain import DEFAULT_ARCH, n_weights
     craft = next(x for x in (curriculum.lesson(config, np.random.default_rng(k)) for k in range(80)) if x["lesson"] == "craft")
     out = evolve.test_race(np.random.default_rng(1).normal(0, 0.3, (2, n_weights(DEFAULT_ARCH))), DEFAULT_ARCH,
@@ -136,7 +138,7 @@ def test_stall_reasons_remedial_ease_and_recovery_on_retest(tmp_path, monkeypatc
     while "racecraft-2" not in state["stalled"]:
         curriculum._advance(state, "racecraft", state["skills"]["racecraft"]["stage"], 0.0)
     st = state["stages"]["racecraft-2"]
-    assert "easiest setting" in st["stall_reason"] and st["remedial_ease"] == 1.0
+    assert "easiest setting" in st["stall_reason"] and st["remedial_ease"] == 0.0
     # remedial lessons use the stage's remedial ease, not full difficulty
     seen = []
     make = curriculum.BY_ID["racecraft-2"]["make"]
@@ -145,14 +147,13 @@ def test_stall_reasons_remedial_ease_and_recovery_on_retest(tmp_path, monkeypatc
     path = tmp_path / "c.json"
     path.write_text(json.dumps(dict(state, ctx=CTX)))
     curriculum.lesson({"academy_curriculum": str(path), "academy_partners": [], "car": None}, np.random.default_rng(0))
-    assert seen == [1.0]
+    assert seen == [0.0]                                                  # remedial work at full difficulty
     # retests step the difficulty back up, and a full-difficulty pass is Recovered, not Mastered
     assert curriculum.retest(state, "racecraft-2", 0.2) == "failed"
-    steps = [curriculum.retest(state, "racecraft-2", 1.0) for _ in range(4)]   # 1.0 -> 0.66 -> 0.32 -> 0, then full
-    assert steps[:3] == ["passed (easier); harder again"] * 3 and steps[3] == "recovered at full difficulty"
+    assert curriculum.retest(state, "racecraft-2", 1.0) == "recovered at full difficulty"
     assert "racecraft-2" in state["recovered"] and "racecraft-2" not in state["stalled"] + state["mastered"]
     assert curriculum.status_of(state, "racecraft-2") == "Recovered on retest (after stalling)"
-    assert st["stall_reason"] and len(st["retests"]) == 5                     # the stall history is kept
+    assert st["stall_reason"] and len(st["retests"]) == 2                     # the stall history is kept
     other = curriculum.fresh_state({"id": "y", "name": "Y"})
     for _ in range(curriculum.STALL_ATTEMPTS):
         if other["skills"]["grip"]["stage"] != "grip-1":
@@ -175,4 +176,5 @@ def test_following_lessons_pay_for_following_not_for_getting_past():
 def test_four_of_six_is_a_pass():
     assert round(4 / 6, 3) >= curriculum.TARGET > round(3 / 6, 3)
     state = curriculum.fresh_state({"id": "x", "name": "X"})
+    assert curriculum._advance(state, "grip", "grip-1", round(4 / 6, 3)) == "passed (1 of 2 in a row)"
     assert curriculum._advance(state, "grip", "grip-1", round(4 / 6, 3)) == "mastered"

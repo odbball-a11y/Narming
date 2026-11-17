@@ -60,7 +60,9 @@ EASE_AFTER = 2         # failed checks in a row before the stage is made easier
 EASE_STEP = 0.34
 STALL_AT_EASIEST = 4   # failed checks in a row at the easiest setting -> stalled
 STALL_ATTEMPTS = 12    # or this many checks on one stage in all -> stalled
-REMEDIAL_SHARE = 0.25  # one remedial lesson (stalled stages) for every three normal ones
+REMEDIAL_SHARE = 0.1   # one remedial lesson in ten (stalled stages, at full difficulty)
+MASTER_STREAK = 2      # passes in a row at full difficulty to master a stage
+LESSON_SHARE = 0.65    # the rest of every block's training races are normal racing
 WEIGHT_CAP = 0.4       # no skill gets more than this share of the normal lessons
 RACECRAFT_EMPHASIS = 1.5
 FOLLOW_PACE = 0.95     # following: the car ahead at 95% of the learner's pace (5% slower)
@@ -390,8 +392,7 @@ def lesson(config: dict, rng) -> dict:
     review = sorted(done_stages(state))
     roll = rng.random()
     if stalled and (roll < REMEDIAL_SHARE or not (current or review)):
-        sid = stalled[int(rng.integers(0, len(stalled)))]
-        ease = state["stages"][sid].get("remedial_ease", 0.0)          # remedial work starts where it failed
+        sid, ease = stalled[int(rng.integers(0, len(stalled)))], 0.0   # remedial work at full difficulty
     elif review and (not current or rng.random() < REVIEW_SHARE):
         w = np.array([3.0 if i in state.get("forgotten", []) else 1.0 for i in review])
         sid, ease = review[int(rng.choice(len(review), p=w / w.sum()))], 0.0
@@ -496,7 +497,7 @@ def _move_on(state: dict, skill: str, sid: str) -> None:
     k = ladder.index(sid)
     s = state["skills"][skill]
     s["stage"] = ladder[k + 1] if k + 1 < len(ladder) else None
-    s["ease"], s["fails"], s["fails_at_easiest"] = 0.0, 0, 0
+    s["ease"], s["fails"], s["fails_at_easiest"], s["streak"] = 0.0, 0, 0, 0
 
 
 def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
@@ -509,12 +510,18 @@ def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
         s["fails"] = s["fails_at_easiest"] = 0
         if s["ease"] > 0:                                   # passed an easier version: step the difficulty back up
             s["ease"] = round(max(0.0, s["ease"] - EASE_STEP), 2)
+            s["streak"] = 0
             return "passed (easier); harder again"
+        s["streak"] = s.get("streak", 0) + 1
+        if s["streak"] < MASTER_STREAK:                     # one pass is not enough: pass the next check too
+            return f"passed ({s['streak']} of {MASTER_STREAK} in a row)"
+        s["streak"] = 0
         st["mastered_at"] = state["generations"]
         state["mastered"].append(sid)
         _move_on(state, skill, sid)
         return "mastered" + ("" if s["stage"] else "; skill complete")
     s["fails"] += 1
+    s["streak"] = 0
     if s["ease"] >= 1.0:
         s["fails_at_easiest"] += 1
     if s["fails_at_easiest"] >= STALL_AT_EASIEST or st["attempts"] >= STALL_ATTEMPTS:
@@ -522,7 +529,7 @@ def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
         st["stall_reason"] = (f"failed {STALL_AT_EASIEST} checks in a row at the easiest setting"
                               if s["fails_at_easiest"] >= STALL_AT_EASIEST
                               else f"reached the {STALL_ATTEMPTS}-check limit without passing at full difficulty")
-        st["remedial_ease"] = s["ease"]                    # remedial lessons and retests start from here
+        st["remedial_ease"] = 0.0                          # remedial lessons and retests: full difficulty
         state["stalled"].append(sid)
         _move_on(state, skill, sid)
         return "stalled; moved on (not mastered)"
@@ -604,7 +611,7 @@ def course(name: str, generations: int = 120, population: int = academy.POPULATI
                 break
             state["weights"] = skill_weights(state)
             path.write_text(json.dumps(state, indent=1))
-            academy.train(spec["id"], block, population, workers, log=lambda m: None, where=d, lesson_share=0.85,
+            academy.train(spec["id"], block, population, workers, log=lambda m: None, where=d, lesson_share=LESSON_SHARE,
                           planned=generations, curriculum=evolve.project_path(path))
             gen = evolve.list_generations(d / "run")[-1]
             state["generations"], state["block"] = gen, state["block"] + 1
@@ -682,6 +689,11 @@ def versions(driver_id: str, tag: str = "adaptive") -> dict:
         g = json.loads((old / "curriculum.json").read_text())["generations"]
         w, arch = academy._gen_weights(old, g)
         out["previous candidate"] = _save_brain(d / "bench", "previous candidate", w, arch, info)
+    first = folder(driver_id, "adaptive")
+    if tag != "adaptive" and (first / "curriculum.json").exists():     # the first adaptive run, for comparison
+        g = json.loads((first / "curriculum.json").read_text())["generations"]
+        w, arch = academy._gen_weights(first, g)
+        out["first adaptive candidate"] = _save_brain(d / "bench", "first adaptive candidate", w, arch, info)
     state = json.loads((d / "curriculum.json").read_text())
     w, arch = academy._gen_weights(d, state["generations"])
     out["new candidate"] = _save_brain(d / "bench", "new candidate", w, arch, info)
@@ -871,7 +883,8 @@ def report(driver_id: str, tag: str = "adaptive") -> Path:
             L.append(f"| {lab} | " + " | ".join(f"{bt.get(t, 0):.2f}" for t in ALL_TRACKS) + " |")
         L += ["", "### Head to head (same races)", "", "| Pair | Races | Ahead - behind | Mean places better | Sign test p | Verdict |",
               "|---|---|---|---|---|---|"]
-        pairs = [("new candidate", "original"), ("new candidate", "previous candidate"), ("previous candidate", "original")]
+        pairs = [("new candidate", "original"), ("new candidate", "previous candidate"),
+                 ("new candidate", "first adaptive candidate"), ("previous candidate", "original")]
         verdicts = {}
         for a, b in pairs:
             if a in keys and b in keys:
