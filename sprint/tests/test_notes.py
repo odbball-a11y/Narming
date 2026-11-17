@@ -31,7 +31,8 @@ def test_zero_notes_drive_exactly_as_no_notes_and_real_notes_change_driving():
     assert a["laps"] == b["laps"]
     track = Track.load("oval")
     changed = noted.copy()
-    k = brain.n_weights(arch) + sum(c * brain.NOTE_FIELDS for key, c, _ in arch["notes"] if key < "oval")
+    keys = [key for key, _, _ in arch["notes"]]
+    k = brain.n_weights(arch) + sum(c * brain.NOTE_FIELDS for key, c, _ in arch["notes"][:keys.index("oval")])
     changed[0, k:k + track.corners()["count"] * 3] = 0.9
     assert brain.notes_for(changed[0], arch, track)[0, 0] == 0.9
     c = evolve.test_solo(changed, arch, "oval", seconds=8)

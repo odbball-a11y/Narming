@@ -22,7 +22,7 @@ from .render import C_CYAN, C_HUD_ACCENT, C_HUD_DIM, C_HUD_TEXT, C_PINK, Camera,
 from .screens import ACCEPT, BACK, DOWN, LEFT, RIGHT, UP, Screen
 
 TRACKS = ["oval", "speedway", "esses", "technical", "grandprix"]
-NAMES = {"oval": "Oval", "speedway": "Speedway", "esses": "Esses", "technical": "Technical", "grandprix": "Grand Prix"}
+NAMES = {"oval": "Oval", "speedway": "Speedway", "esses": "Esses", "technical": "Technical", "grandprix": "Grand Prix", "national": "National"}
 C_BRAKE = (240, 70, 80)
 C_POWER = (60, 220, 110)
 

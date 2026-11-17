@@ -95,7 +95,8 @@ def _write(path: Path, data) -> None:
 
 
 # A scripted car's flying lap on each track, to compare AI pace across tracks.
-SCRIPTED_LAPS = {"oval": 11.48, "speedway": 13.98, "esses": 17.37, "technical": 22.20, "grandprix": 23.99}
+SCRIPTED_LAPS = {"oval": 11.48, "speedway": 13.98, "esses": 17.37, "technical": 22.20, "grandprix": 23.99,
+                 "national": 13.85}
 TRACK_NAMES = {"oval": "Oval", "speedway": "Speedway", "esses": "Esses", "technical": "Technical",
                "grandprix": "Grand Prix"}
 

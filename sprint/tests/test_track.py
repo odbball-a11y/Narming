@@ -106,3 +106,19 @@ def test_checkpoints_and_grid(track):
 def test_racing_line_defaults_to_centreline(track):
     assert np.allclose(track.racing_line, track.center)
     assert track.racing_line_point(12.0) == track.point_at(12.0)
+
+
+def test_a_new_track_goes_after_the_first_five_in_the_notes_layout():
+    """Older brains pad missing notes with zeros at the end, so a newer track
+    (National) must come after the first five or their notes would shift."""
+    from ai import brain
+    keys = [k for k, _, _ in brain.notes_layout()]
+    assert keys[:5] == ["esses", "grandprix", "oval", "speedway", "technical"]
+    assert "national" in keys[5:]
+
+
+def test_national_runs_anticlockwise_for_now():
+    import numpy as np
+    t = Track.load("national")
+    x, y = t.center[:, 0], t.center[:, 1]
+    assert 0.5 * np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y) < 0      # y down: negative = anticlockwise

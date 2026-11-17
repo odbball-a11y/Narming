@@ -650,6 +650,27 @@ podium): `record_result(..., finished=)`.
   when `academy.promotable` (otherwise the foal stays as born).
   `CertificateScreen` has a second page (A): Academy pass rates by module at
   birth and after the course, with the change and whether it was promoted.
+- National (user: a track based on Silverstone National, "traceable", practice
+  only for now; keep the clockwise design but run it anticlockwise at first for
+  ease of racing). `tracks/national.json` (314 long, width 9.6, verge 2.3,
+  scripted 13.85 s, anticlockwise: pit straight, Woodcote, Luffield, Brooklands,
+  the National Straight, Becketts-Maggotts, Copse). The clockwise original is
+  `mockups/national_clockwise.json`, made by `mockups/national_make.py` (straights
+  and arcs, closed by solving two straight lengths, scaled to the play area).
+  Not in `championship.TRACK_ORDER`, the graduate's or the Academy's tracks; no
+  AI has trained on it. Notes order fixed: `brain.notes_layout` keeps the first
+  five tracks in their old order and puts newer ones after (older brains pad
+  missing notes with zeros at the end; alphabetical order would have shifted
+  them).
+- Progressive curriculum (`ai/curriculum.py`, user: progressive learning,
+  racecraft in ten steps, mastery-based, randomised, judgement rewarded, no
+  forgetting, tournament benchmark): five skill ladders, `course` (blocks of
+  `BLOCK` gens, checks of `CHECK_RUNS` fresh scenarios, `TARGET` 0.67 at full
+  difficulty, ease after `EASE_AFTER` fails, `STALL`, review share and
+  re-tests), `lessons.CraftMeter` (close / tailgate / weaves), `evolve.craft_score`,
+  `league.run_league` benchmark with original and candidate, `report`.
+  `python -m ai.curriculum run NAME`. Calibration: every house rival fails most
+  racecraft stages before training; Keith never catches a slower car.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

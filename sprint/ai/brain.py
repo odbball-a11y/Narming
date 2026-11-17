@@ -344,7 +344,11 @@ def notes_layout() -> list:
     """[[track key, corners, track fingerprint], ...] for every track, in a fixed order."""
     if not _LAYOUT:
         from sim.track import Track
-        for key in sorted(Track.available()):
+        # The first five tracks keep their places; newer tracks go after them, so an
+        # older brain's notes (padded with zeros at the end) still line up.
+        first = ["esses", "grandprix", "oval", "speedway", "technical"]
+        keys = [k for k in first if k in Track.available()] + sorted(set(Track.available()) - set(first))
+        for key in keys:
             track = Track.load(key)
             _LAYOUT.append([key, track.corners()["count"], track.fingerprint()])
     return [list(x) for x in _LAYOUT]

@@ -1,7 +1,7 @@
 {
  "name": "National",
  "laps": 3,
- "verge": 2.6,
+ "verge": 2.3,
  "checkpoints": 14,
  "comment": "Each point is [x, y, track width]. Inspired by Silverstone's National circuit, run clockwise: the pit straight, the fast right at Copse, the Maggotts-Becketts S, the long Wellington Straight, a heavy stop into Brooklands, the long tightening right of Luffield and the fast Woodcote back onto the pit straight.",
  "points": [

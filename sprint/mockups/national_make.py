@@ -2,7 +2,7 @@
 import json, math, sys
 import numpy as np
 sys.path.insert(0, ".")
-W, VERGE = 9.6, 2.6
+W, VERGE = 9.6, 2.3
 # (kind, value, radius): straight length, or arc turn in degrees (+ = right) with radius
 PLAN = [("s", 70, None, "pit straight"), ("a", 145, 13, "Copse"), ("s", 4, None, ""),
         ("a", -40, 16, "Maggotts"), ("a", 85, 12, "Becketts"), ("a", -45, 12, "Chapel"), ("s", 3, None, ""),
