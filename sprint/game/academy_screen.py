@@ -73,6 +73,10 @@ class AcademyScreen(Screen):
                 self.enrol(d)
         elif event.key == pygame.K_r and self.list:
             self.open_report()
+        elif event.key == pygame.K_s and self.list:           # the driver's Scouting Report
+            from .scouting_screen import ScoutingScreen
+            d = self.current()
+            self.app.show(ScoutingScreen(self.app, d["id"], d["name"], back=lambda: AcademyScreen(self.app)))
 
     def open_report(self) -> None:
         s = academy.summary(self.current()["id"])
@@ -169,7 +173,7 @@ class AcademyScreen(Screen):
                 tint = C_CYAN
             ui.text(screen, "small", text, tint, 70, y + 0.8)
             y += 4.6
-        ui.text(screen, "small", "Up/Down choose   Enter enrol / carry on / see the report   R report   Esc back",
+        ui.text(screen, "small", "Up/Down choose   Enter enrol / carry on / see the report   R report   S scouting report   Esc back",
                 C_HUD_DIM, 6, 88.5, "bottomleft")
 
     def draw_report(self, screen) -> None:

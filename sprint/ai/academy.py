@@ -251,6 +251,13 @@ def driver_spec(name: str, root: Path | None = None) -> dict:
                     "arch": d.arch, "traits": card.get("traits") or cartraits.default(),
                     "aggression": card.get("aggression", 0.5), "caution": card.get("caution", 0.5),
                     "source": f"house:{card['id']}"}
+    for g in stable.guests():                            # guest drivers (house/guests/)
+        if name.lower() in (g["name"].lower(), g["id"]):
+            d = stable.guest_driver(g["id"])
+            return {"id": g["id"], "name": g["name"], "kind": "guest", "weights": np.asarray(d.weights),
+                    "arch": d.arch, "traits": g.get("traits") or cartraits.default(),
+                    "aggression": g.get("aggression") or 0.5, "caution": g.get("caution") or 0.5,
+                    "source": f"guest:{g['id']}"}
     for base in [root] if root else [stable.STABLE_DIR, stable.WORKSHOP_DIR]:
         for d in stable.list_racers(base, include_dead=True) if base else []:
             racer = stable.load(d)
@@ -379,6 +386,7 @@ def run_variant(weights, arch, traits, variant: dict, rep: int = 0) -> dict:
     return {
         "laps": round(covered / length, 3),
         "pace": round(best / stable.SCRIPTED_LAPS[track.key], 4) if best else None,
+        "lap_cv": round(float(np.std(laps_timed) / np.mean(laps_timed)), 4) if len(laps_timed) >= 2 else None,
         "offtrack": round(grass / max(1, n), 4),
         "slide": round(slides / max(1, n), 4),
         "line_error": round(line_sum / max(1, line_n), 4),

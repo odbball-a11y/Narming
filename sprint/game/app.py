@@ -116,6 +116,19 @@ class App:
                                 cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT, **_own_group())
         self.trainer = {"proc": proc, "dir": str(folder), "log": log}
 
+    def start_scouting(self, driver_name: str, driver_id: str) -> None:
+        """Assess a driver for its Scouting Report in a separate process."""
+        from ai import assess, evolve
+        if self.training_dir():
+            raise RuntimeError("already training")
+        folder = assess.OUT / driver_id
+        folder.mkdir(parents=True, exist_ok=True)
+        workers = max(1, min(3, (os.cpu_count() or 2) - 1))
+        log = open(folder / "assess.log", "a", encoding="utf-8")
+        proc = subprocess.Popen([sys.executable, "-m", "ai.assess", "run", driver_name, "--workers", str(workers)],
+                                cwd=evolve.PROJECT, stdout=log, stderr=subprocess.STDOUT, **_own_group())
+        self.trainer = {"proc": proc, "dir": str(folder), "log": log}
+
     def start_trackschool(self, school_dir) -> None:
         """Train a track-school copy in a separate process."""
         self._start_job(None, school_dir, module="ai.trackschool")

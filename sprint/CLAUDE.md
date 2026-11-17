@@ -680,6 +680,29 @@ podium): `record_result(..., finished=)`.
   LEGENDS, all scrolling (Up/Down, PgUp/PgDn, scroll bar), S sort, F filter, W
   wins or win % by track; Enter opens `CarRecordScreen` (per track, seasons,
   highlights, head to head). Pictures `mockups/hall_*.png` (synthetic seasons).
+- Scouting Report (phase 1 of weakness-led Upskilling, user-agreed: assessment
+  only, no training; both Upskill styles will stay; 50-generation budget stays).
+  `ai/assess.py`: `BATTERY` (solo laps on all tracks + National unseen,
+  overtaking slower cars set from the driver's own median lap, defending a
+  faster house rival, busy traffic, a six-car race with the house rivals,
+  recoveries, low grip) run twice (seeds A/B); `MEASURES` are real quantities
+  (pace v the scripted driver in the same car, lap spread, off-track, walls,
+  pass share, contacts per car caught, places lost, weaves, contacts in traffic,
+  tailgating, race place, recovery, greasy pace, National). Per-attempt measures
+  are None when never attempted (a car that never tries is not praised).
+  `field()` rescores every saved car from its raw runs: field percentile,
+  test-retest reliability (A v B across cars, `RELIABLE` 0.5, from `MIN_FIELD` 5
+  cars), noise; strength/weakness only if reliable and more than 2x noise from
+  the field median. `validate()` runs a field tournament and rank-correlates
+  each measure with points per race (conclusive from `MIN_VALIDITY` 8 cars).
+  Files in `scouting/` (git-ignored). CLI `python -m ai.assess run NAME | field |
+  validate`. Screen `game/scouting_screen.py` (racer card SCOUTING REPORT,
+  Academy screen S; Enter assesses in the background via `App.start_scouting`).
+  `academy.driver_spec` finds guests too; `run_variant` gives `lap_cv`.
+  First field (6 cars here): Keith clean but slow, can't pass; Dave messy;
+  Zappy fast and clean; Bold fast and messy; Grip Dave fast everywhere, bumps
+  cars he catches. Unreliable here: places lost, recovery time, share of passes
+  with contact.
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to

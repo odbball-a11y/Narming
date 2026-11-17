@@ -637,6 +637,8 @@ class RacerScreen(Screen):
             out.append("retire")
         if self.app.workshop and trained:
             out.append("publish")
+        if trained:
+            out.append("scouting")
         out.append("training")
         out.append("back")
         return out
@@ -719,6 +721,11 @@ class RacerScreen(Screen):
                 self.reload()
             elif choice == "upskill":
                 self.app.show(CreateScreen(self.app, self.racer_dir))
+            elif choice == "scouting":
+                from .scouting_screen import ScoutingScreen
+                d = self.racer_dir
+                self.app.show(ScoutingScreen(self.app, Path(d).name, self.racer["name"],
+                                             back=lambda: RacerScreen(self.app, d)))
             elif choice == "publish":
                 path = stable.publish(self.racer_dir)
                 self.message = f"Published as a house rival: house/rivals/{path.stem}"
@@ -835,6 +842,7 @@ class RacerScreen(Screen):
                   "race": "TEST RACE", "championship": "ENTER CHAMPIONSHIP", "stop": "STOP",
                   "resume": "RESUME TRAINING", "training": "TRAINING HISTORY",
                   "upskill": "UPSKILL", "retire": "RETIRE TO STUD", "publish": "PUBLISH AS HOUSE RIVAL",
+                  "scouting": "SCOUTING REPORT",
                   "back": "BACK"}
         rows = self.rows()
         y = 48.0

@@ -452,7 +452,7 @@ def test_career_screens(app, monkeypatch):
     card.row = card.rows().index("retire")
     press(app, pygame.K_RETURN)
     assert stable.status(racer) == "stud" and "retires" in card.message
-    assert card.rows() == ["training", "back"] and "AT STUD" in status_text(app, racer)[0]
+    assert card.rows() == ["scouting", "training", "back"] and "AT STUD" in status_text(app, racer)[0]
     other = stable.create(root, "Mate", 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
     quick_train(other)
     stable.retire(other)
