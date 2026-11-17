@@ -797,13 +797,50 @@ def _academy_score(job) -> dict:
             "modules": {str(m): round(academy.pass_rate(res, "unseen", m), 3) for m in academy.MODULES}}
 
 
+def academy_test(racer_dir, repeats: int = ACADEMY_TEST_REPEATS) -> dict | None:
+    """Sit the racer's current driver through the Academy tests (unseen
+    scenarios; no training) and keep the result with its latest finished
+    round of training: `version["academy_test"]` = {"score", "modules"}.
+    None if that round is unfinished or was already tested."""
+    racer_dir = Path(racer_dir)
+    left = progress(racer_dir)
+    if brain_file(racer_dir) is None or left["done"] < left["target"]:
+        return None
+    if load(racer_dir)["versions"][-1].get("academy_test"):
+        return None
+    from .brain import align
+    w = brain(racer_dir)
+    w, arch = align(w, arch_for_vector(w, graduate()["arch"]))
+    result = _academy_score((w, arch, traits_of(racer_dir), racer_dir.name, repeats))
+    racer = load(racer_dir)                    # (fresh: the test takes a minute or two)
+    racer["versions"][-1]["academy_test"] = result
+    save(racer_dir, racer)
+    return result
+
+
+def academy_tests(racer_dir) -> list[dict]:
+    """The racer's Academy test results in order, for showing progress:
+    [{"round": 1-based version, "score", "modules"}].  A foal picked by the
+    Academy tests has its birth scores as round 1."""
+    racer = load(racer_dir)
+    out = []
+    for k, v in enumerate(racer["versions"], start=1):
+        t = v.get("academy_test")
+        if t is None and k == 1:
+            w = (racer.get("certificate") or {}).get("winner") or {}
+            if w.get("academy_modules"):
+                t = {"score": w["academy"], "modules": w["academy_modules"]}
+        if t:
+            out.append(dict(t, round=k))
+    return out
+
+
 def academy_course(foal_dir, workers: int = 3, log=print, generations: int | None = None,
                    population: int | None = None) -> str:
     """Put a bred foal through the Racing Academy course; the Academy brain
     becomes the foal's driver only if it really improved (else the foal stays
     as it was born).  Returns what happened."""
-    from . import academy, migrate
-    migrate.ensure()                         # saved brains on the current inputs before any are loaded
+    from . import academy
     foal_dir = Path(foal_dir)
     academy.run(foal_dir.name, generations or academy.GENERATIONS, population or academy.POPULATION,
                 workers=workers, log=log)
@@ -1311,6 +1348,12 @@ def main(argv=None) -> int:
             print(f"gen {entry['gen']} best {entry['best']:.2f} lap {lap:.2f}" if lap else
                   f"gen {entry['gen']} best {entry['best']:.2f}", flush=True)
         train(args.racer_dir, workers=args.workers, on_generation=report)
+        try:                                     # the round's Academy test (shown in TRAINING HISTORY)
+            t = academy_test(args.racer_dir)
+            if t:
+                print(f"Academy test: {t['score']:.0%}", flush=True)
+        except Exception as e:
+            print(f"Academy test skipped: {e}", flush=True)
         print("done", flush=True)
     return 0
 

@@ -867,15 +867,50 @@ class TrainingScreen(Screen):
         # show the track it knows best first
         self.track_i = max(range(len(self.tracks)), key=lambda i: self.knowledge.get(self.tracks[i], 0))
         self.maps = {}
+        self.tests = stable.academy_tests(racer_dir)
+        self.side = "knowledge"                 # or "academy": the right column (A switches)
 
     def handle_event(self, event) -> None:
         from .screens import BACK
         if event.type != pygame.KEYDOWN:
             return
-        if event.key in LEFT + RIGHT:
+        if event.key == pygame.K_a and self.tests:
+            self.side = "academy" if self.side == "knowledge" else "knowledge"
+        elif event.key in LEFT + RIGHT:
             self.track_i = (self.track_i + (1 if event.key in RIGHT else -1)) % len(self.tracks)
         elif event.key in BACK + ACCEPT:
             self.app.show(RacerScreen(self.app, self.racer_dir))
+
+    ACADEMY_SHORT = {1: "Car control", 2: "Grip limit", 3: "Recovery", 4: "Sliding", 5: "Traffic", 6: "Overtaking",
+                     7: "Judgement", 8: "Racecraft"}
+
+    def draw_academy(self, screen) -> None:
+        """Right column: the Academy test after each round of training, by
+        module, so progress shows (the last four tests)."""
+        ui = self.app.ui
+        ui.panel(screen, 104, 11, 53, 76)
+        ui.text(screen, "small", "ACADEMY TESTS  (unseen scenarios passed)", C_HUD_ACCENT, 107, 12.5)
+        shown = self.tests[-4:]
+        xs = [128 + 7.2 * k for k in range(len(shown))]
+        y = 18.0
+        for x, t in zip(xs, shown):
+            head = ("BORN" if "certificate" in stable.load(self.racer_dir) else "1ST") if t["round"] == 1 \
+                else f"UP {t['round'] - 1}"
+            ui.text(screen, "small", head, C_HUD_DIM, x, y)
+        rows = [(self.ACADEMY_SHORT[m], str(m)) for m in self.ACADEMY_SHORT] + [("OVERALL", None)]
+        for name, m in rows:
+            y += 5.6 if m else 7.0
+            ui.text(screen, "small", name, C_HUD_TEXT if m else C_HUD_ACCENT, 107, y)
+            last = None
+            for x, t in zip(xs, shown):
+                value = t["modules"].get(m, 0.0) if m else t["score"]
+                colour = C_HUD_TEXT if last is None or abs(value - last) < 0.005 else \
+                    ((60, 220, 110) if value > last else (240, 90, 90))
+                ui.text(screen, "small", f"{value:.0%}", colour, x, y)
+                last = value
+        ui.text(screen, "small", "green: up on the test before", (60, 220, 110), 107, y + 6)
+        ui.text(screen, "small", "red: down.  Small changes are noise.", (240, 90, 90), 107, y + 9)
+        ui.text(screen, "small", "A: track knowledge", C_HUD_DIM, 107, y + 13)
 
     def draw_knowledge(self, screen) -> None:
         """Right column: how much each track has been trained, and the chosen
@@ -926,7 +961,8 @@ class TrainingScreen(Screen):
             ui.text(screen, "small", f"power on early out of {early}", C_HUD_DIM, 107, y + 3.2)
         ui.text(screen, "small", "green: carries more speed", (60, 220, 110), 107, y + 8)
         ui.text(screen, "small", "red: slower than it looks", (240, 70, 80), 107, y + 11)
-        ui.text(screen, "small", "Left/Right: track", C_HUD_DIM, 107, y + 15)
+        ui.text(screen, "small", "Left/Right: track" + ("    A: Academy tests" if self.tests else ""), C_HUD_DIM,
+                107, y + 15)
 
     def draw(self, screen) -> None:
         ui = self.app.ui
@@ -962,10 +998,18 @@ class TrainingScreen(Screen):
                 pace = stable.pace_text(stable.pace(done[-1]["exam"]))
                 ui.text(screen, "small", f"end: pace {pace}  place {e['race_place']:.1f}  "
                         f"damage {e['race_damage'] * 100:.0f}%", C_HUD_TEXT, 45, y + 5.6)
+            test = next((t for t in self.tests if t["round"] == k), None)
+            if test:
+                before = next((t for t in reversed(self.tests) if t["round"] < k), None)
+                change = f"  ({(test['score'] - before['score']) * 100:+.0f}%)" if before else ""
+                ui.text(screen, "small", f"Academy test {test['score']:.0%}{change}", C_CYAN, 60, y + 9)
             y += 15.5
             if y > 78:
                 break
-        self.draw_knowledge(screen)
+        if self.side == "academy" and self.tests:
+            self.draw_academy(screen)
+        else:
+            self.draw_knowledge(screen)
         ui.text(screen, "mid", "BACK", C_HUD_ACCENT, 8, 84, shadow=True)
 
 

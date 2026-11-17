@@ -529,7 +529,9 @@ def test_a_foal_can_be_bred_from_the_house_stud(dirs):
 
 
 def test_the_academy_tests_can_pick_the_foal_which_then_takes_the_course(dirs, tmp_path, monkeypatch):
-    from ai import academy
+    from ai import academy, migrate
+    if migrate.ensure():                # the Academy upgrades old saved brains; mid-run that upsets this test
+        pytest.skip("the house files were upgraded just now: run again")
     monkeypatch.setattr(academy, "ACADEMY_DIR", tmp_path / "academy")
     monkeypatch.setattr(academy, "REPORT_DIR", tmp_path / "report")
     few = [dict(c, seen=[dict(v, seconds=5.0) for v in c["seen"]], unseen=[dict(v, seconds=5.0) for v in c["unseen"]])
@@ -562,11 +564,28 @@ def test_the_academy_tests_can_pick_the_foal_which_then_takes_the_course(dirs, t
     game.draw()
     versions = len(stable.load(foal)["versions"])
     said = stable.academy_course(foal, workers=1, log=lambda m: None, generations=1, population=4)
+    promoted = len(stable.load(foal)["versions"]) > versions
     grown = view.academy_rows()
     assert grown["after"] is not None and all(r["after"] is not None for r in grown["rows"])
     game.draw()
     if os.environ.get("SHOT"):
         pygame.image.save(game.screen, os.environ["SHOT"])
+    # After an upskill the Academy test is taken again; TRAINING HISTORY shows the progress.
+    from game.stable_screens import TrainingScreen
+    if stable.progress(foal)["done"] >= stable.progress(foal)["target"] and stable.can_train(foal):
+        stable.upskill(foal, 0.5, 0.5, [{"name": "Scripted car", "kind": "scripted"}], 1)
+        assert stable.academy_test(foal) is None                 # not until the round is finished
+        quick_train(foal)
+        t = stable.academy_test(foal)
+        assert 0.0 <= t["score"] <= 1.0 and stable.academy_test(foal) is None      # once per round
+        tests = stable.academy_tests(foal)
+        assert tests[0]["round"] == 1 and tests[-1]["round"] == len(stable.load(foal)["versions"])
+        history = TrainingScreen(game, foal)
+        game.show(history)
+        history.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_a))
+        assert history.side == "academy"
+        game.draw()
+        if os.environ.get("SHOT"):
+            pygame.image.save(game.screen, os.environ["SHOT"].replace(".png", "_history.png"))
     assert (academy.folder(foal.name) / "after.json").exists()
-    promoted = len(stable.load(foal)["versions"]) > versions
     assert promoted == ("not promoted" not in said)             # promoted only when it really improved
