@@ -328,6 +328,7 @@ def run_variant(weights, arch, traits, variant: dict, rep: int = 0) -> dict:
                      slide=start.get("slide", 0.0) * (1 - 0.1 * sign), before=start.get("before", 22.0) + 3 * rep)
     lessons.place(world, 0, start)
     stats = evolve.RaceStats(world)
+    meter = lessons.CraftMeter(world)
     off, curv = track.ideal()
     plan = my_params.grip * GRIP_PLAN
     car = world.cars[0]
@@ -354,6 +355,7 @@ def run_variant(weights, arch, traits, variant: dict, rep: int = 0) -> dict:
         last_s = car.s
         if tick % 4:
             continue
+        meter.sample()
         n += 1
         grass += car.surface == GRASS
         slides += bool(car.sliding)
@@ -387,6 +389,7 @@ def run_variant(weights, arch, traits, variant: dict, rep: int = 0) -> dict:
         "passes": passes, "clean_passes": stats.clean_passes, "passed": stats.passed,
         "clean_ratio": round(stats.clean_passes / passes, 3) if passes else 0.0,
         "reached": len(stats.reached), "place": stats.place(), "field": len(rivals) + 1,
+        **meter.result(),
     }
 
 
@@ -471,6 +474,13 @@ def completed(results: dict, cid: str, part: str = "unseen") -> bool:
 # ------------------------------------------------------------- training lessons
 
 def lesson_scenario(config: dict, gen: int, start: int, rng) -> dict:
+    if config.get("academy_curriculum"):         # the progressive curriculum (ai/curriculum.py)
+        from . import curriculum
+        return curriculum.lesson(config, rng)
+    return _module_lesson(config, gen, start, rng)
+
+
+def _module_lesson(config: dict, gen: int, start: int, rng) -> dict:
     """A training race drawn from the seen variants, following the curriculum:
     early generations favour the early modules and easy levels, later ones the
     later modules and harder levels (every module stays in the mix)."""
@@ -490,10 +500,22 @@ def lesson_scenario(config: dict, gen: int, start: int, rng) -> dict:
     weights = np.array(weights) / sum(weights)
     c = pool[int(rng.choice(len(pool), p=weights))]
     v = c["seen"][int(rng.integers(0, len(c["seen"])))]
+    rivals, rival_cars = training_rivals(config, v["rivals"])
+    kind = c["kind"] if c["kind"] == "solo" else ("traffic" if any(r.startswith("traffic:") for r in rivals) else "race")
+    return {"track": v["track"], "slot": v["slot"], "rivals": rivals, "rival_cars": rival_cars,
+            "car": config.get("car") if isinstance(config.get("car"), dict) else None,
+            "seconds": min(v["seconds"], 70.0), "lesson": kind, "challenge": c["id"],
+            "start": v.get("start"), "grip": v.get("grip")}
+
+
+def training_rivals(config: dict, specs: list) -> tuple[list, list]:
+    """A variant's rivals as training races take them: house rivals become the
+    run's partners ("p:<i>", with their car), the driver itself and anyone
+    not among the partners a scripted car."""
     me = config.get("academy_driver")
     partners = config.get("academy_partners") or []
     rivals, rival_cars = [], []
-    for spec in v["rivals"]:
+    for spec in specs:
         if spec.startswith("house:"):
             parts = spec.split(":")
             if parts[1] == me or parts[1] not in partners:
@@ -510,11 +532,7 @@ def lesson_scenario(config: dict, gen: int, start: int, rng) -> dict:
         else:
             rivals.append(spec)
             rival_cars.append(None)
-    kind = c["kind"] if c["kind"] == "solo" else ("traffic" if any(r.startswith("traffic:") for r in rivals) else "race")
-    return {"track": v["track"], "slot": v["slot"], "rivals": rivals, "rival_cars": rival_cars,
-            "car": config.get("car") if isinstance(config.get("car"), dict) else None,
-            "seconds": min(v["seconds"], 70.0), "lesson": kind, "challenge": c["id"],
-            "start": v.get("start"), "grip": v.get("grip")}
+    return rivals, rival_cars
 
 
 # ------------------------------------------------------------------- pipeline
@@ -555,7 +573,7 @@ def original(driver_id: str) -> tuple[np.ndarray, dict, dict]:
 
 def train(driver_id: str, generations: int = GENERATIONS, population: int = POPULATION, workers: int = 4,
           log=print, where: Path | None = None, challenges: list | None = None, lesson_share: float | None = None,
-          emphasis: dict | None = None, planned: int | None = None) -> Path:
+          emphasis: dict | None = None, planned: int | None = None, curriculum: str | None = None) -> Path:
     """Train the candidate (resumable): a copy of the original, its own
     personality's scoring, Academy lessons plus normal racing.  A focused
     course (`focus_course`) trains in its own folder (`where`) on a subset of
@@ -577,7 +595,8 @@ def train(driver_id: str, generations: int = GENERATIONS, population: int = POPU
                         partners=partners, car=info["traits"], solo_share=0.35, notes=True, workers=workers,
                         record_laps=False, log=lambda m: log(m),
                         academy={"driver": driver_id, "partners": partners_ids, "generations": planned or generations,
-                                 "challenges": challenges, "lesson_share": lesson_share, "emphasis": emphasis},
+                                 "challenges": challenges, "lesson_share": lesson_share, "emphasis": emphasis,
+                                 "curriculum": curriculum},
                         on_generation=lambda e: log(f"  gen {e['gen']}: fitness {e['best']:.2f}"))
 
 

@@ -60,3 +60,61 @@ def place(world, i: int, spec: dict | None) -> None:
     car.yaw_rate = float(spec.get("yaw", 0.0))
     car.refresh_speed()
     car.prev_x, car.prev_y, car.prev_heading = car.x, car.y, car.heading
+
+
+FOLLOW = 14.0       # within this far behind the car ahead (track distance) counts as following it
+TAIL = 4.5          # closer than this, in the same lane, is tailgating
+LANE = 2.6          # lateral distance that counts as the same lane
+DEFEND = 10.0       # a car this close behind means the driver is defending
+SWERVE = 0.22       # lateral move per sample (30 a second) that counts as a deliberate move
+
+
+class CraftMeter:
+    """Racecraft measures for car `me`, sampled every decision tick (pure
+    function of the World): share of the time following a car ahead, share
+    of the time tailgating it, and weaves (changes of direction while a car
+    is close behind: moving to block, then back, then across again)."""
+
+    def __init__(self, world, me: int = 0):
+        self.world, self.me = world, me
+        self.n = self.close = self.tail = self.defend = self.weaves = 0
+        self.last_lat = None
+        self.last_dir = 0
+
+    def sample(self) -> None:
+        w = self.world
+        car = w.cars[self.me]
+        length = w.track.length
+        ahead = behind = None
+        for j, other in enumerate(w.cars):
+            if j == self.me or getattr(other, "retired", False):
+                continue
+            d = (other.s - car.s) % length
+            if d < length / 2:
+                if ahead is None or d < ahead[0]:
+                    ahead = (d, other)
+            elif behind is None or length - d < behind:
+                behind = length - d
+        self.n += 1
+        if ahead and ahead[0] < FOLLOW:
+            self.close += 1
+            if ahead[0] < TAIL and abs(ahead[1].lateral - car.lateral) < LANE:
+                self.tail += 1
+        lat = car.lateral
+        if behind is not None and behind < DEFEND:
+            self.defend += 1
+            if self.last_lat is not None:
+                move = lat - self.last_lat
+                d = 1 if move > SWERVE else -1 if move < -SWERVE else 0
+                if d and self.last_dir and d != self.last_dir:
+                    self.weaves += 1
+                if d:
+                    self.last_dir = d
+        else:
+            self.last_dir = 0
+        self.last_lat = lat
+
+    def result(self) -> dict:
+        n = max(1, self.n)
+        return {"close": round(self.close / n, 4), "tailgate": round(self.tail / n, 4),
+                "defend_time": round(self.defend / n, 4), "weaves": self.weaves}

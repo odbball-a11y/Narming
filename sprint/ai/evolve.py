@@ -372,6 +372,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         worlds.append(world)
         scripted.append(drivers)
         stats.append(RaceStats(world))
+    meters = [lessons.CraftMeter(w) for w in worlds]
     brains = {k + 1: Brain(r, arch, batch=count)
               for k, r in enumerate(scenario["rivals"]) if not isinstance(r, str)}
     for n, world in enumerate(worlds):                     # everyone races with their own track notes
@@ -407,6 +408,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
             if tick % DECISION_TICKS == 0:
                 off_track[n] += world.cars[0].surface != 0
                 sliding[n] += bool(world.cars[0].sliding)
+                meters[n].sample()
     for p in progress:
         p.update(retire=False)
     return {
@@ -424,6 +426,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         "slide": [g / samples for g in sliding],
         "passed": [s.passed for s in stats],
         "draft": [s.draft_share() for s in stats],
+        **{k: [m.result()[k] for m in meters] for k in ("close", "tailgate", "weaves")},
     }
 
 
@@ -498,6 +501,21 @@ def drill_score(result: dict, weights: dict | None = None) -> np.ndarray:
             + DRILL_WEIGHTS["place"] * place_points(r["place"], r.get("field"), w["place"])
             + w["laps"] * r["laps"] - w["damage"] * r["damage"] - max(w["fault"], 0.25) * r["fault"]
             - DRILL_WEIGHTS["suffered"] * r["suffered"] - w["walls"] * r["walls"])
+
+
+CRAFT = {"tailgate": 1.5, "weaves": 0.3, "fault": 0.5, "suffered": 0.1}   # extra costs in curriculum racecraft
+
+
+def craft_score(result: dict, weights: dict | None = None, extra: dict | None = None) -> np.ndarray:
+    """Score of a curriculum racecraft lesson: a traffic drill's score
+    (clean passes, catching cars, place, less contact) plus good judgement:
+    tailgating, weaving and causing contact cost extra, and the lesson's own
+    `extra` terms (e.g. time spent following, places lost) add on."""
+    r = {k: np.asarray(v, dtype=float) for k, v in result.items()}
+    score = drill_score(result, weights) - sum(c * r.get(k, 0.0) for k, c in CRAFT.items())
+    for k, c in (extra or {}).items():
+        score = score + c * r.get(k, 0.0)
+    return score
 
 
 def race_score(result: dict, bonus: float, weights: dict | None = None) -> np.ndarray:
@@ -578,6 +596,8 @@ def score_population(pop: np.ndarray, arch: dict, tracks: list[str], scenarios=N
         lesson = scenario.get("lesson")
         if lesson == "solo":
             race += lesson_score(part, weights)
+        elif lesson == "craft":
+            race += craft_score(part, weights, scenario.get("extra"))
         elif scenario.get("drill") or lesson == "traffic":
             race += drill_score(part, weights)
         else:
@@ -950,7 +970,8 @@ def train(run: str = "default", generations: int = 50, population: int = 80, eli
                       "academy_generations": int(academy.get("generations") or 30),
                       "academy_challenges": academy.get("challenges"),
                       "academy_lesson_share": academy.get("lesson_share"),
-                      "academy_emphasis": {str(k): v for k, v in (academy.get("emphasis") or {}).items()}}
+                      "academy_emphasis": {str(k): v for k, v in (academy.get("emphasis") or {}).items()},
+                      "academy_curriculum": academy.get("curriculum")}
                    if academy else {}),
                   "style": style or "balanced", "name": name, "parent": parent,
                   "inputs": N_INPUTS, "tuning_id": tuning.physics_fingerprint()}

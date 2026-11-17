@@ -43,6 +43,19 @@ def drivers() -> dict:
 def make(key: str):
     from ai import stable
     kind, rid = key.split(":", 1)
+    if kind == "file":                               # a brain saved as <path>.npz + <path>.json (e.g. an Academy candidate)
+        import numpy as np
+        from ai import evolve
+        from ai.brain import NeuralDriver
+        from sim import cartraits
+        base = evolve.resolve_path(rid)
+        card = json.loads(base.with_suffix(".json").read_text())
+        with np.load(base.with_suffix(".npz")) as data:
+            w = data["pop"][0].astype(np.float64)
+        d = NeuralDriver(w, card["arch"], card["name"])
+        d.car_params = cartraits.params_for(card.get("traits") or cartraits.default())
+        d.livery = card.get("livery")
+        return d
     if kind == "house":
         return stable.house_driver(rid)
     if kind == "guest":
@@ -73,29 +86,24 @@ def table(state: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--rounds", type=int, default=10)
-    ap.add_argument("--laps", type=int, default=5)
-    ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--fresh", action="store_true", help="start the league again")
-    args = ap.parse_args()
-    from ai import championship, migrate, rating
-    migrate.ensure()
-    OUT.mkdir(exist_ok=True)
-    save = OUT / "league.json"
-    state = json.loads(save.read_text()) if save.exists() and not args.fresh else {"round": 0, "drivers": {}}
-    for key, d in drivers().items():                       # new brains join; old results are kept
+def run_league(entries: dict, rounds: int = 10, laps: int = 5, workers: int = 4, save: Path | None = None,
+               fresh: bool = False, log=print) -> dict:
+    """Race `entries` ({key: {"name", "status"}}) in divisions of six, re-drawn
+    every round by the ratings so far; resumable from `save`.  Returns the state."""
+    from ai import championship, rating
+    save = Path(save or OUT / "league.json")
+    save.parent.mkdir(parents=True, exist_ok=True)
+    state = json.loads(save.read_text()) if save.exists() and not fresh else {"round": 0, "drivers": {}}
+    state["laps"] = laps
+    for key, d in entries.items():                         # new brains join; old results are kept
         state["drivers"].setdefault(key, {"mu": rating.ENV.mu, "sigma": rating.ENV.sigma, "races": 0, "wins": 0,
-                                          "podiums": 0, "places": 0, "dnf": 0}).update(d)
-    live = set(drivers())
-    keys = [k for k in state["drivers"] if k in live]
+                                          "podiums": 0, "places": 0, "dnf": 0, "points": 0}).update(d)
+    keys = [k for k in state["drivers"] if k in entries]
     if len(keys) < 2:
-        print("need at least two trained drivers")
-        return 1
-    print(f"{len(keys)} drivers, {args.rounds} rounds of {len(championship.TRACK_ORDER)} races, {args.laps} laps")
-    with Pool(args.workers) as pool:
-        for _ in range(args.rounds):
+        raise ValueError("need at least two drivers")
+    log(f"{len(keys)} drivers, {rounds} rounds of {len(championship.TRACK_ORDER)} races, {laps} laps")
+    with Pool(workers) as pool:
+        while state["round"] < rounds:
             rnd = state["round"] + 1
             rng = random.Random(rnd)
             order = sorted(keys, key=lambda k: -state["drivers"][k]["mu"]) if rnd > 1 else rng.sample(keys, len(keys))
@@ -103,7 +111,7 @@ def main() -> int:
             if len(divisions) > 1 and len(divisions[-1]) < 3:      # no tiny last division
                 divisions[-2:] = [divisions[-2] + divisions[-1]]
             for t, track in enumerate(championship.TRACK_ORDER):
-                jobs = [(track, rng.sample(div, len(div)), args.laps, rnd * 100 + t * 10 + n)
+                jobs = [(track, rng.sample(div, len(div)), laps, rnd * 100 + t * 10 + n)
                         for n, div in enumerate(divisions)]
                 for _, rows in pool.map(run_race, jobs):
                     rows.sort(key=lambda r: r[1])
@@ -119,16 +127,38 @@ def main() -> int:
                         d["podiums"] += fin and place <= 3
                         d["places"] += place
                         d["dnf"] += not fin
+                        d["points"] = d.get("points", 0) + (championship.POINTS[min(place, len(championship.POINTS)) - 1]
+                                                            if fin else 0)
             state["round"] = rnd
             save.write_text(json.dumps(state, indent=1))
-            (OUT / "TABLE.md").write_text(table(state), encoding="utf-8")
             top = sorted(keys, key=lambda k: -state["drivers"][k]["mu"])[:3]
-            print(f"round {rnd}: " + ", ".join(f"{state['drivers'][k]['name']} {rating.show(state['drivers'][k]['mu']):.0f}"
-                                               for k in top), flush=True)
+            log(f"round {rnd}: " + ", ".join(f"{state['drivers'][k]['name']} {rating.show(state['drivers'][k]['mu']):.0f}"
+                                             for k in top))
+    return state
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--rounds", type=int, default=10)
+    ap.add_argument("--laps", type=int, default=5)
+    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--fresh", action="store_true", help="start the league again")
+    args = ap.parse_args()
+    from ai import migrate
+    migrate.ensure()
+    OUT.mkdir(exist_ok=True)
+    save = OUT / "league.json"
+    done = json.loads(save.read_text())["round"] if save.exists() and not args.fresh else 0
+    try:
+        state = run_league(drivers(), rounds=done + args.rounds, laps=args.laps, workers=args.workers, save=save,
+                           fresh=args.fresh, log=lambda m: print(m, flush=True))
+    except ValueError as e:
+        print(e)
+        return 1
+    (OUT / "TABLE.md").write_text(table(state), encoding="utf-8")
     print(table(state))
     print(f"saved: {OUT / 'TABLE.md'}")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
