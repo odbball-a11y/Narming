@@ -46,17 +46,28 @@ import numpy as np
 
 from . import academy, evolve, stable
 
+# Adaptive version (agreed specification): placement from the before-test,
+# rivals matched to the learner's own measured lap pace, pace targets against
+# the scripted driver in the same car, adaptive skill weights with a cap,
+# stalled stages move on (never mastered) with remedial lessons, and a
+# fixed-grid + head-to-head benchmark.
+
 TARGET = 0.67          # share of a stage's check scenarios passed to master it
 CHECK_RUNS = 6         # fresh random scenarios per check
 REVIEW_RUNS = 3        # scenarios when re-testing a mastered stage
 FORGOT = 0.34          # a mastered stage re-tested below this is forgotten
 EASE_AFTER = 2         # failed checks in a row before the stage is made easier
 EASE_STEP = 0.34
-STALL = 10             # failed checks on one stage before the skill stops there
+STALL_AT_EASIEST = 4   # failed checks in a row at the easiest setting -> stalled
+STALL_ATTEMPTS = 12    # or this many checks on one stage in all -> stalled
+REMEDIAL_SHARE = 0.25  # one remedial lesson (stalled stages) for every three normal ones
+WEIGHT_CAP = 0.4       # no skill gets more than this share of the normal lessons
+RACECRAFT_EMPHASIS = 1.5
+FOLLOW_PACE = 0.95     # following: the car ahead at 95% of the learner's pace (5% slower)
+PASS_PACE = 0.85       # overtaking: cars ahead at 85% of the learner's pace (15% slower)
 BLOCK = 4              # generations between checks
 REVIEW_SHARE = 0.3     # share of lessons revisiting mastered stages
 PROFILE_RUNS = 6       # scenarios per stage in the before/after profile
-SKILL_WEIGHT = {"control": 1.0, "grip": 1.0, "recovery": 1.0, "adverse": 1.0, "racecraft": 2.0}
 SKILLS = {"control": "Vehicle control and racing lines", "grip": "Braking, cornering and the grip limit",
           "recovery": "Understeer, oversteer and recovery", "adverse": "Adverse conditions",
           "racecraft": "Racecraft"}
@@ -84,6 +95,66 @@ def _queue(rng, n, pace, styles):
     return [f"traffic:{pace + rng.uniform(-0.02, 0.02):.3f}:{_pick(rng, styles)}" for _ in range(n)]
 
 
+# --------------------------------------------------------- pace calibration
+# A traffic car's "pace" is a share of its top speed; what matters is its lap
+# time.  traffic_laps() measures it once per track over a grid of paces (the
+# same every time: no randomness), so a rival can be set to a lap time.
+
+PACE_GRID = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
+_LAPS_CACHE: dict = {}
+
+
+def _best_lap(track: str, driver, laps: int = 3) -> float | None:
+    import sim.scripted  # noqa: F401
+    from sim.race import Race
+    race = Race(track, [(0, driver)], laps=laps, seed=1, rolling=True).run(max_seconds=60 * laps)
+    times = race.world.cars[0].lap_times[1:] or race.world.cars[0].lap_times
+    return min(times) if times else None
+
+
+def traffic_laps(track: str) -> list[float]:
+    """Lap time of a traffic car (racing line, standard car) at each PACE_GRID value."""
+    if track not in _LAPS_CACHE:
+        from sim.traffic import TrafficDriver
+        f = academy.ACADEMY_DIR / "traffic_laps.json"
+        saved = json.loads(f.read_text()) if f.exists() else {}
+        if track not in saved:
+            saved[track] = [round(_best_lap(track, TrafficDriver(0, pace=p, style="line")), 3) for p in PACE_GRID]
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps(saved, indent=1))
+        _LAPS_CACHE[track] = saved[track]
+    return _LAPS_CACHE[track]
+
+
+def rival_pace(track: str, target_lap: float) -> float:
+    """The traffic pace whose lap time is `target_lap` (clamped to the grid)."""
+    laps = traffic_laps(track)                      # slower pace -> longer lap
+    xs, ys = np.array(laps[::-1]), np.array(PACE_GRID[::-1])
+    return float(np.clip(np.interp(target_lap, xs, ys), PACE_GRID[0], PACE_GRID[-1]))
+
+
+def scripted_lap(track: str, traits) -> float:
+    """The scripted driver's flying lap in the learner's own car (same traits)."""
+    from sim import cartraits
+    from sim.scripted import ScriptedDriver
+    d = ScriptedDriver(0)
+    d.car_params = cartraits.params_for(traits or cartraits.default())
+    return _best_lap(track, d)
+
+
+def _ctx_lap(ctx, track):
+    """The learner's measured lap on `track` (or the scripted lap if unknown)."""
+    if ctx and ctx.get("laps", {}).get(track):
+        return ctx["laps"][track]
+    return stable.SCRIPTED_LAPS[track]
+
+
+def _relative(rng, ctx, track, share, jitter=0.01):
+    """A traffic pace for a car lapping at `share` of the learner's pace."""
+    target = _ctx_lap(ctx, track) / max(0.3, share + rng.uniform(-jitter, jitter))
+    return rival_pace(track, target)
+
+
 # Each stage: (id, title, kind, objectives(ease) -> list, make(rng, ease) -> variant, extra scoring terms).
 # kind: "solo" lessons are scored as Academy solo lessons, "craft" with craft_score.
 def _stage(sid, title, kind, objectives, make, extra=None):
@@ -91,7 +162,7 @@ def _stage(sid, title, kind, objectives, make, extra=None):
 
 
 def _solo(tracks, laps=3, grip=None, trouble=None):
-    def make(rng, e):
+    def make(rng, e, ctx=None):
         t = _pick(rng, tracks)
         g = None if grip is None else min(1.0, grip + 0.08 * e) * rng.uniform(0.98, 1.02)
         start = trouble(rng, e) if trouble else None
@@ -99,20 +170,33 @@ def _solo(tracks, laps=3, grip=None, trouble=None):
     return make
 
 
-def _behind(tracks, n, pace, styles, laps=2.0, slower=0.08):
-    def make(rng, e):
+def _behind(tracks, n, share, styles, laps=2.0, slower=0.08):
+    """`n` cars ahead lapping at `share` of the learner's own pace; easier:
+    fewer, calmer and (for overtaking) slower cars."""
+    def make(rng, e, ctx=None):
         t = _pick(rng, tracks)
         k = max(1, n - int(round(e * (n - 1) / 2)))
-        return academy._v(t, _lap(t, laps), _queue(rng, k, pace - slower * e, styles if e < 0.5 else ("line",)))
+        rivals = [f"traffic:{_relative(rng, ctx, t, share - slower * e):.3f}:{_pick(rng, styles if e < 0.5 else ('line',))}"
+                  for _ in range(k)]
+        return academy._v(t, _lap(t, laps), rivals)
     return make
 
 
-def _defend(rng, e):
+def _follow(tracks, laps=2.5):
+    """Safe following: one car on the racing line at 95% of the learner's pace,
+    starting just ahead.  Easier never means slower (that only invites a pass)."""
+    def make(rng, e, ctx=None):
+        t = _pick(rng, tracks)
+        return academy._v(t, _lap(t, laps), [f"traffic:{_relative(rng, ctx, t, FOLLOW_PACE):.3f}:line"])
+    return make
+
+
+def _defend(rng, e, ctx=None):
     t = _pick(rng, MID_TRACKS + TIGHT_TRACKS)
     return academy._v(t, _lap(t, 2.0), [f"house:{_pick(rng, HOUSE)}:{1.10 - 0.08 * e:.3f}"], slot=0)
 
 
-def _full_race(rng, e):
+def _full_race(rng, e, ctx=None):
     t = _pick(rng, ALL_TRACKS)
     field = list(rng.permutation(HOUSE))
     keep = 5 - int(round(3 * e))                     # easier: some house rivals replaced by scripted cars
@@ -120,9 +204,10 @@ def _full_race(rng, e):
     return academy._v(t, _lap(t, 3), rivals, slot=5)
 
 
-def _judgement(rng, e):
+def _judgement(rng, e, ctx=None):
+    """A defending car nearly as quick as the learner: attack, wait or give up."""
     t = _pick(rng, TIGHT_TRACKS + ["speedway"])
-    return academy._v(t, _lap(t, 2.5), [f"traffic:{0.90 - 0.08 * e:.3f}:defend"])
+    return academy._v(t, _lap(t, 2.5), [f"traffic:{_relative(rng, ctx, t, FOLLOW_PACE - 0.08 * e):.3f}:defend"])
 
 
 CURRICULUM = {
@@ -190,28 +275,29 @@ CURRICULUM = {
     "racecraft": [
         _stage("racecraft-1", "Catch and follow a car without damage", "craft",
                lambda e: [("reached", ">=", 1), ("damage", "<=", 0.02), ("tailgate", "<=", 0.08 + 0.05 * e)],
-               _behind(EASY_TRACKS, 1, 0.68, ("line",), 2.5), {"close": 0.3}),
+               _behind(EASY_TRACKS, 1, PASS_PACE, ("line",), 2.5), {"close": 0.3}),
         _stage("racecraft-2", "Safe following distance through corners", "craft",
-               lambda e: [("close", ">=", 0.15 - 0.05 * e), ("tailgate", "<=", 0.03 + 0.03 * e), ("fault", "<=", 0)],
-               _behind(TIGHT_TRACKS, 1, 0.80, ("line",), 2.5), {"close": 0.4}),
+               lambda e: [("corner_tail", "<=", 0.03 + 0.03 * e), ("contacts", "<=", 0),
+                          ("close", ">=", 0.6 - 0.15 * e), ("max_gap_s", "<=", 2.0 + 1.0 * e)],
+               _follow(TIGHT_TRACKS + ["speedway"]), {"close": 0.5, "corner_tail": -1.5, "clean_passes": -0.6}),
         _stage("racecraft-3", "Spot the chance to pass a slower car", "craft",
                lambda e: [("clean_passes", ">=", 1), ("fault", "<=", 0)],
-               _behind(EASY_TRACKS, 1, 0.70, ("line",), 2.5)),
+               _behind(EASY_TRACKS, 1, PASS_PACE, ("line",), 2.5)),
         _stage("racecraft-4", "Simple overtakes on predictable cars", "craft",
                lambda e: [("clean_passes", ">=", 2 - int(e > 0.5)), ("fault", "<=", 0.5)],
-               _behind(MID_TRACKS, 2, 0.74, ("line",), 2.5)),
+               _behind(MID_TRACKS, 2, PASS_PACE, ("line",), 2.5)),
         _stage("racecraft-5", "Overtake with little room", "craft",
                lambda e: [("clean_passes", ">=", 1), ("fault", "<=", 0), ("damage", "<=", 0.05)],
-               _behind(TIGHT_TRACKS, 2, 0.78, ("wander", "line"), 2.0)),
+               _behind(TIGHT_TRACKS, 2, PASS_PACE, ("wander", "line"), 2.0)),
         _stage("racecraft-6", "Pass defensive drivers", "craft",
                lambda e: [("clean_passes", ">=", 1), ("contacts", "<=", 1), ("fault", "<=", 0)],
-               _behind(MID_TRACKS + TIGHT_TRACKS, 2, 0.80, ("defend",), 2.5)),
+               _behind(MID_TRACKS + TIGHT_TRACKS, 2, PASS_PACE, ("defend",), 2.5)),
         _stage("racecraft-7", "Attack, wait or abandon", "craft",
                lambda e: [("fault", "<=", 0), ("damage", "<=", 0.03), ("judged", ">=", 1)],
                _judgement, {"close": 0.2}),
         _stage("racecraft-8", "Through traffic", "craft",
                lambda e: [("clean_passes", ">=", 3 - int(round(2 * e))), ("fault", "<=", 1), ("damage", "<=", 0.1)],
-               _behind(ALL_TRACKS, 5, 0.76, ("line", "defend", "wander"), 3.0)),
+               _behind(ALL_TRACKS, 5, PASS_PACE, ("line", "defend", "wander"), 3.0)),
         _stage("racecraft-9", "Defend fairly: no weaving, no blocking", "craft",
                lambda e: [("weaves", "<=", 1), ("fault", "<=", 0), ("passed", "<=", 0)],
                _defend, {"passed": -0.6, "weaves": -0.3}),
@@ -223,16 +309,20 @@ CURRICULUM = {
 BY_ID = {st["id"]: dict(st, skill=k, n=i + 1) for k, stages in CURRICULUM.items() for i, st in enumerate(stages)}
 
 
-def derived(metrics: dict) -> dict:
+def derived(metrics: dict, track: str | None = None, ctx: dict | None = None) -> dict:
     """Measures built from others: `judged` = 1 when the driver either made a
-    clean pass or sat patiently behind (following, no contact it caused)."""
+    clean pass or sat patiently behind (following, no contact it caused);
+    `pace` re-based on the scripted driver in the learner's own car."""
     m = dict(metrics)
+    ref = (ctx or {}).get("scripted", {}).get(track) if track else None
+    if ref and m.get("pace") is not None:
+        m["pace"] = round(m["pace"] * stable.SCRIPTED_LAPS[track] / ref, 4)
     m["judged"] = int(m.get("fault", 0) <= 0 and (m.get("clean_passes", 0) >= 1 or m.get("close", 0) >= 0.3))
     return m
 
 
-def variant(stage_id: str, rng, ease: float = 0.0) -> dict:
-    return BY_ID[stage_id]["make"](rng, ease)
+def variant(stage_id: str, rng, ease: float = 0.0, ctx: dict | None = None) -> dict:
+    return BY_ID[stage_id]["make"](rng, ease, ctx)
 
 
 def objectives(stage_id: str, ease: float = 0.0) -> list:
@@ -241,21 +331,65 @@ def objectives(stage_id: str, ease: float = 0.0) -> list:
 
 # ----------------------------------------------------------------- training
 
+def done_stages(state: dict) -> set:
+    """Stages the driver has shown it can do: passed on entry or mastered."""
+    return set(state.get("entry", [])) | set(state["mastered"])
+
+
+def skill_weights(state: dict) -> dict:
+    """Share of the normal (non-review) lessons for each skill still in
+    training: weaker skills (fewer stages done, lower last check) get more,
+    racecraft is emphasised, and no skill gets more than WEIGHT_CAP."""
+    active = [sk for sk, s in state["skills"].items() if s["stage"]]
+    if not active:
+        return {}
+    raw = {}
+    for sk in active:
+        ladder = [x["id"] for x in CURRICULUM[sk]]
+        done = sum(1 for i in ladder if i in done_stages(state)) / len(ladder)
+        last = (state["stages"][state["skills"][sk]["stage"]]["passes"] or [0.0])[-1]
+        weakness = 1.0 - 0.5 * (done + last)
+        raw[sk] = (0.5 + weakness) * (RACECRAFT_EMPHASIS if sk == "racecraft" else 1.0)
+    total = sum(raw.values())
+    w = {k: v / total for k, v in raw.items()}
+    cap = max(WEIGHT_CAP, 1.0 / len(w))
+    for _ in range(len(w)):                          # cap, handing the excess to the others in proportion
+        over = {k: v for k, v in w.items() if v > cap + 1e-9}
+        if not over:
+            break
+        excess = sum(v - cap for v in over.values())
+        rest = {k: v for k, v in w.items() if k not in over}
+        for k in over:
+            w[k] = cap
+        rest_total = sum(rest.values()) or 1.0
+        for k, v in rest.items():
+            w[k] = v + excess * v / rest_total
+    return {k: round(v, 3) for k, v in w.items()}
+
+
 def lesson(config: dict, rng) -> dict:
     """A training race for the current curriculum (`config["academy_curriculum"]`
-    names the state file): mostly the stage each skill is at (at its ease),
-    some review of mastered stages (forgotten ones weighted up)."""
+    names the state file).  With stalled stages, REMEDIAL_SHARE of lessons are
+    remedial work on them; of the rest, REVIEW_SHARE revisit stages already
+    shown (forgotten ones weighted up) and the others are the stage each
+    skill is at, by the adaptive skill weights."""
     state = json.loads(evolve.resolve_path(config["academy_curriculum"]).read_text())
+    ctx = state.get("ctx")
+    stalled = state.get("stalled", [])
     current = [(sk, s["stage"], s["ease"]) for sk, s in state["skills"].items() if s["stage"]]
-    review = [(BY_ID[i]["skill"], i, 0.0) for i in state["mastered"]]
-    if review and (not current or rng.random() < REVIEW_SHARE):
-        w = np.array([3.0 if i in state.get("forgotten", []) else 1.0 for _, i, _ in review])
-        skill, sid, ease = review[int(rng.choice(len(review), p=w / w.sum()))]
+    review = sorted(done_stages(state))
+    roll = rng.random()
+    if stalled and (roll < REMEDIAL_SHARE or not (current or review)):
+        sid, ease = stalled[int(rng.integers(0, len(stalled)))], 0.0
+    elif review and (not current or rng.random() < REVIEW_SHARE):
+        w = np.array([3.0 if i in state.get("forgotten", []) else 1.0 for i in review])
+        sid, ease = review[int(rng.choice(len(review), p=w / w.sum()))], 0.0
     else:
-        w = np.array([SKILL_WEIGHT[sk] for sk, _, _ in current])
-        skill, sid, ease = current[int(rng.choice(len(current), p=w / w.sum()))]
+        weights = state.get("weights") or skill_weights(state)
+        w = np.array([weights.get(sk, 0.0) for sk, _, _ in current]) + 1e-9
+        _, sid, ease = current[int(rng.choice(len(current), p=w / w.sum()))]
     st = BY_ID[sid]
-    v = st["make"](rng, ease)
+    v = st["make"](rng, ease, ctx)
     rivals, rival_cars = academy.training_rivals(config, v["rivals"])
     return {"track": v["track"], "slot": v["slot"], "rivals": rivals, "rival_cars": rival_cars,
             "car": config.get("car") if isinstance(config.get("car"), dict) else None,
@@ -265,19 +399,22 @@ def lesson(config: dict, rng) -> dict:
 
 # ------------------------------------------------------------------ testing
 
+KEEP = ("pace", "offtrack", "damage", "contacts", "fault", "clean_passes", "close", "tailgate", "corner_tail",
+        "max_gap_s", "weaves", "place", "recovered", "limit_use", "passed")
+
+
 def _run(job):
-    weights, arch, traits, sid, ease, seed = job
-    v = variant(sid, np.random.default_rng(seed), ease)
-    m = derived(academy.run_variant(weights, arch, traits, v, rep=seed % 3))
+    weights, arch, traits, sid, ease, seed, ctx = job
+    v = variant(sid, np.random.default_rng(seed), ease, ctx)
+    m = derived(academy.run_variant(weights, arch, traits, v, rep=seed % 3), v["track"], ctx)
     ok = all(academy.meets(m, objectives(sid, ease)))
-    return sid, ok, {k: m[k] for k in ("pace", "offtrack", "damage", "contacts", "fault", "clean_passes",
-                                       "close", "tailgate", "weaves", "place", "recovered", "limit_use")}
+    return sid, ok, {k: m.get(k) for k in KEEP}
 
 
-def check(weights, arch, traits, stages: list[tuple[str, float, int]], seed: int, pool=None) -> dict:
+def check(weights, arch, traits, stages: list[tuple[str, float, int]], seed: int, pool=None, ctx=None) -> dict:
     """Pass rates on fresh random scenarios: stages = [(stage id, ease, runs)].
     {stage id: {"pass": share, "runs": [bool], "metrics": [..]}}."""
-    jobs = [(weights, arch, traits, sid, ease, seed * 1000 + k * 37 + list(BY_ID).index(sid) * 7919)
+    jobs = [(weights, arch, traits, sid, ease, seed * 1000 + k * 37 + list(BY_ID).index(sid) * 7919, ctx)
             for sid, ease, runs in stages for k in range(runs)]
     out = {}
     for sid, ok, m in (pool.map(_run, jobs) if pool else map(_run, jobs)):
@@ -292,24 +429,63 @@ def check(weights, arch, traits, stages: list[tuple[str, float, int]], seed: int
 PROFILE_SEED = 900001        # the before/after profile uses the same scenarios for both brains
 
 
-def profile(weights, arch, traits, pool=None, runs: int = PROFILE_RUNS) -> dict:
+def profile(weights, arch, traits, pool=None, runs: int = PROFILE_RUNS, ctx=None) -> dict:
     """Every stage at full difficulty on the same fixed random scenarios."""
-    return check(weights, arch, traits, [(sid, 0.0, runs) for sid in BY_ID], PROFILE_SEED, pool)
+    return check(weights, arch, traits, [(sid, 0.0, runs) for sid in BY_ID], PROFILE_SEED, pool, ctx)
+
+
+def measure(weights, arch, traits) -> dict:
+    """The learner's baseline for pace-relative rivals and fair pace targets:
+    its own best flying lap on every track (driving alone) and the scripted
+    driver's in the same car."""
+    from ai.brain import NeuralDriver
+    from sim import cartraits
+    laps, scripted = {}, {}
+    for t in ALL_TRACKS:
+        d = NeuralDriver(weights, arch, "Learner")
+        d.car_params = cartraits.params_for(traits or cartraits.default())
+        scripted[t] = round(scripted_lap(t, traits), 3)
+        mine = _best_lap(t, d)
+        laps[t] = round(mine, 3) if mine else scripted[t]
+    return {"laps": laps, "scripted": scripted}
 
 
 # --------------------------------------------------------------- the course
 
-def folder(driver_id: str) -> Path:
-    return academy.ACADEMY_DIR / f"{driver_id}-curriculum"
+def folder(driver_id: str, tag: str = "adaptive") -> Path:
+    return academy.ACADEMY_DIR / f"{driver_id}-{tag}"
 
 
 def fresh_state(spec: dict) -> dict:
-    return {"driver": spec["id"], "name": spec["name"], "generations": 0, "block": 0, "mastered": [], "forgotten": [],
-            "skills": {sk: {"stage": stages[0]["id"], "ease": 0.0, "fails": 0, "attempts": 0, "stalled": False}
+    return {"driver": spec["id"], "name": spec["name"], "generations": 0, "block": 0, "entry": [], "mastered": [],
+            "stalled": [], "forgotten": [],
+            "skills": {sk: {"stage": stages[0]["id"], "ease": 0.0, "fails": 0, "fails_at_easiest": 0, "attempts": 0}
                        for sk, stages in CURRICULUM.items()},
-            "stages": {sid: {"attempts": 0, "passes": [], "mastered_at": None, "ease_used": 0.0, "forgotten": 0}
-                       for sid in BY_ID},
+            "stages": {sid: {"attempts": 0, "passes": [], "mastered_at": None, "stalled_at": None, "ease_used": 0.0,
+                             "forgotten": 0, "retests": []} for sid in BY_ID},
             "log": []}
+
+
+def place(state: dict, before: dict) -> None:
+    """Placement: each skill starts at the first stage the car fails; the
+    stages before it are Passed on entry."""
+    for sk, stages in CURRICULUM.items():
+        s = state["skills"][sk]
+        s["stage"] = None
+        for st in stages:
+            if before[st["id"]]["pass"] >= TARGET:
+                state["entry"].append(st["id"])
+            else:
+                s["stage"] = st["id"]
+                break
+
+
+def _move_on(state: dict, skill: str, sid: str) -> None:
+    ladder = [x["id"] for x in CURRICULUM[skill]]
+    k = ladder.index(sid)
+    s = state["skills"][skill]
+    s["stage"] = ladder[k + 1] if k + 1 < len(ladder) else None
+    s["ease"], s["fails"], s["fails_at_easiest"] = 0.0, 0, 0
 
 
 def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
@@ -319,20 +495,22 @@ def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
     st["passes"].append(rate)
     s["attempts"] += 1
     if rate >= TARGET:
-        s["fails"] = 0
+        s["fails"] = s["fails_at_easiest"] = 0
         if s["ease"] > 0:                                   # passed an easier version: step the difficulty back up
             s["ease"] = round(max(0.0, s["ease"] - EASE_STEP), 2)
             return "passed (easier); harder again"
         st["mastered_at"] = state["generations"]
         state["mastered"].append(sid)
-        ladder = [x["id"] for x in CURRICULUM[skill]]
-        k = ladder.index(sid)
-        s["stage"] = ladder[k + 1] if k + 1 < len(ladder) else None
+        _move_on(state, skill, sid)
         return "mastered" + ("" if s["stage"] else "; skill complete")
     s["fails"] += 1
-    if st["attempts"] >= STALL:
-        s["stalled"] = True
-        return "stalled"
+    if s["ease"] >= 1.0:
+        s["fails_at_easiest"] += 1
+    if s["fails_at_easiest"] >= STALL_AT_EASIEST or st["attempts"] >= STALL_ATTEMPTS:
+        st["stalled_at"] = state["generations"]            # moving on is not passing: never mastered
+        state["stalled"].append(sid)
+        _move_on(state, skill, sid)
+        return "stalled; moved on (not mastered)"
     if s["fails"] >= EASE_AFTER and s["ease"] < 1.0:
         s["ease"] = round(min(1.0, s["ease"] + EASE_STEP), 2)
         st["ease_used"] = max(st["ease_used"], s["ease"])
@@ -341,29 +519,54 @@ def _advance(state: dict, skill: str, sid: str, rate: float) -> str:
     return "failed; repeat"
 
 
-def course(name: str, generations: int = 80, population: int = academy.POPULATION, workers: int = 4,
-           log=print, block: int = BLOCK) -> dict:
-    """Train a candidate through the curriculum (resumable)."""
+def status_of(state: dict, sid: str) -> str:
+    if sid in state.get("entry", []):
+        return "Passed on entry"
+    if sid in state["mastered"]:
+        return "Mastered in training"
+    if sid in state.get("stalled", []):
+        return "Stalled - moved on, competency not demonstrated"
+    if any(s["stage"] == sid for s in state["skills"].values()):
+        return "In training"
+    return "Not reached"
+
+
+def course(name: str, generations: int = 120, population: int = academy.POPULATION, workers: int = 4,
+           log=print, block: int = BLOCK, tag: str = "adaptive") -> dict:
+    """Train a candidate from the ORIGINAL brain through the adaptive
+    curriculum (resumable)."""
     from . import migrate
     migrate.ensure()
     spec = academy.driver_spec(name)
     academy.prepare(spec)
     w0, arch0, info = academy.original(spec["id"])
-    d = folder(spec["id"])
+    d = folder(spec["id"], tag)
     d.mkdir(parents=True, exist_ok=True)
     path = d / "curriculum.json"
     state = json.loads(path.read_text()) if path.exists() else fresh_state(spec)
     pool = ProcessPoolExecutor(workers) if workers > 1 else None
     try:
-        if "before" not in state:
-            log(f"{spec['name']}: testing the original on every stage ...")
-            state["before"] = profile(w0, arch0, info["traits"], pool)
+        if "ctx" not in state:
+            log(f"{spec['name']}: measuring its lap pace (and the scripted driver's in the same car) ...")
+            state["ctx"] = measure(w0, arch0, info["traits"])
+            for t in ALL_TRACKS:                          # build the traffic lap tables once, before workers need them
+                traffic_laps(t)
             path.write_text(json.dumps(state, indent=1))
+        ctx = state["ctx"]
+        if "before" not in state:
+            log("  placement: every stage at full difficulty ...")
+            state["before"] = profile(w0, arch0, info["traits"], pool, ctx=ctx)
+            place(state, state["before"])
+            state["weights"] = skill_weights(state)
+            path.write_text(json.dumps(state, indent=1))
+            log("  starts: " + ", ".join(f"{sk} {s['stage'] or 'complete'}" for sk, s in state["skills"].items())
+                + f"; weights {state['weights']}")
         while state["generations"] < generations:
-            active = [(sk, s) for sk, s in state["skills"].items() if s["stage"] and not s["stalled"]]
-            if not active:
-                log("  every skill complete or stalled")
+            active = [(sk, s) for sk, s in state["skills"].items() if s["stage"]]
+            if not active and not state["stalled"]:
+                log("  every skill complete")
                 break
+            state["weights"] = skill_weights(state)
             path.write_text(json.dumps(state, indent=1))
             academy.train(spec["id"], block, population, workers, log=lambda m: None, where=d, lesson_share=0.85,
                           planned=generations, curriculum=evolve.project_path(path))
@@ -374,17 +577,20 @@ def course(name: str, generations: int = 80, population: int = academy.POPULATIO
             rng = np.random.default_rng([state["block"], 5])
             reviews = {}
             for sk in CURRICULUM:
-                done = [i for i in state["mastered"] if BY_ID[i]["skill"] == sk]
+                done = [i for i in sorted(done_stages(state)) if BY_ID[i]["skill"] == sk]
                 if done:
                     reviews[sk] = done[int(rng.integers(0, len(done)))]
+            retest = state["stalled"][state["block"] % len(state["stalled"])] if state["stalled"] else None
             todo += [(sid, 0.0, REVIEW_RUNS) for sid in reviews.values()]
-            res = check(w, arch, info["traits"], todo, seed=state["block"], pool=pool)
-            entry = {"block": state["block"], "gen": gen, "checks": {}, "reviews": {}}
+            if retest and retest not in [t[0] for t in todo]:
+                todo.append((retest, 0.0, REVIEW_RUNS))
+            res = check(w, arch, info["traits"], todo, seed=state["block"], pool=pool, ctx=ctx)
+            entry = {"block": state["block"], "gen": gen, "weights": state["weights"], "checks": {}, "reviews": {},
+                     "retest": None}
             for sk, s in active:
                 sid, ease = s["stage"], s["ease"]
                 rate = res[sid]["pass"]
-                what = _advance(state, sk, sid, rate)
-                entry["checks"][sid] = {"pass": rate, "ease": ease, "result": what}
+                entry["checks"][sid] = {"pass": rate, "ease": ease, "result": _advance(state, sk, sid, rate)}
             for sk, sid in reviews.items():
                 rate = res[sid]["pass"]
                 forgot = rate < FORGOT
@@ -394,15 +600,20 @@ def course(name: str, generations: int = 80, population: int = academy.POPULATIO
                 elif not forgot and sid in state["forgotten"]:
                     state["forgotten"].remove(sid)
                 entry["reviews"][sid] = {"pass": rate, "forgotten": forgot}
+            if retest:
+                rate = res[retest]["pass"]
+                state["stages"][retest]["retests"].append({"gen": gen, "pass": rate})
+                entry["retest"] = {"stage": retest, "pass": rate}
             state["log"].append(entry)
             path.write_text(json.dumps(state, indent=1))
             log(f"  gen {gen}: " + "; ".join(f"{sid} {c['pass']:.0%} {c['result']}" for sid, c in entry["checks"].items())
                 + ("; review " + ", ".join(f"{sid} {r['pass']:.0%}{' FORGOTTEN' if r['forgotten'] else ''}"
-                                           for sid, r in entry["reviews"].items()) if entry["reviews"] else ""))
+                                           for sid, r in entry["reviews"].items()) if entry["reviews"] else "")
+                + (f"; retest {retest} {entry['retest']['pass']:.0%}" if retest else ""))
         if "after" not in state and evolve.list_generations(d / "run"):
             w, arch = academy._gen_weights(d, state["generations"])
             log("  testing the candidate on every stage ...")
-            state["after"] = profile(w, arch, info["traits"], pool)
+            state["after"] = profile(w, arch, info["traits"], pool, ctx=ctx)
             path.write_text(json.dumps(state, indent=1))
     finally:
         if pool:
@@ -412,31 +623,131 @@ def course(name: str, generations: int = 80, population: int = academy.POPULATIO
 
 # -------------------------------------------------------------- benchmark
 
-def bench_entries(driver_id: str) -> dict:
-    """The tournament field: every brain league.py knows, with this driver's
-    own entry replaced by its original and its candidate."""
-    import league
-    d = folder(driver_id)
-    state = json.loads((d / "curriculum.json").read_text())
+PANEL_OPPONENTS = ["house:zoe-bold", "house:zappy-zoe", "house:clinical-clara"]
+PANEL_PER_TRACK = 6
+PANEL_LAPS = 5
+
+
+def _save_brain(where: Path, which: str, w, arch, info) -> str:
+    where.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(where / f"{which}.npz", pop=np.asarray(w, dtype=np.float32)[None, :])
+    (where / f"{which}.json").write_text(json.dumps({"name": f"{info['name']} ({which})", "arch": arch,
+                                                    "traits": info["traits"]}))
+    return f"file:{evolve.project_path(where / which)}"
+
+
+def versions(driver_id: str, tag: str = "adaptive") -> dict:
+    """The versions compared: {label: league key}.  The original, the previous
+    (fixed-curriculum) candidate if there is one, and this candidate."""
+    d = folder(driver_id, tag)
     w0, arch0, info = academy.original(driver_id)
-    w1, arch1 = academy._gen_weights(d, state["generations"])
-    for which, (w, arch) in (("original", (w0, arch0)), ("candidate", (w1, arch1))):
-        (d / "bench").mkdir(exist_ok=True)
-        np.savez_compressed(d / "bench" / f"{which}.npz", pop=np.asarray(w, dtype=np.float32)[None, :])
-        (d / "bench" / f"{which}.json").write_text(json.dumps(
-            {"name": f"{info['name']} ({which})", "arch": arch, "traits": info["traits"]}))
-    entries = {k: v for k, v in league.drivers().items() if not k.endswith(f":{driver_id}")}
-    for which in ("original", "candidate"):
-        entries[f"file:{evolve.project_path(d / 'bench' / which)}"] = {"name": f"{info['name']} ({which})",
-                                                                       "status": "academy " + which}
-    return entries
+    out = {"original": _save_brain(d / "bench", "original", w0, arch0, info)}
+    old = academy.ACADEMY_DIR / f"{driver_id}-curriculum"           # the first, fixed curriculum
+    if (old / "curriculum.json").exists():
+        g = json.loads((old / "curriculum.json").read_text())["generations"]
+        w, arch = academy._gen_weights(old, g)
+        out["previous candidate"] = _save_brain(d / "bench", "previous candidate", w, arch, info)
+    state = json.loads((d / "curriculum.json").read_text())
+    w, arch = academy._gen_weights(d, state["generations"])
+    out["new candidate"] = _save_brain(d / "bench", "new candidate", w, arch, info)
+    return out
 
 
-def benchmark(driver_id: str, rounds: int = 8, laps: int = 5, workers: int = 4, log=print) -> dict:
+def _panel_race(job):
+    """One fixed-grid race: [(key, place, finished, damage, contacts, walls, best lap)]."""
     import league
-    d = folder(driver_id)
-    out = league.run_league(bench_entries(driver_id), rounds=rounds, laps=laps, workers=workers,
-                            save=d / "tournament.json", log=log)
+    import sim.scripted  # noqa: F401
+    from sim.race import Race
+    track, keys, laps, seed = job
+    race = Race(track, [(slot, league.make(k)) for slot, k in enumerate(keys)], laps=laps, seed=seed, rolling=True)
+    contacts = [0] * len(keys)
+    walls = [0] * len(keys)
+    limit = int(120 * laps * 120)
+    while race.phase != "finished" and race.world.tick < limit:
+        for e in race.step():
+            if e[0] == "car":
+                contacts[e[1]] += 1
+                contacts[e[2]] += 1
+            elif e[0] == "wall":
+                walls[e[1]] += 1
+    return track, [(keys[r["car"]], r["place"], bool(r["finished"]), round(race.world.cars[r["car"]].damage, 3),
+                    contacts[r["car"]], walls[r["car"]], r.get("best_lap")) for r in race.results()]
+
+
+def panel(keys: list[str], workers: int = 4, per_track: int = PANEL_PER_TRACK, laps: int = PANEL_LAPS,
+          seed: int = 77) -> list[dict]:
+    """Fixed-grid benchmark: every version in every race against the same
+    opponents, the same tracks and seeds; grid order drawn per race (seeded)."""
+    from multiprocessing import Pool
+    field = list(keys) + PANEL_OPPONENTS
+    rng = np.random.default_rng(seed)
+    jobs = [(t, [field[k] for k in rng.permutation(len(field))], laps, seed * 1000 + n)
+            for n, t in enumerate([t for t in ALL_TRACKS for _ in range(per_track)])]
+    with Pool(workers) as pool:
+        out = pool.map(_panel_race, jobs)
+    return [{"track": t, "results": [dict(zip(("key", "place", "finished", "damage", "contacts", "walls", "best_lap"), r))
+                                     for r in rows]} for t, rows in out]
+
+
+def head_to_head(races: list[dict], a: str, b: str) -> dict:
+    """In races with both: how often a finished ahead of b, the mean place
+    difference (b - a: positive = a better) with its standard error, and a
+    two-sided sign-test p value."""
+    ahead = behind = 0
+    diffs = []
+    for race in races:
+        res = {r["key"]: r for r in race["results"]}
+        if a in res and b in res:
+            pa, pb = res[a]["place"], res[b]["place"]
+            ahead += pa < pb
+            behind += pb < pa
+            diffs.append(pb - pa)
+    n = ahead + behind
+    k = min(ahead, behind)
+    p = min(1.0, 2 * sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n) if n else 1.0
+    mean = float(np.mean(diffs)) if diffs else 0.0
+    se = float(np.std(diffs, ddof=1) / math.sqrt(len(diffs))) if len(diffs) > 1 else 0.0
+    return {"races": len(diffs), "ahead": ahead, "behind": behind, "mean": round(mean, 2), "se": round(se, 2),
+            "p": round(p, 4), "real": bool(n and p < 0.05 and abs(mean) > 2 * se)}
+
+
+def summary_of(races: list[dict], key: str) -> dict:
+    rows = [r for race in races for r in race["results"] if r["key"] == key]
+    n = max(1, len(rows))
+    by_track = {}
+    for race in races:
+        for r in race["results"]:
+            if r["key"] == key:
+                by_track.setdefault(race["track"], []).append(r["place"])
+    return {"races": len(rows), "wins": sum(r["finished"] and r["place"] == 1 for r in rows),
+            "podiums": sum(r["finished"] and r["place"] <= 3 for r in rows),
+            "avg_place": round(sum(r["place"] for r in rows) / n, 2),
+            "place_se": round(float(np.std([r["place"] for r in rows], ddof=1) / math.sqrt(n)) if len(rows) > 1 else 0, 2),
+            "dnf": sum(not r["finished"] for r in rows), "damage": round(sum(r["damage"] for r in rows) / n, 3),
+            "contacts": round(sum(r.get("contacts", 0) for r in rows) / n, 2),
+            "walls": round(sum(r.get("walls", 0) for r in rows) / n, 2),
+            "by_track": {t: round(float(np.mean(v)), 2) for t, v in by_track.items()}}
+
+
+def benchmark(driver_id: str, rounds: int = 8, laps: int = 5, workers: int = 4, log=print, tag: str = "adaptive",
+              per_track: int = PANEL_PER_TRACK) -> dict:
+    """Fixed-grid panel (the verdict) and the all-car tournament (context)."""
+    import league
+    d = folder(driver_id, tag)
+    keys = versions(driver_id, tag)
+    out = json.loads((d / "benchmark.json").read_text()) if (d / "benchmark.json").exists() else {}
+    if "panel" not in out:
+        log(f"  fixed-grid panel: {per_track * len(ALL_TRACKS)} races ...")
+        out["panel"] = panel(list(keys.values()), workers, per_track, laps)
+        out["keys"] = keys
+        (d / "benchmark.json").write_text(json.dumps(out, indent=1))
+    entries = {k: v for k, v in league.drivers().items() if not k.endswith(f":{driver_id}")}
+    for label, key in keys.items():
+        entries[key] = {"name": f"{academy.original(driver_id)[2]['name']} ({label})", "status": "academy " + label}
+    log("  all-car tournament ...")
+    out["tournament"] = league.run_league(entries, rounds=rounds, laps=laps, workers=workers,
+                                          save=d / "tournament.json", log=log)
+    (d / "benchmark.json").write_text(json.dumps(out, indent=1))
     return out
 
 
@@ -451,34 +762,45 @@ def _se(p, n):
     return math.sqrt(max(p * (1 - p), 0.25 / n) / n) if n else 0.0
 
 
-def report(driver_id: str) -> Path:
-    d = folder(driver_id)
+def report(driver_id: str, tag: str = "adaptive") -> Path:
+    from . import rating
+    d = folder(driver_id, tag)
     state = json.loads((d / "curriculum.json").read_text())
     before, after = state.get("before", {}), state.get("after", {})
-    t = json.loads((d / "tournament.json").read_text()) if (d / "tournament.json").exists() else None
-    L = [f"# {state['name']}: progressive Academy curriculum", "",
-         f"{state['generations']} generations of training in {state['block']} blocks of {BLOCK}; checks of "
-         f"{CHECK_RUNS} fresh random scenarios per stage; a stage is mastered at {TARGET:.0%} at full difficulty. "
-         "The original brain is untouched; the candidate trained separately.", "", "## Progression", "",
-         "| Skill | Stage reached | Mastered | Status |", "|---|---|---|---|"]
+    bench = json.loads((d / "benchmark.json").read_text()) if (d / "benchmark.json").exists() else None
+    ctx = state.get("ctx", {})
+    L = [f"# {state['name']}: adaptive Academy curriculum", "",
+         f"Started from the original brain. {state['generations']} generations in {state['block']} blocks of {BLOCK}; "
+         f"each check uses {CHECK_RUNS} fresh random scenarios; a stage is mastered at {TARGET:.0%} at full difficulty. "
+         f"Rivals are matched to the driver's own measured lap pace (following {FOLLOW_PACE:.0%}, overtaking "
+         f"{PASS_PACE:.0%}); pace targets compare with the scripted driver in the same car. The original is untouched "
+         "and the candidate is not promoted.", "",
+         "## Placement", "", "Measured flying laps (alone) and the scripted driver in the same car:", "",
+         "| Track | Driver | Scripted, same car |", "|---|---|---|"]
+    for t in ALL_TRACKS:
+        L.append(f"| {stable.TRACK_NAMES[t]} | {ctx.get('laps', {}).get(t, '-')} s | {ctx.get('scripted', {}).get(t, '-')} s |")
+    first = state["log"][0]["weights"] if state["log"] else state.get("weights", {})
+    L += ["", "| Skill | Passed on entry | Started at | First lesson weights |", "|---|---|---|---|"]
     for sk, stages in CURRICULUM.items():
-        s = state["skills"][sk]
-        done = [x for x in stages if x["id"] in state["mastered"]]
-        status = "complete" if not s["stage"] else ("stalled" if s["stalled"] else f"working on it (ease {s['ease']:.2f})")
-        at = BY_ID[s["stage"]]["title"] if s["stage"] else "-"
-        L.append(f"| {SKILLS[sk]} | {at} | {len(done)} of {len(stages)} | {status} |")
-    L += ["", "## Every stage", "",
-          "| Stage | Attempts | Hardest ease needed | Mastered at gen | Forgotten | Before | After | Change |",
-          "|---|---|---|---|---|---|---|---|"]
+        entry = [x["title"] for x in stages if x["id"] in state.get("entry", [])]
+        start = next((x for x in stages if x["id"] not in state.get("entry", [])), None)
+        L.append(f"| {SKILLS[sk]} | {len(entry)} of {len(stages)} | "
+                 f"{f'{stages.index(start) + 1}. ' + start['title'] if start else 'all passed'} | {first.get(sk, 0):.0%} |")
+    # A. competence
+    L += ["", "## A. Has he become more competent?", "", "| Stage | Status | Checks | Hardest ease | Before | After |",
+          "|---|---|---|---|---|---|"]
+    counts = {}
     for sk, stages in CURRICULUM.items():
         for k, st in enumerate(stages, 1):
             r = state["stages"][st["id"]]
+            status = status_of(state, st["id"])
+            counts[status] = counts.get(status, 0) + 1
+            if r["retests"] and any(x["pass"] >= TARGET for x in r["retests"]) and st["id"] in state["stalled"]:
+                status += " (later passed on retest)"
             b, a = _rate(before, [st["id"]]), _rate(after, [st["id"]])
-            change = "-" if a is None or b is None else f"{a - b:+.0%}"
-            L.append(f"| {SKILLS[sk].split(' ')[0]} {k}: {st['title']} | {r['attempts']} | {r['ease_used']:.2f} | "
-                     f"{r['mastered_at'] if r['mastered_at'] is not None else '-'} | {r['forgotten']} | "
-                     f"{'-' if b is None else f'{b:.0%}'} | {'-' if a is None else f'{a:.0%}'} | {change} |")
-    L += ["", "## Skills before and after (the same fixed scenarios for both brains)", "",
+            L.append(f"| {SKILLS[sk].split(' ')[0]} {k}: {st['title']} | {status} | {r['attempts']} | {r['ease_used']:.2f} | "
+                     f"{'-' if b is None else f'{b:.0%}'} | {'-' if a is None else f'{a:.0%}'} |")
+    L += ["", "Stages: " + ", ".join(f"{v} {k.lower()}" for k, v in sorted(counts.items())) + ".", "",
           "| Skill | Before | After | Change |", "|---|---|---|---|"]
     rows = []
     for sk, stages in CURRICULUM.items():
@@ -488,53 +810,75 @@ def report(driver_id: str) -> Path:
             continue
         n = sum(len(before[i]["runs"]) for i in ids)
         se = math.sqrt(_se(b, n) ** 2 + _se(a, n) ** 2)
-        real = "real" if abs(a - b) > 2 * se else "within noise"
         rows.append((sk, a))
-        L.append(f"| {SKILLS[sk]} | {b:.0%} | {a:.0%} | {a - b:+.0%} ({real}) |")
+        L.append(f"| {SKILLS[sk]} | {b:.0%} | {a:.0%} | {a - b:+.0%} ({'real' if abs(a - b) > 2 * se else 'within noise'}) |")
     if rows:
         rows.sort(key=lambda r: -r[1])
-        L += ["", f"Strengths: {', '.join(SKILLS[r[0]] for r in rows[:2])}.  "
-                  f"Weaknesses: {', '.join(SKILLS[r[0]] for r in rows[-2:])}."]
-        weak = [BY_ID[sid]["title"] for sid, r in after.items() if r["pass"] < 0.34]
-        if weak:
-            L += ["", "Stages still failed most of the time: " + "; ".join(weak) + "."]
-    if t:
-        L += ["", "## Tournament benchmark (all cars, divisions of six)", "",
-              f"{t['round']} rounds; every division races all five tracks, {t.get('laps', 5)} laps; TrueSkill ratings; "
-              "points 10-7-5-3-2-1 per race.", "",
-              "| # | Driver | Rating | +- | Races | Wins | Podiums | Avg place | Points per race | DNFs |",
-              "|---|---|---|---|---|---|---|---|---|---|"]
-        from . import rating
-        ranked = sorted(t["drivers"].items(), key=lambda kv: -(kv[1]["mu"] - 3 * kv[1]["sigma"]))
-        for k, (key, r) in enumerate(ranked, 1):
-            n = max(1, r["races"])
-            bold = "**" if key.startswith("file:") else ""
-            L.append(f"| {k} | {bold}{r['name']}{bold} | {rating.show(r['mu']):.0f} | {rating.SCALE * r['sigma']:.0f} | "
-                     f"{r['races']} | {r['wins']} | {r['podiums']} | {r['places'] / n:.2f} | {r.get('points', 0) / n:.2f} | {r['dnf']} |")
-        o = next(r for k, r in t["drivers"].items() if k.startswith("file:") and k.endswith("original"))
-        c = next(r for k, r in t["drivers"].items() if k.startswith("file:") and k.endswith("candidate"))
-        diff = rating.SCALE * (c["mu"] - o["mu"])
-        se = rating.SCALE * math.sqrt(c["sigma"] ** 2 + o["sigma"] ** 2)
-        verdict = ("better" if diff > 2 * se else "worse" if diff < -2 * se else "no different, within the uncertainty")
-        pc, po = c["places"] / max(1, c["races"]), o["places"] / max(1, o["races"])
-        L += ["", f"**Verdict:** the candidate is rated {diff:+.0f} against the original (+- {2 * se:.0f} for a real "
-                  f"difference): **{verdict}**. Average place {po:.2f} -> {pc:.2f}; points per race "
-                  f"{o.get('points', 0) / max(1, o['races']):.2f} -> {c.get('points', 0) / max(1, c['races']):.2f}."]
-    path = academy.REPORT_DIR / f"{driver_id}-curriculum.md"
+        L += ["", f"Strongest: {', '.join(SKILLS[r[0]] for r in rows[:2])}.  Weakest: {', '.join(SKILLS[r[0]] for r in rows[-2:])}."]
+    # B. racing
+    if bench:
+        keys = bench["keys"]
+        label = {v: k for k, v in keys.items()}
+        races = bench["panel"]
+        L += ["", "## B. Has he become a better racer?", "",
+              f"### Fixed-grid benchmark (the verdict): {len(races)} races, {PANEL_LAPS} laps, every version in every race "
+              f"with {', '.join(k.split(':')[1] for k in PANEL_OPPONENTS)}; the same tracks, grids and seeds for all.", "",
+              "| Version | Avg place | Wins | Podiums | DNFs | Damage | Car contacts / race | Wall hits / race |",
+              "|---|---|---|---|---|---|---|---|"]
+        for lab, key in keys.items():
+            sm = summary_of(races, key)
+            L.append(f"| {lab} | {sm['avg_place']:.2f} +- {sm['place_se']:.2f} | {sm['wins']} | {sm['podiums']} | {sm['dnf']} | "
+                     f"{sm['damage']:.0%} | {sm['contacts']:.1f} | {sm['walls']:.1f} |")
+        L += ["", "By track (average place):", "", "| Version | " + " | ".join(stable.TRACK_NAMES[t] for t in ALL_TRACKS) + " |",
+              "|---|" + "---|" * len(ALL_TRACKS)]
+        for lab, key in keys.items():
+            bt = summary_of(races, key)["by_track"]
+            L.append(f"| {lab} | " + " | ".join(f"{bt.get(t, 0):.2f}" for t in ALL_TRACKS) + " |")
+        L += ["", "### Head to head (same races)", "", "| Pair | Races | Ahead - behind | Mean places better | Sign test p | Verdict |",
+              "|---|---|---|---|---|---|"]
+        pairs = [("new candidate", "original"), ("new candidate", "previous candidate"), ("previous candidate", "original")]
+        verdicts = {}
+        for a, b in pairs:
+            if a in keys and b in keys:
+                h = head_to_head(races, keys[a], keys[b])
+                v = ("better" if h["mean"] > 0 else "worse") if h["real"] else "no real difference"
+                verdicts[(a, b)] = (v, h)
+                L.append(f"| {a} v {b} | {h['races']} | {h['ahead']} - {h['behind']} | {h['mean']:+.2f} +- {h['se']:.2f} | "
+                         f"{h['p']:.3f} | {v} |")
+        t = bench.get("tournament")
+        if t:
+            L += ["", f"### All-car tournament (context only: divisions differ), {t['round']} rounds", "",
+                  "| # | Driver | Rating | +- | Races | Wins | Podiums | Avg place | DNFs |", "|---|---|---|---|---|---|---|---|---|"]
+            ranked = sorted(t["drivers"].items(), key=lambda kv: -(kv[1]["mu"] - 3 * kv[1]["sigma"]))
+            for k, (key, r) in enumerate(ranked, 1):
+                n = max(1, r["races"])
+                bold = "**" if key in label else ""
+                L.append(f"| {k} | {bold}{r['name']}{bold} | {rating.show(r['mu']):.0f} | {rating.SCALE * r['sigma']:.0f} | "
+                         f"{r['races']} | {r['wins']} | {r['podiums']} | {r['places'] / n:.2f} | {r['dnf']} |")
+        v, h = verdicts.get(("new candidate", "original"), ("-", {}))
+        L += ["", "## Verdicts", "",
+              f"- **A. Competence:** {counts.get('Mastered in training', 0)} stages mastered in training, "
+              f"{counts.get('Passed on entry', 0)} passed on entry, {counts.get('Stalled - moved on, competency not demonstrated', 0)} "
+              f"stalled, {counts.get('Not reached', 0) + counts.get('In training', 0)} not finished.",
+              f"- **B. Racing (fixed grid, against the original):** {v}"
+              + (f" (finished ahead in {h['ahead']} of {h['ahead'] + h['behind']} races, {h['mean']:+.2f} places a race)" if h else "")
+              + ".", "- Not promoted: promotion is a separate decision."]
+    path = academy.REPORT_DIR / f"{driver_id}-{tag}.md"
     academy.REPORT_DIR.mkdir(exist_ok=True)
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
     return path
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="The Racing Academy's progressive curriculum")
+    ap = argparse.ArgumentParser(description="The Racing Academy's adaptive curriculum")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    r = sub.add_parser("run", help="train through the curriculum, benchmark in the tournament, write the report")
+    r = sub.add_parser("run", help="place, train, benchmark and report (resumable)")
     r.add_argument("driver")
-    r.add_argument("--generations", type=int, default=80)
+    r.add_argument("--generations", type=int, default=120)
     r.add_argument("--population", type=int, default=academy.POPULATION)
     r.add_argument("--workers", type=int, default=4)
     r.add_argument("--rounds", type=int, default=8)
+    r.add_argument("--tag", default="adaptive")
     sub.add_parser("stages", help="list the curriculum")
     args = ap.parse_args()
     if args.cmd == "stages":
@@ -545,12 +889,9 @@ def main() -> int:
         return 0
     log = lambda m: print(f"{time.strftime('%H:%M')} {m}", flush=True)
     spec = academy.driver_spec(args.driver)
-    course(args.driver, args.generations, args.population, args.workers, log)
-    if not (folder(spec["id"]) / "tournament.json").exists() or \
-            json.loads((folder(spec["id"]) / "tournament.json").read_text())["round"] < args.rounds:
-        log("  tournament benchmark ...")
-        benchmark(spec["id"], rounds=args.rounds, workers=args.workers, log=log)
-    print(report(spec["id"]), flush=True)
+    course(args.driver, args.generations, args.population, args.workers, log, tag=args.tag)
+    benchmark(spec["id"], rounds=args.rounds, workers=args.workers, log=log, tag=args.tag)
+    print(report(spec["id"], args.tag), flush=True)
     return 0
 
 

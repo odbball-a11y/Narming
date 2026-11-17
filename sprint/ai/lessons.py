@@ -67,6 +67,7 @@ TAIL = 4.5          # closer than this, in the same lane, is tailgating
 LANE = 2.6          # lateral distance that counts as the same lane
 DEFEND = 10.0       # a car this close behind means the driver is defending
 SWERVE = 0.22       # lateral move per sample (30 a second) that counts as a deliberate move
+CORNER = 0.012      # centreline curvature above which the car is in a corner
 
 
 class CraftMeter:
@@ -78,6 +79,9 @@ class CraftMeter:
     def __init__(self, world, me: int = 0):
         self.world, self.me = world, me
         self.n = self.close = self.tail = self.defend = self.weaves = 0
+        self.corner_n = self.corner_tail = 0
+        self.caught = False
+        self.max_gap = 0.0
         self.last_lat = None
         self.last_dir = 0
 
@@ -96,10 +100,18 @@ class CraftMeter:
             elif behind is None or length - d < behind:
                 behind = length - d
         self.n += 1
+        in_corner = abs(float(w.track.curvature[car.idx])) > CORNER
+        tail = bool(ahead and ahead[0] < TAIL and abs(ahead[1].lateral - car.lateral) < LANE)
+        if in_corner:
+            self.corner_n += 1
+            self.corner_tail += tail
         if ahead and ahead[0] < FOLLOW:
             self.close += 1
-            if ahead[0] < TAIL and abs(ahead[1].lateral - car.lateral) < LANE:
+            self.caught = True
+            if tail:
                 self.tail += 1
+        if ahead and self.caught:                      # once with the car ahead: how far does it drop back?
+            self.max_gap = max(self.max_gap, ahead[0] / max(car.speed, 5.0))
         lat = car.lateral
         if behind is not None and behind < DEFEND:
             self.defend += 1
@@ -117,4 +129,6 @@ class CraftMeter:
     def result(self) -> dict:
         n = max(1, self.n)
         return {"close": round(self.close / n, 4), "tailgate": round(self.tail / n, 4),
+                "corner_tail": round(self.corner_tail / max(1, self.corner_n), 4),
+                "max_gap_s": round(self.max_gap, 2) if self.caught else 99.0,
                 "defend_time": round(self.defend / n, 4), "weaves": self.weaves}

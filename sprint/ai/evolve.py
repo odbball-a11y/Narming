@@ -426,7 +426,7 @@ def test_race(weights: np.ndarray, arch: dict, scenario: dict) -> dict:
         "slide": [g / samples for g in sliding],
         "passed": [s.passed for s in stats],
         "draft": [s.draft_share() for s in stats],
-        **{k: [m.result()[k] for m in meters] for k in ("close", "tailgate", "weaves")},
+        **{k: [m.result()[k] for m in meters] for k in ("close", "tailgate", "corner_tail", "weaves")},
     }
 
 
