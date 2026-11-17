@@ -75,6 +75,8 @@ def test_lessons_become_training_races():
 
 @pytest.fixture
 def small_academy(tmp_path, monkeypatch):
+    from ai import migrate
+    migrate.ensure()                        # house files on the current inputs before tests copy them
     monkeypatch.setattr(academy, "ACADEMY_DIR", tmp_path / "academy")
     monkeypatch.setattr(academy, "REPORT_DIR", tmp_path / "report")
     few = [dict(c, seen=[dict(v, seconds=6.0) for v in c["seen"]], unseen=[dict(v, seconds=6.0) for v in c["unseen"]])

@@ -74,7 +74,9 @@ def test_upskilling_loosens_the_rating(tmp_path, dirs):
     assert rating.summary(root, "racer:zoe")["sigma"] > sure + 50           # less sure of it now
 
 
-def test_every_championship_race_rates_everyone_scripted_cars_included(dirs):
+def test_every_championship_race_rates_everyone_scripted_cars_included(dirs, monkeypatch):
+    few = stable.house_rivals()[:2]                       # leave room in the field for scripted cars
+    monkeypatch.setattr(stable, "house_rivals", lambda: few)
     root = stable.STABLE_DIR
     zoe = instant_racer(root, "Zoe")
     ch = championship.start(root, [zoe])
@@ -91,7 +93,9 @@ def test_every_championship_race_rates_everyone_scripted_cars_included(dirs):
     assert sum(r["rating"] for r in table.values()) / len(table) == pytest.approx(1000, abs=1)
 
 
-def test_scripted_cars_are_the_same_car_every_race(dirs):
+def test_scripted_cars_are_the_same_car_every_race(dirs, monkeypatch):
+    few = stable.house_rivals()[:2]                       # leave room in the field for scripted cars
+    monkeypatch.setattr(stable, "house_rivals", lambda: few)
     root = stable.STABLE_DIR
     ch = championship.start(root, [instant_racer(root, "Zoe")])
     first = championship.build_race(root, ch)

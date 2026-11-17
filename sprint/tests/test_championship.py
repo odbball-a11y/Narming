@@ -107,7 +107,8 @@ def test_a_season_has_five_races_the_right_points_and_a_reverse_grid(dirs):
     root = stable.STABLE_DIR
     zoe = instant_racer(root, "Zoe")
     ch = championship.start(root, [zoe])
-    assert [e["name"] for e in ch["entrants"]][:3] == ["Zoe", "Careful Keith", "Dangerous Dave"]
+    expected = [r["name"] for r in championship.house_field(root)][:2]           # highest-rated house rivals first
+    assert [e["name"] for e in ch["entrants"]][:3] == ["Zoe"] + expected
     houses = len(stable.house_rivals())                                # every house rival, then scripted cars
     assert [e["kind"] for e in ch["entrants"]] == ["racer"] + ["house"] * min(houses, 5) + ["scripted"] * (5 - min(houses, 5))
     scripted = [e for e in ch["entrants"] if e["kind"] == "scripted"]
