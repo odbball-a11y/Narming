@@ -52,7 +52,7 @@ from . import academy, evolve, stable
 # stalled stages move on (never mastered) with remedial lessons, and a
 # fixed-grid + head-to-head benchmark.
 
-TARGET = 0.67          # share of a stage's check scenarios passed to master it
+TARGET = 0.666         # two thirds of a stage's check scenarios (4 of 6) to master it
 CHECK_RUNS = 6         # fresh random scenarios per check
 REVIEW_RUNS = 3        # scenarios when re-testing a mastered stage
 FORGOT = 0.34          # a mastered stage re-tested below this is forgotten

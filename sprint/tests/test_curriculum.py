@@ -170,3 +170,9 @@ def test_following_lessons_pay_for_following_not_for_getting_past():
     s = evolve.craft_score({k: [v] for k, v in follower.items()}, None, extra)[0]
     t = evolve.craft_score({k: [v] for k, v in passer.items()}, None, extra)[0]
     assert s > t
+
+
+def test_four_of_six_is_a_pass():
+    assert round(4 / 6, 3) >= curriculum.TARGET > round(3 / 6, 3)
+    state = curriculum.fresh_state({"id": "x", "name": "X"})
+    assert curriculum._advance(state, "grip", "grip-1", round(4 / 6, 3)) == "mastered"
