@@ -464,6 +464,9 @@ def test_career_screens(app, monkeypatch):
     press(app, pygame.K_RETURN)
     hall = app.current
     assert isinstance(hall, HallScreen) and len(hall.legends) == 2
+    for _ in range(3):
+        press(app, pygame.K_RIGHT)                        # the LEGENDS tab
+    assert hall.tab == 3
     press(app, pygame.K_RETURN)
     assert isinstance(app.current, RacerScreen) and "HALL OF FAME" in status_text(app, racer)[0]
     press(app, pygame.K_ESCAPE)

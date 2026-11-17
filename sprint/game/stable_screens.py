@@ -1320,93 +1320,288 @@ class CertificateScreen(Screen):
 
 
 class HallScreen(Screen):
-    """Track records, past champions, and the racers who have died."""
+    """The Hall of Fame: all-time results of every car that has raced a
+    championship, by track, every season's champion, and the legends (dead
+    racers).  Left/Right: tab.  Up/Down, PgUp/PgDn: scroll.  Enter: a car's
+    full record (a legend's card).  S: sort.  F: filter.  W: wins / win %."""
 
-    def __init__(self, app):
+    TABS = ["ALL-TIME", "BY TRACK", "CHAMPIONS", "LEGENDS"]
+    VISIBLE = 15
+
+    def __init__(self, app, tab: int = 0, row: int = 0):
         super().__init__(app)
+        from ai import halloffame
         root = app.stable_root
         self.legends = stable.hall_of_fame(root)
         self.records = records.load(root)
-        self.champions = championship.past_champions(root)
-        self.row = 0
+        self.cars = halloffame.stats(root)
+        self.champions = halloffame.champions(root)
+        self.tab, self.row, self.top = tab, row, 0
+        self.sort, self.show, self.percent = "wins", "all", False
+
+    def rows(self) -> list:
+        from ai import halloffame
+        if self.tab == 0:
+            return halloffame.table(self.cars, self.sort, self.show)
+        if self.tab == 1:
+            return sorted(self.cars.items(), key=lambda kc: (-kc[1]["wins"], -kc[1]["podiums"]))
+        if self.tab == 2:
+            return self.champions
+        return self.legends
 
     def handle_event(self, event) -> None:
+        from ai import halloffame
         from .screens import BACK
         if event.type != pygame.KEYDOWN:
             return
-        rows = self.legends + ["back"]
+        rows = self.rows()
         if event.key in BACK:
             self.app.show(StableScreen(self.app))
-        elif event.key in UP:
-            self.row = (self.row - 1) % len(rows)
-        elif event.key in DOWN:
-            self.row = (self.row + 1) % len(rows)
-        elif event.key in ACCEPT:
+        elif event.key in LEFT + RIGHT:
+            self.tab = (self.tab + (1 if event.key in RIGHT else -1)) % len(self.TABS)
+            self.row = self.top = 0
+        elif event.key in UP + DOWN and rows:
+            self.row = (self.row + (1 if event.key in DOWN else -1)) % len(rows)
+        elif event.key in (pygame.K_PAGEDOWN, pygame.K_PAGEUP) and rows:
+            step = self.VISIBLE if event.key == pygame.K_PAGEDOWN else -self.VISIBLE
+            self.row = max(0, min(len(rows) - 1, self.row + step))
+        elif event.key == pygame.K_s and self.tab == 0:
+            self.sort = halloffame.SORTS[(halloffame.SORTS.index(self.sort) + 1) % len(halloffame.SORTS)]
+            self.row = self.top = 0
+        elif event.key == pygame.K_f and self.tab == 0:
+            self.show = halloffame.FILTERS[(halloffame.FILTERS.index(self.show) + 1) % len(halloffame.FILTERS)]
+            self.row = self.top = 0
+        elif event.key == pygame.K_w and self.tab == 1:
+            self.percent = not self.percent
+        elif event.key in ACCEPT and rows:
             choice = rows[self.row]
-            if choice == "back":
-                self.app.show(StableScreen(self.app))
-            else:
+            if self.tab in (0, 1):
+                self.app.show(CarRecordScreen(self.app, choice[0], self.cars, back=(self.tab, self.row)))
+            elif self.tab == 3:
                 self.app.show(RacerScreen(self.app, choice))
+
+    def visible(self, rows) -> list:
+        self.row = min(self.row, max(0, len(rows) - 1))
+        if self.row < self.top:
+            self.top = self.row
+        elif self.row >= self.top + self.VISIBLE:
+            self.top = self.row - self.VISIBLE + 1
+        return list(enumerate(rows))[self.top:self.top + self.VISIBLE]
+
+    def scrollbar(self, screen, count: int, y0: float = 21.5, height: float = 15 * 3.9) -> None:
+        if count <= self.VISIBLE:
+            return
+        ui = self.app.ui
+        pygame.draw.rect(screen, (50, 44, 80), ui.rect(156.5, y0, 1.2, height))
+        frac = self.VISIBLE / count
+        start = self.top / count
+        pygame.draw.rect(screen, C_HUD_ACCENT, ui.rect(156.5, y0 + start * height, 1.2, max(1.5, frac * height)))
 
     def draw(self, screen) -> None:
         ui = self.app.ui
         ui.backdrop(screen)
-        ui.text(screen, "big", "HALL OF FAME", C_HUD_ACCENT, 6, 4, shadow=True)
-        # Track records (left) and champions (right)
-        ui.panel(screen, 3, 13, 76, 30)
-        ui.text(screen, "small", "TRACK RECORDS (fastest race lap)", C_HUD_ACCENT, 6, 14.5)
-        y = 19.0
-        for track in championship.TRACK_ORDER:
-            ui.text(screen, "small", stable.TRACK_NAMES[track].upper(), C_HUD_TEXT, 6, y + 0.6)
-            rec = self.records.get(track)
+        ui.text(screen, "big", "HALL OF FAME", C_HUD_ACCENT, 6, 3, shadow=True)
+        x = 6
+        for k, name in enumerate(self.TABS):
+            ui.text(screen, "mid", name, C_HUD_ACCENT if k == self.tab else C_HUD_DIM, x, 11)
+            x += text_width(ui, "mid", name) + 6
+        [self.draw_alltime, self.draw_tracks, self.draw_champions, self.draw_legends][self.tab](screen)
+        keys = {0: "S sort   F filter   Enter: the car's record", 1: "W wins / win %   Enter: the car's record",
+                2: "", 3: "Enter: the racer's card"}[self.tab]
+        ui.text(screen, "small", f"Left/Right tab   Up/Down PgUp/PgDn scroll   {keys}   Esc back", C_HUD_DIM, 6, 87)
+
+    def _row_marker(self, screen, i, y):
+        if i == self.row:
+            pygame.draw.rect(screen, (60, 40, 100), self.app.ui.rect(3, y - 0.3, 152.5, 3.6))
+
+    def draw_alltime(self, screen) -> None:
+        from ai import halloffame
+        ui = self.app.ui
+        rows = self.rows()
+        ui.text(screen, "small", f"sorted by {self.sort.upper()}    showing {self.show.upper()}    "
+                f"(rates from {halloffame.MIN_RACES} races)", C_CYAN, 6, 15.5)
+        cols = ((5, "#"), (9, "CAR"), (52, "RACES"), (62, "WINS"), (71, "WIN%"), (80, "PODS"), (89, "POD%"),
+                (98, "AVG"), (106, "PTS/R"), (115, "DNF"), (122, "TITLES"), (134, "PEAK"), (143, "BEST LAP"))
+        for x, head in cols:
+            ui.text(screen, "small", head, C_HUD_DIM, x, 18.5)
+        if not rows:
+            ui.text(screen, "small", "No championship races yet.", C_HUD_DIM, 9, 24)
+        y = 22.0
+        pct = lambda v: "-" if v is None else f"{v:.0%}"
+        for i, (key, c) in self.visible(rows):
+            self._row_marker(screen, i, y)
+            colour = C_HUD_ACCENT if i == self.row else C_HUD_TEXT
+            tag = {"house": " (house)", "scripted": " (scripted)", "dead": " +", "retired": " (retired)"}.get(
+                c["status"], "") if c["kind"] != "racer" or c["status"] != "racing" else ""
+            draw_chip(ui, screen, c["livery"], 9, y + 0.3, 3.4)
+            avg, ppr = halloffame.rate(c, "place"), halloffame.rate(c, "points")
+            for x, value in ((5, str(i + 1)), (13.5, (c["name"] + tag)[:28]), (52, str(c["races"])), (62, str(c["wins"])),
+                             (71, pct(halloffame.rate(c))), (80, str(c["podiums"])), (89, pct(halloffame.rate(c, "podiums"))),
+                             (98, "-" if avg is None else f"{avg:.2f}"), (106, "-" if ppr is None else f"{ppr:.1f}"),
+                             (115, str(c["dnf"])), (134, "-" if c["peak"] is None else f"{c['peak']:.0f}"),
+                             (143, format_time(c["best_lap"]) if c["best_lap"] else "-")):
+                ui.text(screen, "small", value, colour, x, y)
+            draw_stars(ui, screen, c["titles"], 122, y - 0.2, 2.0, 5)
+            y += 3.9
+        self.scrollbar(screen, len(rows))
+
+    def draw_tracks(self, screen) -> None:
+        from ai import halloffame
+        ui = self.app.ui
+        rows = self.rows()
+        tracks = list(championship.TRACK_ORDER)
+        ui.text(screen, "small", ("WIN % at each track (from " + str(halloffame.MIN_RACES) + " races there)")
+                if self.percent else "WINS at each track (races there in brackets)", C_CYAN, 6, 15.5)
+        xs = [52 + 19 * k for k in range(len(tracks))]
+        for x, t in zip(xs, tracks):
+            ui.text(screen, "small", stable.TRACK_NAMES[t].upper(), C_HUD_DIM, x, 18.5)
+            rec = self.records.get(t)
             if rec:
-                ui.text(screen, "mid", format_time(rec["time"]), C_HUD_ACCENT, 28, y)
-                if rec.get("livery"):
-                    draw_chip(ui, screen, rec["livery"], 47, y + 0.2, 4)
-                ui.text(screen, "small", rec["name"].upper()[:16], C_HUD_TEXT, 52, y + 0.6)
-            else:
-                ui.text(screen, "small", "no record yet", C_HUD_DIM, 28, y + 0.6)
-            y += 4.8
-        ui.panel(screen, 82, 13, 75, 30)
-        ui.text(screen, "small", "CHAMPIONS", C_HUD_ACCENT, 85, 14.5)
-        y = 19.0
-        for c in self.champions[:5]:
-            ui.text(screen, "small", f"SEASON {c['season']}", C_HUD_DIM, 85, y + 0.6)
-            draw_chip(ui, screen, c["livery"], 105, y + 0.2, 4)
-            ui.text(screen, "small", f"{c['name'].upper()[:16]}  {c['points']} pts", C_HUD_TEXT, 110, y + 0.6)
-            y += 4.8
-        if not self.champions:
-            ui.text(screen, "small", "No season finished yet.", C_HUD_DIM, 85, y)
-        # Legends
-        y = 46.0
-        ui.text(screen, "small", "LEGENDS", C_HUD_ACCENT, 6, y)
-        for x, head in ((50, "RACES"), (62, "WINS"), (72, "TITLES"), (84, "PEAK"),
-                        (98, "BEST LAP"), (116, "FOALS"), (127, "DIED")):
-            ui.text(screen, "small", head, C_HUD_DIM, x, y)
-        y += 4.2
+                ui.text(screen, "small", f"{format_time(rec['time'])} {rec['name'][:7]}", C_HUD_DIM, x, 81.5)
+        ui.text(screen, "small", "CAR", C_HUD_DIM, 9, 18.5)
+        ui.text(screen, "small", "TOTAL", C_HUD_DIM, 147, 18.5)
+        ui.text(screen, "small", "track records:", C_HUD_DIM, 6, 81.5)
+        best = {t: max((c["tracks"].get(t, {}).get("wins", 0) for _, c in rows), default=0) for t in tracks}
+        y = 22.0
+        for i, (key, c) in self.visible(rows):
+            self._row_marker(screen, i, y)
+            colour = C_HUD_ACCENT if i == self.row else C_HUD_TEXT
+            draw_chip(ui, screen, c["livery"], 9, y + 0.3, 3.4)
+            ui.text(screen, "small", c["name"][:24], colour, 13.5, y)
+            for x, t in zip(xs, tracks):
+                tr = c["tracks"].get(t)
+                if not tr:
+                    ui.text(screen, "small", "-", C_HUD_DIM, x, y)
+                    continue
+                if self.percent:
+                    value = f"{tr['wins'] / tr['races']:.0%}" if tr["races"] >= halloffame.MIN_RACES else "-"
+                else:
+                    value = f"{tr['wins']}  ({tr['races']})"
+                top = tr["wins"] and tr["wins"] == best[t]
+                ui.text(screen, "small", value, (60, 220, 110) if top else colour, x, y)
+            ui.text(screen, "small", str(c["wins"]), colour, 147, y)
+            y += 3.9
+        self.scrollbar(screen, len(rows))
+
+    def draw_champions(self, screen) -> None:
+        ui = self.app.ui
+        rows = self.rows()
+        for x, head in ((6, "SEASON"), (22, "CHAMPION"), (68, "POINTS"), (82, "RACE WINS"), (98, "RUNNER-UP"),
+                        (138, "MARGIN")):
+            ui.text(screen, "small", head, C_HUD_DIM, x, 18.5)
+        if not rows:
+            ui.text(screen, "small", "No season finished yet.", C_HUD_DIM, 6, 24)
+        y = 22.0
+        for i, c in self.visible(rows):
+            self._row_marker(screen, i, y)
+            colour = C_HUD_ACCENT if i == self.row else C_HUD_TEXT
+            draw_chip(ui, screen, c["livery"], 22, y + 0.3, 3.4)
+            for x, value in ((6, str(c["season"])), (26.5, c["name"][:26]), (68, str(c["points"])),
+                             (82, str(c["wins"])), (98, c["runner_up"][:24]), (138, f"+{c['margin']}")):
+                ui.text(screen, "small", value, colour, x, y)
+            y += 3.9
+        self.scrollbar(screen, len(rows))
+
+    def draw_legends(self, screen) -> None:
+        ui = self.app.ui
         root = self.app.stable_root
-        shown = self.legends[:6]
-        for i, d in enumerate(shown + ["back"]):
-            selected = i == self.row
-            colour = C_HUD_ACCENT if selected else C_HUD_TEXT
-            if selected:
-                ui.text(screen, "mid", ">", C_PINK, 3, y)
-            if d == "back":
-                ui.text(screen, "mid", "BACK", colour, 8, y + 1)
-                break
+        rows = self.rows()
+        for x, head in ((9, "LEGEND"), (50, "RACES"), (62, "WINS"), (72, "TITLES"), (84, "PEAK"),
+                        (98, "BEST LAP"), (116, "FOALS"), (127, "DIED")):
+            ui.text(screen, "small", head, C_HUD_DIM, x, 18.5)
+        if not rows:
+            ui.text(screen, "small", "No racer has died yet.", C_HUD_DIM, 9, 24)
+        y = 22.0
+        for i, d in self.visible(rows):
+            self._row_marker(screen, i, y)
+            colour = C_HUD_ACCENT if i == self.row else C_HUD_TEXT
             r = stable.load(d)
             c = r["career"]
             best = min(c["best_laps"].values()) if c["best_laps"] else None
             skill = rating.summary(root, f"racer:{r['id']}")
-            for x, value in ((8, r["name"].upper()[:18]), (50, str(c["races"])), (62, str(c["wins"])),
+            for x, value in ((9, r["name"].upper()[:20]), (50, str(c["races"])), (62, str(c["wins"])),
                              (84, f"{skill['peak']:.0f}" if skill else "-"),
                              (98, format_time(best)), (116, str(len(stable.offspring(root, r["id"]))))):
-                ui.text(screen, "small", value, colour, x, y + 0.6)
-            ui.text(screen, "small", r.get("death_cause", ""), C_HUD_DIM, 127, y + 0.6)
-            draw_stars(ui, screen, c.get("titles", 0), 72, y + 0.4, 2.2, 4)
-            y += 4.6
-        if not self.legends:
-            ui.text(screen, "small", "No racer has died yet.", C_HUD_DIM, 8, y + 6)
+                ui.text(screen, "small", value, colour, x, y)
+            ui.text(screen, "small", r.get("death_cause", "")[:22], C_HUD_DIM, 127, y)
+            draw_stars(ui, screen, c.get("titles", 0), 72, y - 0.2, 2.0, 4)
+            y += 3.9
+        self.scrollbar(screen, len(rows))
+
+
+class CarRecordScreen(Screen):
+    """One car's all-time record: per track, every season, highlights and
+    head to head against the cars it has raced most."""
+
+    def __init__(self, app, key: str, cars: dict, back=(0, 0)):
+        super().__init__(app)
+        self.key, self.cars, self.back = key, cars, back
+        self.car = cars[key]
+
+    def handle_event(self, event) -> None:
+        if event.type == pygame.KEYDOWN and event.key in ACCEPT + (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            self.app.show(HallScreen(self.app, tab=self.back[0], row=self.back[1]))
+
+    def draw(self, screen) -> None:
+        from ai import halloffame
+        ui = self.app.ui
+        ui.backdrop(screen)
+        c = self.car
+        draw_chip(ui, screen, c["livery"], 6, 4.2, 7)
+        ui.text(screen, "big", c["name"].upper(), C_HUD_ACCENT, 15, 3, shadow=True)
+        status = {"racing": "still racing", "retired": "retired to stud", "dead": "legend (died)",
+                  "house": "house rival", "scripted": "scripted car", "gone": "no longer in the stable"}[c["status"]]
+        n = c["races"]
+        pct = lambda v: "-" if v is None else f"{v:.0%}"
+        ui.text(screen, "small", f"{status}    {n} races   {c['wins']} wins ({pct(halloffame.rate(c))})   "
+                f"{c['podiums']} podiums ({pct(halloffame.rate(c, 'podiums'))})   {c['titles']} titles   "
+                f"{c['dnf']} DNFs   longest winning run {c['win_streak']}"
+                + (f"   peak rating {c['peak']:.0f}" if c["peak"] else ""), C_HUD_TEXT, 6, 12)
+        # By track
+        ui.panel(screen, 3, 16, 96, 32)
+        ui.text(screen, "small", "BY TRACK", C_HUD_ACCENT, 6, 17.3)
+        for x, head in ((6, "TRACK"), (30, "RACES"), (41, "WINS"), (51, "WIN%"), (61, "PODS"), (71, "AVG"),
+                        (81, "BEST LAP")):
+            ui.text(screen, "small", head, C_HUD_DIM, x, 21)
+        y = 24.5
+        for t in championship.TRACK_ORDER + [k for k in c["tracks"] if k not in championship.TRACK_ORDER]:
+            tr = c["tracks"].get(t)
+            ui.text(screen, "small", stable.TRACK_NAMES.get(t, t).upper(), C_HUD_TEXT, 6, y)
+            if tr:
+                for x, value in ((30, str(tr["races"])), (41, str(tr["wins"])),
+                                 (51, f"{tr['wins'] / tr['races']:.0%}"), (61, str(tr["podiums"])),
+                                 (71, f"{tr['places'] / tr['races']:.2f}"),
+                                 (81, format_time(tr["best_lap"]) if tr["best_lap"] else "-")):
+                    ui.text(screen, "small", value, C_HUD_TEXT, x, y)
+            else:
+                ui.text(screen, "small", "not raced", C_HUD_DIM, 30, y)
+            y += 3.8
+        # Seasons
+        ui.panel(screen, 102, 16, 55, 32)
+        ui.text(screen, "small", "SEASONS", C_HUD_ACCENT, 105, 17.3)
+        y = 21
+        for s in c["seasons"][-7:][::-1]:
+            mark = "CHAMPION" if s["done"] and s["position"] == 1 else ("" if s["done"] else "(in progress)")
+            ui.text(screen, "small", f"Season {s['season']}:  {s['position']} of {s['of']},  {s['points']} pts  {mark}",
+                    C_HUD_ACCENT if mark == "CHAMPION" else C_HUD_TEXT, 105, y)
+            y += 3.6
+        if len(c["seasons"]) > 7:
+            ui.text(screen, "small", f"... and {len(c['seasons']) - 7} earlier", C_HUD_DIM, 105, y)
+        # Head to head
+        ui.panel(screen, 3, 51, 154, 33)
+        ui.text(screen, "small", "HEAD TO HEAD  (races together: finished ahead - behind)", C_HUD_ACCENT, 6, 52.3)
+        opponents = sorted(c["h2h"].items(), key=lambda kv: -sum(kv[1]))[:12]
+        for k, (other, (ahead, behind)) in enumerate(opponents):
+            o = self.cars.get(other, {"name": other, "livery": None})
+            x, y = 6 + (k // 6) * 76, 56.5 + (k % 6) * 4.4
+            draw_chip(ui, screen, o["livery"], x, y + 0.3, 3.4)
+            colour = (60, 220, 110) if ahead > behind else (240, 90, 90) if ahead < behind else C_HUD_TEXT
+            ui.text(screen, "small", o["name"][:24], C_HUD_TEXT, x + 4.5, y)
+            ui.text(screen, "small", f"{ahead} - {behind}", colour, x + 44, y)
+            bar(ui, screen, x + 55, y + 0.3, 14, ahead / max(1, ahead + behind), colour)
+        if not opponents:
+            ui.text(screen, "small", "No championship races yet.", C_HUD_DIM, 6, 57)
+        ui.text(screen, "small", "Enter or Esc: back to the Hall of Fame", C_HUD_DIM, 6, 87)
 
 
 # -------------------------------------------------------------- championship

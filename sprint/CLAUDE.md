@@ -671,6 +671,15 @@ podium): `record_result(..., finished=)`.
   `league.run_league` benchmark with original and candidate, `report`.
   `python -m ai.curriculum run NAME`. Calibration: every house rival fails most
   racecraft stages before training; Keith never catches a slower car.
+- Hall of Fame upgrade (user: it did not scroll; drill into results: which cars
+  win at which tracks, wins, win %; "all yes" to house and scripted cars
+  included, 5-race minimum for rates, sorted by wins, head to head).
+  `ai/halloffame.py` works everything out from `stable/seasons/` plus the season
+  in progress (`stats`, `table` with `SORTS` / `FILTERS`, `rate` from
+  `MIN_RACES`, `champions`). `HallScreen` tabs ALL-TIME / BY TRACK / CHAMPIONS /
+  LEGENDS, all scrolling (Up/Down, PgUp/PgDn, scroll bar), S sort, F filter, W
+  wins or win % by track; Enter opens `CarRecordScreen` (per track, seasons,
+  highlights, head to head). Pictures `mockups/hall_*.png` (synthetic seasons).
 - Upgrade bug fixed: `migrate._upgrade_npz` skipped any population carrying
   track notes (it compared against `n_weights` only), so cards and run configs
   were moved to new inputs while their weights were not (house rivals failed to
